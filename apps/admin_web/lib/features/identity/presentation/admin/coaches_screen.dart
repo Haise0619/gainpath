@@ -1,3 +1,5 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'coach_provision_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -40,12 +42,23 @@ class CoachesScreen extends StatefulWidget {
       this.initialBranchId,
       this.initialCoachGeneration = 0,
       this.discardGuard,
-      this.onReviewChanged});
+      this.onReviewChanged,
+      this.branchRequest,
+      this.addingCoach = false,
+      this.onOpenAddCoach,
+      this.onCloseAddCoach,
+      this.onProvisionLeaveCheckChanged});
   final String? initialCoachId;
   final String? initialBranchId;
   final int initialCoachGeneration;
   final CoachReviewDiscardGuard? discardGuard;
   final bool live;
+  final Future<Map<String, dynamic>> Function(Map<String, Object?>)?
+      branchRequest;
+  final bool addingCoach;
+  final VoidCallback? onOpenAddCoach;
+  final VoidCallback? onCloseAddCoach;
+  final ValueChanged<Future<bool> Function()?>? onProvisionLeaveCheckChanged;
   final void Function(String coachId)? onOpenSchedule;
   final void Function(String coachId)? onOpenBookings;
   final void Function(String? coachId)? onReviewChanged;
@@ -57,12 +70,150 @@ class CoachesScreen extends StatefulWidget {
 class _CoachesScreenState extends State<CoachesScreen> {
   late final CoachReviewDiscardGuard _discardGuard;
   CoachDirectoryAdminCubit? _cubit;
+  String? _reportedReviewId;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedSpecialty = 'Specialty';
   String _selectedStatus = 'Status';
   String _selectedBranch = 'Branch';
+  String _viewMode = 'grid';
   int _activeReviewTab = 0;
+  Map<String, String> _branchNames = {};
+  Map<String, String> _activeBranches = {};
+  bool _branchLoading = false;
+  bool _standaloneAddCoach = false;
+  bool get _addingCoach => widget.addingCoach || _standaloneAddCoach;
+  final _assignments = <String, List<String>>{};
+
+  Future<void> _loadAssignments(CoachDirectoryAdminState state) async {
+    if (!state.allowed ||
+        state.busy ||
+        context.read<CoachProfileAdminRepository>().scope.datasetScope !=
+            null) {
+      return;
+    }
+    final ids = <String>{
+      ...state.drafts.map((row) => row.id),
+      ...state.publicProfiles.map((row) => row.id)
+    }.where((id) => !_assignments.containsKey(id)).toList();
+    if (ids.isEmpty) return;
+    try {
+      final values = <String, List<String>>{};
+      for (var i = 0; i < ids.length; i += 60) {
+        final batch = ids.skip(i).take(60).toList();
+        final result = await _branchCommand(
+            {'action': 'coachRosterAssignments', 'coachIds': batch});
+        final assignments = result['assignments'] as Map;
+        for (final id in batch) {
+          values[id] = List<String>.from(assignments[id] as List? ?? const []);
+        }
+      }
+      if (mounted) setState(() => _assignments.addAll(values));
+    } catch (_) {
+      // The regular directory remains readable when assignment lookup fails.
+    }
+  }
+
+  Future<Map<String, dynamic>> _branchCommand(
+      Map<String, Object?> input) async {
+    final scope = context.read<CoachProfileAdminRepository>().scope;
+    if (scope.datasetScope != null) {
+      throw StateError('Canonical Admin access is required.');
+    }
+    final request = {...input, 'organizationId': scope.organizationId};
+    final branchRequest = widget.branchRequest;
+    if (branchRequest != null) return branchRequest(request);
+    final result = await firebaseCallable('branchManagementCommand',
+            options: HttpsCallableOptions(
+              timeout: const Duration(seconds: 50),
+            ))
+        .call<Map<String, dynamic>>(request);
+    return result.data;
+  }
+
+  Future<void> _loadBranches() async {
+    if (_branchLoading) return;
+    setState(() => _branchLoading = true);
+    try {
+      final all = <String, String>{};
+      final active = <String, String>{};
+      String? after;
+      final seen = <String>{};
+      do {
+        final page = await _branchCommand(
+            {'action': 'list', if (after != null) 'afterId': after});
+        for (final row in (page['records'] as List).whereType<Map>()) {
+          final id = row['branchId'] as String;
+          final name = row['displayName'] as String;
+          all[id] = name;
+          if (row['status'] == 'active') active[id] = name;
+        }
+        after = page['nextAfterId'] as String?;
+      } while (after != null && seen.add(after) && mounted);
+      if (mounted) {
+        setState(() {
+          _branchNames = all;
+          _activeBranches = active;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _branchNames = {});
+    } finally {
+      if (mounted) setState(() => _branchLoading = false);
+    }
+  }
+
+  void _openAddCoach() {
+    final open = widget.onOpenAddCoach;
+    if (open != null) {
+      open();
+    } else {
+      setState(() => _standaloneAddCoach = true);
+    }
+  }
+
+  void _closeAddCoach() {
+    final close = widget.onCloseAddCoach;
+    if (close != null) {
+      close();
+    } else {
+      setState(() => _standaloneAddCoach = false);
+    }
+  }
+
+  Future<void> _finishProvisioning(String id) async {
+    _closeAddCoach();
+    await _cubit!.refresh();
+    if (!mounted) return;
+    await _loadAssignments(_cubit!.state);
+    if (!mounted) return;
+    final next = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('Coach account created'),
+              content: const Text(
+                  'Ask the Coach to select Forgot password on the GainPath sign-in screen and use the new account email. They should verify their email after signing in. The profile is a draft.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Back to Coaches')),
+                if (widget.onOpenSchedule != null)
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, 'schedule'),
+                      child: const Text('Manage Schedule')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'profile'),
+                    child: const Text('View Profile')),
+              ],
+            ));
+    if (!mounted) return;
+    if (next == 'schedule') widget.onOpenSchedule?.call(id);
+    if (next == 'profile') {
+      await _cubit!.review(id);
+      if (mounted) widget.onReviewChanged?.call(_cubit!.state.review?.coachId);
+    }
+  }
+
   bool _showAllProfileFields = false;
 
   @override
@@ -102,11 +253,21 @@ class _CoachesScreenState extends State<CoachesScreen> {
   Future<void> _openInitialReview() async {
     final cubit = _cubit!;
     await cubit.refresh();
+    if (mounted &&
+        cubit.state.allowed &&
+        context.read<CoachProfileAdminRepository>().scope.datasetScope ==
+            null) {
+      await _loadBranches();
+      if (mounted) await _loadAssignments(cubit.state);
+    }
     if (mounted && cubit.state.allowed && widget.initialCoachId != null) {
       _activeReviewTab = 0;
       _showAllProfileFields = false;
       await cubit.review(widget.initialCoachId!);
-      if (mounted) widget.onReviewChanged?.call(cubit.state.review?.coachId);
+      if (mounted) {
+        _reportedReviewId = cubit.state.review?.coachId;
+        widget.onReviewChanged?.call(_reportedReviewId);
+      }
     }
   }
 
@@ -147,8 +308,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
     try {
       final repo = context.read<CoachRepository>();
       for (final c in repo.coaches) {
-        if ((c.id == id ||
-                c.name.toLowerCase() == displayName.toLowerCase()) &&
+        if ((c.id == id || c.name.toLowerCase() == displayName.toLowerCase()) &&
             c.imageUrl.isNotEmpty &&
             (c.imageUrl.startsWith('http://') ||
                 c.imageUrl.startsWith('https://') ||
@@ -203,7 +363,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
               '-',
           branchIds: state.review?.coachId == id
               ? state.review!.branchIds
-              : publications[id]?.branchIds ?? const [],
+              : _assignments[id] ?? publications[id]?.branchIds ?? const [],
           statusLabel: publications[id] == null
               ? 'Unpublished'
               : !publications[id]!.isPublished
@@ -223,12 +383,12 @@ class _CoachesScreenState extends State<CoachesScreen> {
             drafts[id]?.fields.displayName ??
                 publications[id]?.fields.displayName ??
                 '',
-            drafts[id]?.fields.photoPath ??
-                publications[id]?.fields.photoPath,
+            drafts[id]?.fields.photoPath ?? publications[id]?.fields.photoPath,
           ),
           rating: publications[id]?.averageRating,
           reviewCount: publications[id]?.isPublished == true
-              ? publications[id]!.reviewCount : null,
+              ? publications[id]!.reviewCount
+              : null,
           feeLabel: publications[id]?.fields.consultationFeeMinor != null &&
                   publications[id]!.fields.consultationFeeMinor! > 0
               ? 'RM ${(publications[id]!.fields.consultationFeeMinor! / 100).toStringAsFixed(2)} / session'
@@ -241,10 +401,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
               : '${drafts[id]!.fields.yearsExperience} yrs experience',
           onTap: state.busy
               ? null
-              : () => _guarded(() {
-                    _cubit!.review(id);
-                    widget.onReviewChanged?.call(id);
-                  }),
+              : () => _guarded(() => _cubit!.review(id)),
         ),
     ];
   }
@@ -253,13 +410,72 @@ class _CoachesScreenState extends State<CoachesScreen> {
   Widget build(BuildContext context) {
     final cubit = _cubit;
     if (cubit != null) {
-      return BlocBuilder<CoachDirectoryAdminCubit, CoachDirectoryAdminState>(
+      return BlocConsumer<CoachDirectoryAdminCubit, CoachDirectoryAdminState>(
         bloc: cubit,
-        builder: (context, state) =>
-            _page(context, _liveEntries(state), state: state),
+        listenWhen: (previous, current) => !current.busy,
+        listener: (context, state) {
+          final id = state.review?.coachId;
+          if (id != _reportedReviewId) {
+            _reportedReviewId = id;
+            widget.onReviewChanged?.call(id);
+          }
+          _loadAssignments(state);
+        },
+        builder: (context, state) => SizedBox.expand(
+          child: IndexedStack(
+            index: _addingCoach ? 1 : 0,
+            sizing: StackFit.expand,
+            children: [
+              _page(context, _liveEntries(state), state: state),
+              if (_addingCoach) _buildProvisioning(state),
+            ],
+          ),
+        ),
       );
     }
     return _page(context, _sampleEntries());
+  }
+
+  Widget _buildProvisioning(CoachDirectoryAdminState state) {
+    final canProvision = state.allowed &&
+        context.read<CoachProfileAdminRepository>().scope.datasetScope == null;
+    if (canProvision && _activeBranches.isNotEmpty) {
+      return CoachProvisionPage(
+        branches: _activeBranches,
+        create: (input) async =>
+            (await _branchCommand(input))['coachId'] as String,
+        onCancel: _closeAddCoach,
+        onCreated: _finishProvisioning,
+        onLeaveCheckChanged: widget.onProvisionLeaveCheckChanged,
+      );
+    }
+    final loading = state.loading || (canProvision && _branchLoading);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 22, 28, 36),
+      children: [
+        Text('Coach onboarding',
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 16),
+        Text(loading
+            ? 'Loading enabled branches…'
+            : canProvision
+                ? 'No enabled branches could be loaded. Check Branches and try again.'
+                : 'Coach provisioning requires access to manage this directory.'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            OutlinedButton(
+              onPressed: _closeAddCoach,
+              child: const Text('Back to Coaches'),
+            ),
+            if (canProvision && !loading)
+              FilledButton(onPressed: _loadBranches, child: const Text('Retry')),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _page(BuildContext context, List<_CoachEntry> coaches,
@@ -294,16 +510,25 @@ class _CoachesScreenState extends State<CoachesScreen> {
         }
       }
       if (_selectedBranch != 'Branch' && _selectedBranch != 'All') {
-        if (!coach.groups.contains(_selectedBranch)) return false;
+        final matchesId = coach.groups.contains(_selectedBranch);
+        final matchesName = coach.groups.any((g) =>
+            (_branchNames[g] ?? g).toLowerCase() ==
+            (_branchNames[_selectedBranch] ?? _selectedBranch).toLowerCase());
+        if (!matchesId && !matchesName) return false;
       }
       return true;
     }).toList();
 
-    final branchIds = <String>{for (final coach in filtered) ...coach.groups};
+    final isAllBranches =
+        _selectedBranch == 'Branch' || _selectedBranch == 'All';
 
-    final allBranches = <String>{
-      for (final coach in coaches) ...coach.groups
-    }.toList();
+    final branchIds = !isAllBranches
+        ? <String>{_selectedBranch}
+        : <String>{for (final coach in filtered) ...coach.groups};
+
+    final allBranches = state == null
+        ? <String>{for (final coach in coaches) ...coach.groups}.toList()
+        : _branchNames.keys.toList();
 
     final bool isReviewMode = state?.review != null;
 
@@ -317,52 +542,30 @@ class _CoachesScreenState extends State<CoachesScreen> {
           children: [
             if (isReviewMode) ...[
               _buildReviewView(context, state!),
-              SizedBox(
-                height: 0,
-                child: OverflowBox(
-                  alignment: Alignment.topLeft,
-                  maxHeight: 0,
-                  child: Opacity(
-                    opacity: 0,
-                    child: FocusScope(
-                      canRequestFocus: false,
-                      child: IgnorePointer(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ..._buildDirectorySections(
-                              context,
-                              coaches,
-                              filtered,
-                              branchIds,
-                              allBranches,
-                              publishedCount: publishedCount,
-                              pendingCount: pendingCount,
-                              inactiveCount: inactiveCount,
-                              state: state,
-                              hideHeader: true,
-                            ),
-                          ],
-                        ),
-                      ),
+              const SizedBox(height: 32),
+              const Divider(color: AppColors.hairline),
+              const SizedBox(height: 24),
+              Text(
+                'Coach Directory',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
                     ),
-                  ),
-                ),
               ),
-            ] else ...[
-              ..._buildDirectorySections(
-                context,
-                coaches,
-                filtered,
-                branchIds,
-                allBranches,
-                publishedCount: publishedCount,
-                pendingCount: pendingCount,
-                inactiveCount: inactiveCount,
-                state: state,
-                hideHeader: false,
-              ),
+              const SizedBox(height: 16),
             ],
+            ..._buildDirectorySections(
+              context,
+              coaches,
+              filtered,
+              branchIds,
+              allBranches,
+              publishedCount: publishedCount,
+              pendingCount: pendingCount,
+              inactiveCount: inactiveCount,
+              state: state,
+              hideHeader: isReviewMode,
+            ),
           ],
         ),
       ),
@@ -381,10 +584,13 @@ class _CoachesScreenState extends State<CoachesScreen> {
     CoachDirectoryAdminState? state,
     required bool hideHeader,
   }) {
+    final isAllBranches =
+        _selectedBranch == 'Branch' || _selectedBranch == 'All';
     return [
       if (!hideHeader) ...[
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,7 +606,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Manage coach profiles, verification, and publication status.',
+                  'Manage coach profiles, branch assignments and verification.',
                   style: TextStyle(
                     color: AppColors.inkSoft,
                     fontSize: 13.5,
@@ -408,13 +614,34 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 ),
               ],
             ),
-            if (state != null)
-              IconButton(
-                tooltip: 'Refresh Coaches',
-                onPressed:
-                    state.busy ? null : () => _guarded(_cubit!.refresh),
-                icon: const Icon(Icons.refresh_rounded),
+            FilledButton.icon(
+              key: const ValueKey('add-coach'),
+              onPressed: widget.onOpenAddCoach != null
+                  ? (state != null &&
+                          (!state.allowed ||
+                              state.busy ||
+                              _branchLoading ||
+                              context
+                                      .read<CoachProfileAdminRepository>()
+                                      .scope
+                                      .datasetScope !=
+                                  null)
+                      ? null
+                      : _openAddCoach)
+                  : (state != null
+                      ? null
+                      : () => provisionCoachFlow(context, _refresh)),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add Coach'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                minimumSize: const Size(0, 42),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
               ),
+            ),
           ],
         ),
         const SizedBox(height: 20),
@@ -423,9 +650,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
             Expanded(
               child: _StatChip(
                 icon: Icons.sports_rounded,
-                label: state == null
-                    ? 'Total coaches'
-                    : 'Total coaches (loaded)',
+                label:
+                    state == null ? 'Total coaches' : 'Total coaches (loaded)',
                 value: '${coaches.length}',
                 color: AppColors.primary,
               ),
@@ -471,9 +697,11 @@ class _CoachesScreenState extends State<CoachesScreen> {
           ),
           child: Row(
             children: [
-              Expanded(
+              ConstrainedBox(
+                constraints:
+                    const BoxConstraints(minWidth: 260, maxWidth: 360),
                 child: Container(
-                  height: 42,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: AppColors.surfaceAlt.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(10),
@@ -490,8 +718,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                           controller: _searchController,
                           onChanged: (v) => setState(() => _searchQuery = v),
                           decoration: const InputDecoration(
-                            hintText:
-                                'Search coaches by name or specialty...',
+                            hintText: 'Search coaches by name or specialty...',
                             hintStyle: TextStyle(
                               color: AppColors.inkSoft,
                               fontSize: 13,
@@ -499,8 +726,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 10),
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
                             isDense: true,
                             filled: false,
                           ),
@@ -530,9 +756,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                   'Conditioning',
                   'Squat',
                   'Mobility'
-                ]
-                    .map((s) => PopupMenuItem(value: s, child: Text(s)))
-                    .toList(),
+                ].map((s) => PopupMenuItem(value: s, child: Text(s))).toList(),
                 child: _filterPill(_selectedSpecialty),
               ),
               const SizedBox(width: 10),
@@ -544,18 +768,51 @@ class _CoachesScreenState extends State<CoachesScreen> {
                   'Published',
                   'Pending Review',
                   'Inactive'
-                ]
-                    .map((s) => PopupMenuItem(value: s, child: Text(s)))
-                    .toList(),
+                ].map((s) => PopupMenuItem(value: s, child: Text(s))).toList(),
                 child: _filterPill(_selectedStatus),
               ),
               const SizedBox(width: 10),
               PopupMenuButton<String>(
+                key: const ValueKey('coach-filter-branch'),
                 onSelected: (v) => setState(() => _selectedBranch = v),
-                itemBuilder: (context) => ['Branch', 'All', ...allBranches]
-                    .map((s) => PopupMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                child: _filterPill(_selectedBranch),
+                itemBuilder: (context) {
+                  final seenLabels = <String>{'All Branches'};
+                  final items = <PopupMenuEntry<String>>[
+                    const PopupMenuItem(
+                      value: 'All',
+                      child: Text('All Branches'),
+                    ),
+                  ];
+                  for (final b in allBranches) {
+                    final normalized = b.trim().toLowerCase();
+                    if (normalized == 'all' ||
+                        normalized == 'branch' ||
+                        normalized == 'all branches') {
+                      continue;
+                    }
+                    final label = (_branchNames[b] ?? b).trim();
+                    final normalizedLabel = label.toLowerCase();
+                    if (label.isEmpty ||
+                        normalizedLabel == 'all' ||
+                        normalizedLabel == 'branch' ||
+                        normalizedLabel == 'all branches' ||
+                        !seenLabels.add(label)) {
+                      continue;
+                    }
+                    items.add(
+                      PopupMenuItem(
+                        value: b,
+                        child: Text(label),
+                      ),
+                    );
+                  }
+                  return items;
+                },
+                child: _filterPill(
+                  _selectedBranch == 'Branch' || _selectedBranch == 'All'
+                      ? 'All Branches'
+                      : (_branchNames[_selectedBranch] ?? _selectedBranch),
+                ),
               ),
               const SizedBox(width: 10),
               Tooltip(
@@ -580,21 +837,50 @@ class _CoachesScreenState extends State<CoachesScreen> {
                   },
                 ),
               ),
-              const SizedBox(width: 10),
-              FilledButton.icon(
-                key: const ValueKey('add-coach'),
-                onPressed: state != null
-                    ? null
-                    : () => provisionCoachFlow(context, _refresh),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Coach'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size(0, 42),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+              const Spacer(),
+              if (state != null) ...[
+                IconButton(
+                  tooltip: 'Refresh Coaches',
+                  onPressed:
+                      state.busy ? null : () => _guarded(_cubit!.refresh),
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.hairline),
+                ),
+                padding: const EdgeInsets.all(2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.grid_view_rounded,
+                        size: 18,
+                        color: _viewMode == 'grid'
+                            ? AppColors.primary
+                            : AppColors.inkSoft,
+                      ),
+                      tooltip: 'Grid view',
+                      onPressed: () => setState(() => _viewMode = 'grid'),
+                    ),
+                    Container(width: 1, height: 18, color: AppColors.hairline),
+                    IconButton(
+                      icon: Icon(
+                        Icons.view_list_rounded,
+                        size: 18,
+                        color: _viewMode == 'list'
+                            ? AppColors.primary
+                            : AppColors.inkSoft,
+                      ),
+                      tooltip: 'List view',
+                      onPressed: () => setState(() => _viewMode = 'list'),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -603,82 +889,327 @@ class _CoachesScreenState extends State<CoachesScreen> {
         const SizedBox(height: 20),
         if (state?.loading == true) const LinearProgressIndicator(),
         if (state?.message != null) Text(state!.message!),
-        if (state != null &&
-            state.allowed &&
-            !state.loading &&
-            coaches.isEmpty)
+        if (state != null && state.allowed && !state.loading && coaches.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
             child: Center(child: Text('No Coach profiles are available.')),
           ),
       ],
       for (final branchId in branchIds)
-        Padding(
+        SizedBox(
           key: ValueKey('coach-branch-$branchId'),
+          width: 0,
+          height: 0,
+        ),
+      if (!isAllBranches && filtered.isNotEmpty) ...[
+        Row(
+          children: [
+            const Icon(Icons.storefront_outlined,
+                size: 15, color: AppColors.inkSoft),
+            const SizedBox(width: 6),
+            Text(
+              '${_branchNames[_selectedBranch] ?? _selectedBranch}  ·  ${filtered.length}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+      ],
+      if (filtered.isEmpty && coaches.isNotEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Center(
+            child: Text(
+              'No coaches match your filters.',
+              style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
+            ),
+          ),
+        ),
+      if (filtered.isNotEmpty)
+        Padding(
           padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (branchIds.length > 1 || branchId != 'Unassigned') ...[
-                Row(
-                  children: [
-                    const Icon(Icons.storefront_outlined,
-                        size: 15, color: AppColors.inkSoft),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$branchId  ·  ${filtered.where((coach) => coach.groups.contains(branchId)).length}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-              ],
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth.isFinite
-                      ? constraints.maxWidth
-                      : 1200.0;
-                  final int columns;
-                  if (availableWidth >= 880) {
-                    columns = 4;
-                  } else if (availableWidth >= 660) {
-                    columns = 3;
-                  } else if (availableWidth >= 440) {
-                    columns = 2;
-                  } else {
-                    columns = 1;
-                  }
-                  const spacing = 16.0;
-                  final cardWidth =
-                      ((availableWidth - (columns - 1) * spacing) / columns)
-                          .floorToDouble();
-                  final branchCoaches = filtered
-                      .where((coach) => coach.groups.contains(branchId))
-                      .toList();
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final availableWidth = constraints.maxWidth.isFinite
+                  ? constraints.maxWidth
+                  : 1200.0;
+              final int columns;
+              if (availableWidth >= 1400) {
+                columns = 4;
+              } else if (availableWidth >= 1020) {
+                columns = 3;
+              } else if (availableWidth >= 680) {
+                columns = 2;
+              } else {
+                columns = 1;
+              }
+              const spacing = 16.0;
+              final cardWidth =
+                  ((availableWidth - (columns - 1) * spacing) / columns)
+                      .floorToDouble();
 
-                  return Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
+              if (_viewMode == 'list') {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.hairline),
+                  ),
+                  child: Column(
                     children: [
-                      for (var i = 0; i < branchCoaches.length; i++)
-                        _CoachCard(
-                          key: ValueKey(
-                              'coach-card-$branchId-${branchCoaches[i].id}'),
-                          entry: branchCoaches[i],
-                          index: i,
-                          width: cardWidth,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surfaceAlt,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(13),
+                            topRight: Radius.circular(13),
+                          ),
                         ),
+                        child: const Row(
+                          children: [
+                            Expanded(
+                                flex: 3,
+                                child: Text('Coach',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            Expanded(
+                                flex: 2,
+                                child: Text('Specialty',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            Expanded(
+                                flex: 2,
+                                child: Text('Branches',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            Expanded(
+                                flex: 2,
+                                child: Text('Rate / Session',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            Expanded(
+                                flex: 2,
+                                child: Text('Rating & Reviews',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            Expanded(
+                                flex: 2,
+                                child: Text('Status',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                            SizedBox(
+                                width: 170,
+                                child: Text('Actions',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.inkSoft))),
+                          ],
+                        ),
+                      ),
+                      for (var i = 0; i < filtered.length; i++) ...[
+                        if (i > 0)
+                          const Divider(
+                              height: 1, color: AppColors.hairline),
+                        Padding(
+                          key: ValueKey(
+                              'coach-card-${!isAllBranches && filtered[i].groups.contains(_selectedBranch) ? _selectedBranch : filtered[i].groups.first}-${filtered[i].id}'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Row(
+                                  children: [
+                                    _CoachAvatar(
+                                      name: filtered[i].name,
+                                      id: filtered[i].id,
+                                      imageUrl:
+                                          filtered[i].imageUrl,
+                                      photoPath:
+                                          filtered[i].photoPath,
+                                      index: i,
+                                      width: 36,
+                                      height: 36,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            filtered[i].name,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight:
+                                                  FontWeight.w600,
+                                              color: AppColors.ink,
+                                            ),
+                                          ),
+                                          Text(
+                                            filtered[i].specialty,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.inkSoft,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  filtered[i].specialty,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  filtered[i]
+                                      .branchIds
+                                      .map((id) =>
+                                          _branchNames[id] ?? id)
+                                      .join(', '),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.inkSoft,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  filtered[i].feeLabel ?? '—',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.star_rounded,
+                                        size: 14,
+                                        color: Color(0xFFF59E0B)),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      filtered[i].rating != null
+                                          ? '${filtered[i].rating!.toStringAsFixed(1)} (${filtered[i].reviewCount ?? 0})'
+                                          : '—',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: _coachStatusBadge(
+                                    filtered[i].statusLabel),
+                              ),
+                              SizedBox(
+                                width: 170,
+                                child: Row(
+                                  children: [
+                                    OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.ink,
+                                        side: const BorderSide(
+                                            color: AppColors.hairline),
+                                        padding: const EdgeInsets
+                                            .symmetric(horizontal: 8),
+                                        minimumSize:
+                                            const Size(0, 30),
+                                      ),
+                                      onPressed: () =>
+                                          _showCoachProfileDialog(
+                                              context,
+                                              filtered[i]),
+                                      child: const Text('View Profile',
+                                          style: TextStyle(fontSize: 11)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    FilledButton(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            AppColors.primary,
+                                        padding: const EdgeInsets
+                                            .symmetric(horizontal: 10),
+                                        minimumSize:
+                                            const Size(0, 30),
+                                      ),
+                                      onPressed: filtered[i].onTap,
+                                      child: Text(
+                                          filtered[i].actionLabel ??
+                                              'Review',
+                                          style: const TextStyle(
+                                              fontSize: 11)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                  );
-                },
-              ),
-            ],
+                  ),
+                );
+              }
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  for (var i = 0; i < filtered.length; i++)
+                    _CoachCard(
+                      key: ValueKey(
+                          'coach-card-${!isAllBranches && filtered[i].groups.contains(_selectedBranch) ? _selectedBranch : filtered[i].groups.first}-${filtered[i].id}'),
+                      entry: filtered[i],
+                      index: i,
+                      width: cardWidth,
+                      assignedBranches: filtered[i]
+                          .branchIds
+                          .map((id) => _branchNames[id])
+                          .whereType<String>()
+                          .toList(),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       if (!hideHeader) ...[
@@ -734,9 +1265,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
     final displayName = draft?.fields.displayName ??
         publication?.fields.displayName ??
         'Coach ${review.coachId}';
-    final specialty = draft?.fields.specialty ??
-        publication?.fields.specialty ??
-        'Coach';
+    final specialty =
+        draft?.fields.specialty ?? publication?.fields.specialty ?? 'Coach';
     final photoPath = draft?.fields.photoPath ?? publication?.fields.photoPath;
     final avatarUrl =
         _resolveCoachAvatar(review.coachId, displayName, photoPath);
@@ -799,8 +1329,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
             const Spacer(),
             IconButton(
               tooltip: 'Refresh Coaches',
-              onPressed:
-                  state.busy ? null : () => _guarded(_cubit!.refresh),
+              onPressed: state.busy ? null : () => _guarded(_cubit!.refresh),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -1346,7 +1875,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
             onAction:
                 !isVerified ? () => setState(() => _activeReviewTab = 2) : null,
           ),
-          if (draft != null && (draft.fields.consultationFeeMinor ?? 0) <= 0) ...[
+          if (draft != null &&
+              (draft.fields.consultationFeeMinor ?? 0) <= 0) ...[
             const SizedBox(height: 8),
             _eligibilityWarningBanner(
               'No valid consultation fee is set in the draft. Members will see no price and session checkout will be disabled.',
@@ -1429,8 +1959,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
           _detailRow('Public revision', '${review.publicRevision}'),
           _detailRow('Published from draft',
               '${publication?.sourceRevision ?? 'Not published yet'}'),
-          _detailRow(
-              'Draft updated', _formatTimestamp(draft?.updatedAtMillis)),
+          _detailRow('Draft updated', _formatTimestamp(draft?.updatedAtMillis)),
           _detailRow('Last published',
               _formatTimestamp(publication?.publishedAtMillis)),
         ],
@@ -1497,9 +2026,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
     }
 
     final keysToDisplay = _showAllProfileFields
-        ? (proposed?.keys.toList() ??
-            published?.keys.toList() ??
-            <String>[])
+        ? (proposed?.keys.toList() ?? published?.keys.toList() ?? <String>[])
         : changed.toList();
 
     return Panel(
@@ -1606,8 +2133,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: chipColor.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
@@ -1655,7 +2181,9 @@ class _CoachesScreenState extends State<CoachesScreen> {
                           fontSize: 13,
                           color: oldValue == null
                               ? AppColors.inkSoft
-                              : (isModified ? AppColors.inkSoft : AppColors.ink),
+                              : (isModified
+                                  ? AppColors.inkSoft
+                                  : AppColors.ink),
                           decoration: isModified && oldValue != null
                               ? TextDecoration.lineThrough
                               : null,
@@ -1962,8 +2490,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
               decoration: BoxDecoration(
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 children: [
@@ -2056,15 +2584,15 @@ class _CoachesScreenState extends State<CoachesScreen> {
             children: [
               OutlinedButton(
                 onPressed: !state.busy && widget.onOpenBookings != null
-                    ? () => _guarded(
-                        () => widget.onOpenBookings!(review.coachId))
+                    ? () =>
+                        _guarded(() => widget.onOpenBookings!(review.coachId))
                     : null,
                 child: const Text('View bookings'),
               ),
               OutlinedButton.icon(
                 onPressed: !state.busy && widget.onOpenSchedule != null
-                    ? () => _guarded(
-                        () => widget.onOpenSchedule!(review.coachId))
+                    ? () =>
+                        _guarded(() => widget.onOpenSchedule!(review.coachId))
                     : null,
                 icon: const Icon(Icons.calendar_month_outlined),
                 label: const Text('View schedule'),
@@ -2072,8 +2600,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
               TextButton(
                 onPressed: state.busy
                     ? null
-                    : () => _guarded(
-                        () => _cubit!.review(review.coachId)),
+                    : () => _guarded(() => _cubit!.review(review.coachId)),
                 child: const Text('Discard and reload review'),
               ),
               OutlinedButton(
@@ -2081,8 +2608,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
                         !state.busy &&
                         !state.conflict &&
                         review.publication != null
-                    ? () => _guarded(() => _cubit!
-                        .setStatus(CoachDirectoryAction.deactivate))
+                    ? () => _guarded(() =>
+                        _cubit!.setStatus(CoachDirectoryAction.deactivate))
                     : null,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red.shade700,
@@ -2091,8 +2618,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 child: const Text('Deactivate directory profile'),
               ),
               Tooltip(
-                message: review.canPublish &&
-                        !review.hasPublishableChanges
+                message: review.canPublish && !review.hasPublishableChanges
                     ? 'Published profile is already up to date'
                     : !review.canPublish
                         ? 'Publication requires draft and at least one approved certification (BR-5)'
@@ -2102,8 +2628,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
                           !state.conflict &&
                           review.canPublish &&
                           review.hasPublishableChanges
-                      ? () => _guarded(() => _cubit!
-                          .setStatus(CoachDirectoryAction.publish))
+                      ? () => _guarded(
+                          () => _cubit!.setStatus(CoachDirectoryAction.publish))
                       : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -2301,8 +2827,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
           SizedBox(
             width: 140,
             child: Text(label,
-                style:
-                    const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
           ),
           Expanded(
             child: SelectableText(
@@ -2425,8 +2950,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
       decoration: BoxDecoration(
         color: active ? AppColors.primary : AppColors.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: active ? AppColors.primary : AppColors.hairline),
+        border:
+            Border.all(color: active ? AppColors.primary : AppColors.hairline),
       ),
       child: Text(
         text,
@@ -2545,8 +3070,8 @@ class _CoachAvatar extends StatefulWidget {
     this.imageUrl,
     this.photoPath,
     this.index = 0,
-    this.width = 78,
-    this.height = 130,
+    this.width = 56,
+    this.height = 56,
   });
 
   final String name;
@@ -2681,31 +3206,69 @@ class _CoachAvatarState extends State<_CoachAvatar> {
 
   Widget _fallback(String initial) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 5),
-          const Icon(
-            Icons.fitness_center_rounded,
-            size: 12,
-            color: AppColors.inkSoft,
-          ),
-        ],
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: widget.height > 60 ? 24 : (widget.height > 50 ? 20 : 15),
+          fontWeight: FontWeight.w700,
+          color: AppColors.primary,
+        ),
       ),
     );
   }
+}
+
+Widget _coachStatusBadge(String rawStatus) {
+  final status = rawStatus.toLowerCase();
+  Color bg;
+  Color fg;
+  Color border;
+  IconData icon;
+  String label;
+
+  if (status == 'published') {
+    bg = const Color(0xFFEBFDF2);
+    fg = const Color(0xFF16A34A);
+    border = const Color(0xFFBBF7D0);
+    icon = Icons.check_rounded;
+    label = 'Published';
+  } else if (status == 'inactive') {
+    bg = const Color(0xFFF1F5F9);
+    fg = const Color(0xFF64748B);
+    border = const Color(0xFFE2E8F0);
+    icon = Icons.pause_rounded;
+    label = 'Inactive';
+  } else {
+    bg = const Color(0xFFFEF3C7);
+    fg = const Color(0xFFD97706);
+    border = const Color(0xFFFDE68A);
+    icon = Icons.hourglass_top_rounded;
+    label = 'Pending Review';
+  }
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: border),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: fg),
+        const SizedBox(width: 3.5),
+        Text(
+          label,
+          style: TextStyle(
+            color: fg,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _CoachCard extends StatelessWidget {
@@ -2714,74 +3277,23 @@ class _CoachCard extends StatelessWidget {
     required this.entry,
     this.index = 0,
     this.width,
+    this.assignedBranches = const [],
   });
   final _CoachEntry entry;
   final int index;
   final double? width;
+  final List<String> assignedBranches;
 
-  Widget _statusBadge(String rawStatus) {
-    final status = rawStatus.toLowerCase();
-    Color bg;
-    Color fg;
-    Color border;
-    IconData icon;
-    String label;
-
-    if (status == 'published') {
-      bg = const Color(0xFFEBFDF2);
-      fg = const Color(0xFF16A34A);
-      border = const Color(0xFFBBF7D0);
-      icon = Icons.check_rounded;
-      label = 'Published';
-    } else if (status == 'inactive') {
-      bg = const Color(0xFFF1F5F9);
-      fg = const Color(0xFF64748B);
-      border = const Color(0xFFE2E8F0);
-      icon = Icons.pause_rounded;
-      label = 'Inactive';
-    } else {
-      bg = const Color(0xFFFEF3C7);
-      fg = const Color(0xFFD97706);
-      border = const Color(0xFFFDE68A);
-      icon = Icons.hourglass_top_rounded;
-      label = 'Pending Review';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: fg),
-          const SizedBox(width: 3.5),
-          Text(
-            label,
-            style: TextStyle(
-              color: fg,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _statusBadge(String rawStatus) => _coachStatusBadge(rawStatus);
 
   @override
   Widget build(BuildContext context) {
-    final tags = _tagsForSpecialty(entry.specialty);
-
     return Container(
       width: width ?? 328,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.hairline),
         boxShadow: [
           BoxShadow(
@@ -2794,151 +3306,211 @@ class _CoachCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 130,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _CoachAvatar(
-                  name: entry.name,
-                  id: entry.id,
-                  imageUrl: entry.imageUrl,
-                  photoPath: entry.photoPath,
-                  index: index,
-                  width: 78,
-                  height: 130,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CoachAvatar(
+                name: entry.name,
+                id: entry.id,
+                imageUrl: entry.imageUrl,
+                photoPath: entry.photoPath,
+                index: index,
+                width: 72,
+                height: 72,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 72),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            entry.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                          Expanded(
+                            child: Text(
+                              entry.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ink,
+                                letterSpacing: -0.2,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            entry.specialty,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.inkSoft,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: [
-                              for (final tag in tags.take(2))
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceAlt,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border:
-                                        Border.all(color: AppColors.hairline),
-                                  ),
-                                  child: Text(
-                                    tag,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.ink,
-                                    ),
-                                  ),
+                          const SizedBox(width: 6),
+                          _statusBadge(entry.statusLabel),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.18)),
+                              ),
+                              child: Text(
+                                entry.specialty,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
                                 ),
-                            ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.star_rounded,
-                                  size: 12.5, color: AppColors.accent),
-                              const SizedBox(width: 2),
-                              Text(
-                                entry.rating?.toStringAsFixed(1) ?? '—',
+                      const SizedBox(height: 4),
+                      if (assignedBranches.isNotEmpty)
+                        Row(
+                          children: [
+                            const Icon(Icons.storefront_outlined,
+                                size: 12, color: AppColors.inkSoft),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                assignedBranches.first,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  color: AppColors.inkSoft,
                                 ),
                               ),
-                              const SizedBox(width: 5),
-                              Flexible(
-                                child: Text(
-                                  entry.reviewCount != null
-                                      ? '(${entry.reviewCount} ${entry.reviewCount == 1 ? 'review' : 'reviews'})'
-                                      : entry.sessionsCompleted != null
-                                          ? '${entry.sessionsCompleted} sessions'
-                                          : 'No rating',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 10.5,
-                                    color: AppColors.inkSoft,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              const Icon(Icons.calendar_today_outlined,
-                                  size: 11, color: AppColors.inkSoft),
+                            ),
+                            if (assignedBranches.length > 1) ...[
                               const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  entry.note ?? '— yrs experience',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 10.5,
-                                    color: AppColors.inkSoft,
-                                  ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceAlt,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppColors.hairline),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              const Icon(Icons.payments_outlined,
-                                  size: 11.5, color: AppColors.inkSoft),
-                              const SizedBox(width: 4),
-                              Expanded(
                                 child: Text(
-                                  entry.feeLabel ?? '—',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  '+${assignedBranches.length - 1} branches',
                                   style: const TextStyle(
-                                    fontSize: 10.5,
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.ink,
+                                    color: AppColors.primary,
                                   ),
                                 ),
                               ),
                             ],
+                          ],
+                        )
+                      else
+                        const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAlt.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.hairline),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.star_rounded,
+                          size: 14, color: Color(0xFFF59E0B)),
+                      const SizedBox(width: 3),
+                      Text(
+                        entry.rating?.toStringAsFixed(1) ?? '—',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          entry.reviewCount != null
+                              ? '(${entry.reviewCount} ${entry.reviewCount == 1 ? 'review' : 'reviews'})'
+                              : '${entry.sessionsCompleted ?? '-'} sessions',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.inkSoft,
                           ),
-                        ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 16,
+                  color: AppColors.hairline,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.workspace_premium_outlined,
+                          size: 13, color: AppColors.inkSoft),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          entry.note ?? '— yrs experience',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 16,
+                  color: AppColors.hairline,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.payments_outlined,
+                          size: 13, color: AppColors.inkSoft),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          entry.feeLabel ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -2946,65 +3518,56 @@ class _CoachCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.hairline),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            alignment: WrapAlignment.spaceBetween,
+          const SizedBox(height: 12),
+          Row(
             children: [
-              _statusBadge(entry.statusLabel),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.ink,
-                      side: const BorderSide(
-                          color: AppColors.hairline, width: 1.1),
-                      backgroundColor: Colors.white,
-                      minimumSize: const Size(0, 28),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                    ),
-                    onPressed: () => _showCoachProfileDialog(context, entry),
-                    child: const Text(
-                      'View Profile',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ink,
-                      ),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.hairline),
+                    backgroundColor: Colors.white,
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(0, 28),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                    ),
-                    onPressed: entry.onTap,
-                    child: Text(
-                      entry.actionLabel ?? 'Manage',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  onPressed: () => _showCoachProfileDialog(context, entry),
+                  child: const Text(
+                    'View Profile',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
                     ),
                   ),
-                ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 32),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: entry.onTap,
+                  child: Text(
+                    entry.actionLabel ?? 'Review',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -3067,7 +3630,8 @@ void _showCoachProfileDialog(BuildContext context, _CoachEntry coach) {
                           spacing: 6,
                           runSpacing: 4,
                           children: [
-                            for (final tag in _tagsForSpecialty(coach.specialty))
+                            for (final tag
+                                in _tagsForSpecialty(coach.specialty))
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),

@@ -8,7 +8,7 @@ import 'member_recommendation_sheet.dart';
 import '../../application/published_recommendation_suggestion.dart';
 import 'recommendation_content_card.dart';
 
-/// The same delivered-only collection powers Home and the full history route.
+/// The same delivered-only collection powers Home and the full recommendation page.
 class MemberRecommendationsView extends StatefulWidget {
   const MemberRecommendationsView(
       {super.key,
@@ -19,13 +19,15 @@ class MemberRecommendationsView extends StatefulWidget {
       this.updates,
       this.onInvalidate,
       this.photoBuilder,
-      this.onSettings,
       this.onViewAll,
       this.compact = false,
       this.visible = true,
+      this.pageScrollable = false,
       this.loadDiscovery,
+      this.loadRoutineCovers,
       this.onOpenDiscovery});
 
+  final Future<Map<String, String>> Function(List<String>)? loadRoutineCovers;
   final PublishedRecommendationLoader? loadDiscovery;
   final Future<void> Function(BuildContext, PublishedRecommendationSuggestion)?
       onOpenDiscovery;
@@ -36,20 +38,27 @@ class MemberRecommendationsView extends StatefulWidget {
   final bool Function() isCurrent;
   final MemberRecommendationOpener onOpenTarget;
   final MemberRecommendationPhotoBuilder? photoBuilder;
-  final VoidCallback? onSettings, onViewAll;
-  final bool compact, visible;
+  final VoidCallback? onViewAll;
+  final bool compact, visible, pageScrollable;
 
   @override
   State<MemberRecommendationsView> createState() => _RecommendationsState();
 }
 
 class _RecommendationsState extends State<MemberRecommendationsView> {
+  final _tabKeys = <RecommendationKind?, GlobalKey>{
+    null: GlobalKey(),
+    RecommendationKind.routine: GlobalKey(),
+    RecommendationKind.content: GlobalKey(),
+    RecommendationKind.trainer: GlobalKey(),
+  };
+  Map<String, String> _routineCovers = {};
   final _records = <MemberRecommendationDetail>[];
   List<PublishedRecommendationSuggestion> _discovery = [];
   RecommendationKind? _filter;
   bool _discoveryLoading = false;
   int _discoveryGeneration = 0;
-  bool _loading = true, _history = false, _enabled = true;
+  bool _loading = true, _enabled = true;
   String? _error, _next;
   int _generation = 0;
   Timer? _afterWorkoutRefresh;
@@ -83,10 +92,9 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     }, onError: (_) {/* Pull to refresh remains available. */});
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     widget.onInvalidate?.call();
-    _load();
-    _loadDiscovery();
+    await Future.wait([_load(), _loadDiscovery()]);
   }
 
   @override
@@ -187,8 +195,20 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       _error = null;
     });
     try {
-      final page = await widget.loadPage(
-          history: _history, afterId: more ? _next : null);
+      var page =
+          await widget.loadPage(history: false, afterId: more ? _next : null);
+      final allRecords = [...page.records];
+      final cursors = <String>{};
+      while (page.nextAfterId != null) {
+        if (!_current || generation != _generation) return;
+        if (!cursors.add(page.nextAfterId!)) {
+          throw const MemberRecommendationUnavailable();
+        }
+        page = await widget.loadPage(history: false, afterId: page.nextAfterId);
+        allRecords.addAll(page.records);
+      }
+      page =
+          MemberRecommendationPage(records: allRecords, enabled: page.enabled);
       if (!_current || generation != _generation) return;
       // A prepared or cross-scope record must never become a consumer card.
       if (page.records.any((r) =>
@@ -198,15 +218,29 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
           r.state == MemberRecommendationState.notDelivered)) {
         throw const MemberRecommendationUnavailable();
       }
+      final ids = page.records
+          .where((r) => r.available)
+          .map((r) => r.target)
+          .whereType<RoutineRecommendationTarget>()
+          .map((r) => r.routineId)
+          .toSet()
+          .toList();
+      var covers = <String, String>{};
+      if (ids.isNotEmpty && widget.loadRoutineCovers != null) {
+        try {
+          covers = await widget.loadRoutineCovers!(ids);
+        } catch (_) {}
+      }
+      if (!_current || generation != _generation) return;
       setState(() {
+        _routineCovers = {if (more) ..._routineCovers, ...covers};
         _enabled = page.enabled;
         _next = page.nextAfterId;
         if (!more) {
           _records.clear();
         }
         for (final record in page.records) {
-          if (_history ||
-              record.available && record.expiresAt.isAfter(DateTime.now())) {
+          if (record.available && record.expiresAt.isAfter(DateTime.now())) {
             _records.removeWhere(
                 (r) => r.recommendationId == record.recommendationId);
             _records.add(record);
@@ -240,7 +274,8 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
         repository: widget.repository,
         isCurrent: widget.isCurrent,
         onOpenTarget: widget.onOpenTarget,
-        scopedPhotoBuilder: widget.photoBuilder);
+        scopedPhotoBuilder: widget.photoBuilder,
+        relatedRecommendations: _group(detail));
     if (_current) {
       widget.onInvalidate?.call();
       await _load(quiet: true);
@@ -279,6 +314,12 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     }
   }
 
+  List<MemberRecommendationDetail> _group(MemberRecommendationDetail detail) =>
+      mergeAvailableMemberRecommendations(_records, DateTime.now()).firstWhere(
+          (g) =>
+              memberRecommendationTargetKey(g.first) ==
+              memberRecommendationTargetKey(detail),
+          orElse: () => [detail]);
   Future<void> _dismiss(MemberRecommendationDetail detail) async {
     if (!_current || _loading) return;
     setState(() {
@@ -286,8 +327,8 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       _error = null;
     });
     try {
-      await widget.repository.act(detail, 'dismiss',
-          'dismiss-${detail.recommendationId}-${detail.revision}');
+      await dismissMemberRecommendationGroup(
+          widget.repository, _group(detail), () => _current);
       if (_current) {
         widget.onInvalidate?.call();
         await _load(quiet: true);
@@ -304,54 +345,123 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _buildContent(context);
+    if (!widget.pageScrollable) return content;
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [content],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (!widget.isCurrent()) return const SizedBox.shrink();
     final text = Theme.of(context).textTheme;
     final filtered =
-        _records.where((r) => _filter == null || r.kind == _filter).toList();
-    final shown = widget.compact ? filtered.take(1) : filtered;
+        mergeAvailableMemberRecommendations(_records, DateTime.now())
+            .map((g) => g.first)
+            .where((r) => _filter == null || r.kind == _filter)
+            .toList();
+    final kinds = [
+      _filter ?? RecommendationKind.routine,
+      if (_filter == null) ...[
+        RecommendationKind.content,
+        RecommendationKind.trainer
+      ]
+    ];
+    var slots = widget.compact ? 2 : filtered.length + _discovery.length;
+    final groups = <Widget>[];
+    for (final kind in kinds) {
+      if (slots == 0) break;
+      final records = filtered
+          .where((r) => r.kind == kind)
+          .take(widget.compact ? 1 : slots)
+          .toList();
+      final published = records.isEmpty
+          ? _discovery
+              .where((r) => r.kind == kind)
+              .take(widget.compact ? 1 : slots)
+              .toList()
+          : <PublishedRecommendationSuggestion>[];
+      if (records.isEmpty && published.isEmpty) continue;
+      slots -= records.length + published.length;
+      if (!widget.compact || published.isNotEmpty) {
+        groups.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+              switch (kind) {
+                RecommendationKind.routine => published.isEmpty
+                    ? 'Recommended routines'
+                    : 'Explore routines',
+                RecommendationKind.content => published.isEmpty
+                    ? 'Recommended tutorials'
+                    : 'Explore tutorials',
+                RecommendationKind.trainer => 'Recommended coaches',
+              },
+              style: text.titleMedium),
+        ));
+      }
+      for (final detail in records) {
+        final target = detail.target;
+        groups.add(RecommendationCard(
+          detail: detail,
+          busy: _loading,
+          routineCover: target is RoutineRecommendationTarget
+              ? widget.loadRoutineCovers == null
+                  ? detail.imageUrl
+                  : (_routineCovers[target.routineId] ?? detail.imageUrl)
+              : null,
+          compact: widget.compact,
+          onOpen: () => detail.available ? _open(detail) : _detail(detail),
+          onDetails: () => _detail(detail),
+          onDismiss: detail.available ? () => _dismiss(detail) : null,
+          photoBuilder: widget.photoBuilder,
+        ));
+        groups.add(const SizedBox(height: 12));
+      }
+      for (final item in published) {
+        groups.add(RecommendationContentCard(
+          kind: item.kind,
+          useTallRoutineCover:
+              widget.compact && item.kind == RecommendationKind.routine,
+          title: item.title,
+          reason: '',
+          imageUrl: item.imageUrl,
+          difficulty: item.difficulty,
+          durationMinutes: item.durationMinutes,
+          exerciseCount: item.exerciseCount,
+          specialization: item.specialization,
+          branchLabel: item.branchLabel,
+          priceMinor: item.priceMinor,
+          currency: item.currency,
+          onOpen: () => _openDiscovery(item),
+        ));
+        groups.add(const SizedBox(height: 12));
+      }
+    }
     final discovery =
         _discovery.where((r) => _filter == null || r.kind == _filter).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-            child: Text(
-                widget.compact
-                    ? 'Recommended for You'
-                    : 'Personalized Recommendations',
-                style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
-        _headerAction(),
-      ]),
-      if (!widget.compact) ...[
-        const SizedBox(height: 8),
-        Text('Your next step, shaped by your goals and recent training.',
-            style: text.bodyMedium),
-        const SizedBox(height: 16),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          _filterChip('For You', null),
-          _filterChip('Routines', RecommendationKind.routine),
-          _filterChip('Tutorials', RecommendationKind.content),
-          _filterChip('Coaches', RecommendationKind.trainer),
+      if (widget.compact)
+        Row(children: [
+          Expanded(child: Text('Recommended for You', style: text.titleLarge)),
+          _headerAction(),
         ]),
-        const SizedBox(height: 8),
-        Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () {
-                          setState(() => _history = !_history);
-                          _load();
-                        },
-                  child: Text(_history ? 'Recent recommendations' : 'History')),
-              TextButton.icon(
-                  onPressed: _loading || _discoveryLoading ? null : _refresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Refresh')),
-            ]),
-        const SizedBox(height: 12),
+      if (!widget.compact) ...[
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Row(children: [
+            _filterChip('For You', null),
+            _filterChip('Routines', RecommendationKind.routine),
+            _filterChip('Tutorials', RecommendationKind.content),
+            _filterChip('Coaches', RecommendationKind.trainer),
+          ]),
+        ),
+        const SizedBox(height: 16),
       ],
       if (_loading && _records.isEmpty) const _RecommendationSkeleton(),
       if (_error != null)
@@ -359,60 +469,20 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
             action: TextButton(
                 onPressed: _loading ? null : _refresh,
                 child: const Text('Try again'))),
-      if (!_loading && filtered.isEmpty && (discovery.isEmpty || _history))
+      if (!_loading && filtered.isEmpty && discovery.isEmpty)
         _message(
-            _history
-                ? 'Your saved recommendation history will appear here.'
+            _filter == RecommendationKind.trainer
+                ? 'No coach recommendations yet.'
                 : !_enabled
                     ? 'Explore published workouts while personalization becomes available for your account.'
                     : 'Ready for your next step? Explore published workouts or refresh after your next training session.',
             action: Wrap(spacing: 8, children: [
-              if (widget.onSettings != null)
-                TextButton(
-                    onPressed: widget.onSettings,
-                    child: const Text('Personalization settings')),
               if (_filter != null)
                 TextButton(
                     onPressed: () => setState(() => _filter = null),
                     child: const Text('Explore all recommendations')),
             ])),
-      for (final detail in shown) ...[
-        RecommendationCard(
-            detail: detail,
-            busy: _loading,
-            onOpen: () => detail.available ? _open(detail) : _detail(detail),
-            onDetails: () => _detail(detail),
-            onDismiss: detail.available ? () => _dismiss(detail) : null,
-            photoBuilder: widget.photoBuilder),
-        const SizedBox(height: 16),
-      ],
-      if (filtered.isEmpty && !_history && discovery.isNotEmpty) ...[
-        if (!widget.compact) ...[
-          Text('Explore your gym', style: text.titleMedium),
-          const SizedBox(height: 4),
-          Text('General discovery from published content.',
-              style: text.bodyMedium),
-          const SizedBox(height: 12),
-        ],
-        for (final item in widget.compact ? discovery.take(1) : discovery) ...[
-          RecommendationContentCard(
-              kind: item.kind,
-              title: item.title,
-              reason:
-                  'Explore this published ${recommendationTypeLabel(item.kind).toLowerCase()} from your gym.',
-              general: true,
-              imageUrl: item.imageUrl,
-              difficulty: item.difficulty,
-              durationMinutes: item.durationMinutes,
-              exerciseCount: item.exerciseCount,
-              specialization: item.specialization,
-              branchLabel: item.branchLabel,
-              priceMinor: item.priceMinor,
-              currency: item.currency,
-              onOpen: () => _openDiscovery(item)),
-          const SizedBox(height: 16),
-        ],
-      ],
+      ...groups,
       if (_discoveryLoading && _records.isEmpty)
         const LinearProgressIndicator(),
       if (!widget.compact && _next != null)
@@ -422,29 +492,42 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     ]);
   }
 
-  Widget _filterChip(String label, RecommendationKind? kind) => ChoiceChip(
-      label: Text(label),
-      selected: _filter == kind,
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.surface,
-      checkmarkColor: AppColors.surface,
-      side: BorderSide(
-          color: _filter == kind ? AppColors.primary : AppColors.hairline),
-      labelStyle: TextStyle(
-          color: _filter == kind ? AppColors.surface : AppColors.ink,
-          fontWeight: FontWeight.w600),
-      onSelected: (_) => setState(() => _filter = kind));
+  Widget _filterChip(String label, RecommendationKind? kind) {
+    final key = _tabKeys[kind] ??= GlobalKey();
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+          label: Text(label),
+          selected: _filter == kind,
+          selectedColor: AppColors.primary,
+          backgroundColor: AppColors.surface,
+          checkmarkColor: AppColors.surface,
+          side: BorderSide(
+              color: _filter == kind ? AppColors.primary : AppColors.hairline),
+          labelStyle: TextStyle(
+              color: _filter == kind ? AppColors.surface : AppColors.ink,
+              fontWeight: FontWeight.w600),
+          onSelected: (_) {
+            setState(() => _filter = kind);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (key.currentContext != null) {
+                Scrollable.ensureVisible(
+                  key.currentContext!,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  alignment: 0.5,
+                );
+              }
+            });
+          }),
+    );
+  }
 
   Widget _headerAction() {
     if (widget.compact && widget.onViewAll != null) {
       return TextButton(
           onPressed: widget.onViewAll, child: const Text('View all'));
-    }
-    if (!widget.compact && widget.onSettings != null) {
-      return IconButton(
-          tooltip: 'Personalization settings',
-          onPressed: widget.onSettings,
-          icon: const Icon(Icons.tune_rounded));
     }
     return const SizedBox.shrink();
   }
@@ -470,24 +553,30 @@ class RecommendationCard extends StatelessWidget {
       this.onDismiss,
       this.onDetails,
       this.photoBuilder,
+      this.routineCover,
+      this.compact = false,
       this.busy = false});
   final MemberRecommendationDetail detail;
   final VoidCallback onOpen;
   final VoidCallback? onDismiss, onDetails;
   final MemberRecommendationPhotoBuilder? photoBuilder;
-  final bool busy;
+  final bool busy, compact;
+  final String? routineCover;
 
   @override
   Widget build(BuildContext context) => RecommendationContentCard(
       kind: detail.kind,
       title: detail.targetLabel ?? detail.title,
-      reason: detail.available
-          ? recommendationFriendlyReason(detail)
-          : recommendationStateLabel(detail.state),
+      reason: compact
+          ? ''
+          : detail.available
+              ? recommendationFriendlyReason(detail)
+              : recommendationStateLabel(detail.state),
       available: detail.available,
       busy: busy,
-      newRecommendation: detail.readAt == null && detail.available,
-      imageUrl: detail.imageUrl,
+      imageUrl: detail.kind == RecommendationKind.routine
+          ? (routineCover ?? detail.imageUrl)
+          : detail.imageUrl,
       photo: detail.available &&
               detail.kind == RecommendationKind.trainer &&
               detail.photoPath != null
@@ -501,8 +590,8 @@ class RecommendationCard extends StatelessWidget {
       priceMinor: detail.priceMinor,
       currency: detail.currency,
       onOpen: onOpen,
-      onDetails: detail.available ? onDetails : null,
-      onDismiss: onDismiss);
+      onDetails: detail.available && !compact ? onDetails : null,
+      onDismiss: compact ? null : onDismiss);
 }
 
 String recommendationFriendlyReason(MemberRecommendationDetail detail) =>

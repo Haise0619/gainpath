@@ -28,18 +28,57 @@ RoutineAttempt? homeWorkoutAttempt(SessionScope scope,
   return null;
 }
 
+enum HomeDayActivity { none, exerciseRecord, inProgress, completed }
+
+/// Display markers share the exact calendar bounds of the existing totals.
+List<HomeDayActivity> homeWeekActivity(
+    RoutineProgress? routines, MemberLocalProgress? progress) {
+  final days = List.filled(7, HomeDayActivity.none);
+  final start = routines?.weekStart ?? progress?.weekStart;
+  final end = routines?.weekEnd ?? progress?.weekEnd;
+  final asOf = routines?.asOf ?? progress?.asOf;
+  if (start == null || end == null || asOf == null) return days;
+
+  void mark(DateTime at, HomeDayActivity status) {
+    if (at.isBefore(start) || !at.isBefore(end) || at.isAfter(asOf)) return;
+    final day = at.difference(start).inDays;
+    if (status.index > days[day].index) days[day] = status;
+  }
+
+  for (final record
+      in progress?.records ?? const <LocalWorkoutProgressRecord>[]) {
+    mark(record.endedAt, HomeDayActivity.exerciseRecord);
+  }
+  for (final attempt in routines?.records ?? const <RoutineAttempt>[]) {
+    final micros = attempt.isComplete
+        ? attempt.finishedAtMicros
+        : !attempt.finished
+            ? attempt.updatedAtMicros
+            : null;
+    if (micros == null) continue;
+    mark(
+        DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true),
+        attempt.isComplete
+            ? HomeDayActivity.completed
+            : HomeDayActivity.inProgress);
+  }
+  return days;
+}
+
 class HomeActivity {
   HomeActivity(
       {required this.title,
       required this.at,
       this.record,
       this.attempt,
+      this.imageUrl = '',
       this.routineBackupLabel});
   final String? routineBackupLabel;
   final String title;
   final DateTime at;
   final LocalWorkoutProgressRecord? record;
   final RoutineAttempt? attempt;
+  final String imageUrl;
   String get result => record != null
       ? '${record!.repetitions} reps${record!.partialRepetitions > 0 ? ' · ${record!.partialRepetitions} partial' : ''}'
       : '${attempt!.completedExercises}/${attempt!.entries.length} exercises · ${attempt!.statusLabel.toLowerCase()}';
@@ -69,9 +108,18 @@ List<HomeActivity> homeRecentActivities(
   final attempts = routines?.records.where((a) => a.scope == scope).toList() ??
       <RoutineAttempt>[];
   final names = reportExerciseNames(attempts);
+  final images = <String, String>{
+    for (final attempt in attempts)
+      for (final exercise in attempt.routine.exercises.reversed)
+        if (exercise.imageUrl.isNotEmpty)
+          exercise.exerciseId: exercise.imageUrl,
+  };
   if (selected != null) {
     for (final exercise in selected.exercises) {
       names.putIfAbsent(exercise.exerciseId, () => exercise.name);
+      if (exercise.imageUrl.isNotEmpty) {
+        images[exercise.exerciseId] = exercise.imageUrl;
+      }
     }
   }
   final covered =
@@ -115,13 +163,24 @@ List<HomeActivity> homeRecentActivities(
               a.finishedAtMicros ?? a.updatedAtMicros,
               isUtc: true),
           attempt: a,
+          imageUrl: _routineThumbnail(a),
           routineBackupLabel: routineBackup(a)),
     for (final r in progress?.records ?? <LocalWorkoutProgressRecord>[])
       if (r.scope == scope && !covered.contains(r.sessionId))
         HomeActivity(
             title: names[r.exerciseId] ?? reportExerciseLabel(r.exerciseId),
             at: r.endedAt,
+            imageUrl: images[r.exerciseId] ?? '',
             record: r),
   ]..sort((a, b) => b.at.compareTo(a.at));
   return items.take(2).toList();
+}
+
+String _routineThumbnail(RoutineAttempt attempt) {
+  for (final exercise in attempt.routine.exercises) {
+    if (exercise.dayNumber == attempt.day && exercise.imageUrl.isNotEmpty) {
+      return exercise.imageUrl;
+    }
+  }
+  return '';
 }

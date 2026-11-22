@@ -1,3 +1,5 @@
+import { getAuth } from 'firebase-admin/auth';
+import { provisionCoach } from './coach-provisioning';
 import { AggregateField, FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -9,14 +11,33 @@ import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { coachCommandError } from '../coaching/coach-profile-callables';
 import { branchManagement } from './branch-management';
 import { branchOperations, branchOperationsActions } from './branch-operations';
-import { readOperationsCalendar } from '../analytics/operations-calendar';
 import { readBranchReport } from '../analytics/branch-report';
+import { readOperationsCalendar } from '../analytics/operations-calendar';
 import { authorizeAdminReport } from '../analytics/admin-reporting';
 
 export const branchManagementCommand = onCall({ region: 'asia-southeast1', enforceAppCheck: true }, async request => {
   try {
     const db = getFirestore();
     const input = request.data;
+    if (input?.action === 'coachRosterAssignments') {
+      requireVerifiedEmail(request.auth);
+      const org = requiredIdentifier(input.organizationId, 'organizationId');
+      if (!Array.isArray(input.coachIds) || input.coachIds.length > 60) throw new HttpsError('invalid-argument', 'Select up to 60 Coach profiles.');
+      const ids = [...new Set<string>(input.coachIds.map((value: unknown) => requiredIdentifier(value, 'coachId')))];
+      return await new FirestoreStore(db).transact(async tx => {
+        await authorizeAdminReport(tx, request.auth!, org);
+        const members = await tx.getAll!(ids.map(id => `orgs/${org}/members/${id}`));
+        return { assignments: Object.fromEntries(ids.flatMap((id, i) => {
+          const member = members[i];
+          return member?.role === 'coach' && member.organizationId === org && Array.isArray(member.branchIds)
+            ? [[id, member.branchIds]] : [];
+        })) };
+      });
+    }
+    if (input?.action === 'provisionCoach') {
+      requireVerifiedEmail(request.auth);
+      return await provisionCoach(new FirestoreStore(db), getAuth(), request.auth!, input);
+    }
     if (input?.action === 'calendarEvents' || input?.action === 'calendarInsights') {
       return await readOperationsCalendar(db, request.auth, input);
     }

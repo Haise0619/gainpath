@@ -17,12 +17,18 @@ class AdminConsoleNavigation extends RouterDelegate<Uri>
     notifyListeners();
   }
 
-  void go(BuildContext context, Uri uri) {
+  void go(BuildContext context, Uri uri, {bool replace = false}) {
     if (_uri == uri) return;
-    Router.navigate(context, () {
+    void update() {
       _uri = uri;
       notifyListeners();
-    });
+    }
+
+    if (replace) {
+      Router.neglect(context, update);
+    } else {
+      Router.navigate(context, update);
+    }
   }
 
   static AdminConsoleNavigation? maybeOf(BuildContext context) => context

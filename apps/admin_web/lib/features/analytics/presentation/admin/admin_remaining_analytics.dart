@@ -201,7 +201,14 @@ class _AdminObservedSectionState extends State<AdminObservedSection> {
                   ])),
         SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: DataTable(columns: [
+            child: DataTable(
+                border: const TableBorder(
+                  horizontalInside:
+                      BorderSide(color: AppColors.hairline, width: 0.8),
+                ),
+                headingRowColor:
+                    WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                columns: [
               DataColumn(
                   label:
                       Text(_weekly ? 'Week starting Monday' : 'Malaysia date')),
@@ -415,10 +422,88 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                         AdminReportDetails(
                             title: 'Scoring details',
                             child: Text(group!.label)),
+                        const SizedBox(height: 6),
                         Text(
-                            'Exercise overall: ${groups.fold<int>(0, (n, g) => n + g.scoredSessions)} scored samples across compatible groups / ${r.exercises.where((e) => e.exerciseId == selected).fold<int>(0, (n, e) => n + e.sessions)} saved camera captures. Unscored capture versions are unknown.'),
-                        Text(
-                            '${group.scoredSessions} scored samples · session-weighted mean ${group.average.toStringAsFixed(1)}%'),
+                            'Exercise overall: ${groups.fold<int>(0, (n, g) => n + g.scoredSessions)} scored samples across compatible groups / ${r.exercises.where((e) => e.exerciseId == selected).fold<int>(0, (n, e) => n + e.sessions)} saved camera captures. Unscored capture versions are unknown.',
+                            style: Theme.of(context).textTheme.bodySmall),
+                        Container(
+                          margin: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFBF8FF),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.auto_awesome,
+                                    color: AppColors.primary, size: 24),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Estimated form score: ${group.average.toStringAsFixed(1)}%',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primary,
+                                              ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: Colors.purple.shade200),
+                                          ),
+                                          child: Text(
+                                            '${group.scoredSessions} scored samples',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary,
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Session-weighted mean across compatible scoring rules. Provisional estimate · not validated biomechanical accuracy.',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                              color: const Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         SizedBox(
                             height: 250,
                             child: SfCartesianChart(
@@ -439,22 +524,104 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                                           const MarkerSettings(isVisible: true),
                                       color: AppColors.primary)
                                 ])),
+                        const SizedBox(height: 4),
                         const Text(
-                            'Each point averages scored sessions in this exact exercise, scoring rule, detector/model, camera view and arm group. Missing dates remain gaps; no score is inferred.'),
+                            'Each point averages scored sessions in this exact exercise, scoring rule, detector/model, camera view and arm group. Missing dates remain gaps; no score is inferred.',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
                         const SizedBox(height: 16),
                         WorkoutScoreDistribution(group: group),
+                        const SizedBox(height: 12),
                         ExpansionTile(
                             title: const Text('View score samples'),
+                            subtitle: Text(
+                                '${points.length} sample records in selected group',
+                                style: const TextStyle(fontSize: 12)),
                             children: [
-                              for (final p in points)
-                                ListTile(
-                                    dense: true,
-                                    title: Text(p.date
-                                        .toIso8601String()
-                                        .substring(0, 10)),
-                                    subtitle: Text(p.score == null
-                                        ? 'No measured score'
-                                        : '${p.score!.toStringAsFixed(1)}% · ${p.samples} samples'))
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                child: Table(
+                                  border: TableBorder(
+                                    horizontalInside: BorderSide(
+                                        color: Colors.grey.shade200),
+                                  ),
+                                  columnWidths: const {
+                                    0: FlexColumnWidth(2),
+                                    1: FlexColumnWidth(2),
+                                    2: FlexColumnWidth(2),
+                                  },
+                                  children: [
+                                    TableRow(
+                                      decoration: BoxDecoration(
+                                          color: Colors.grey.shade50),
+                                      children: const [
+                                        Padding(
+                                          padding: EdgeInsets.all(8),
+                                          child: Text('Date',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12)),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.all(8),
+                                          child: Text('Estimated Mean %',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12)),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.all(8),
+                                          child: Text('Scored Samples',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12)),
+                                        ),
+                                      ],
+                                    ),
+                                    for (final p in points)
+                                      TableRow(
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              p.date
+                                                  .toIso8601String()
+                                                  .substring(0, 10),
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              p.score == null
+                                                  ? 'No measured score'
+                                                  : '${p.score!.toStringAsFixed(1)}%',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: p.score != null
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                                color: p.score != null
+                                                    ? const Color(0xFF1E293B)
+                                                    : Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              '${p.samples} samples',
+                                              style: const TextStyle(
+                                                  fontSize: 12),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ]),
                       ]
                     ]

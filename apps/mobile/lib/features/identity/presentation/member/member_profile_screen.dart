@@ -267,7 +267,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               const Eyebrow('Fitness profile'),
               Panel(
                 padding: EdgeInsets.zero,
@@ -355,7 +355,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               const Eyebrow('Account'),
               Panel(
                 padding: EdgeInsets.zero,
@@ -405,7 +405,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               OutlinedButton.icon(
                 style:
                     OutlinedButton.styleFrom(foregroundColor: AppColors.danger),

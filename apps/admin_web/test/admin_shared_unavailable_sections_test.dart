@@ -137,7 +137,7 @@ void main() {
     });
 
     testWidgets(
-        'Recommendations screen displays honest unavailable metrics and prevents mutations',
+        'Unavailable recommendation sources show a notice and offer no mutations',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 1000);
       tester.view.devicePixelRatio = 1;
@@ -153,10 +153,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // High-risk and matched leads show '—'
-      expect(find.text('—'), findsWidgets);
+      expect(find.text('Recommendation queue is unavailable in this release.'),
+          findsOneWidget);
+      expect(find.text('Refresh queue'), findsNothing);
+      expect(find.text('Send'), findsNothing);
 
-      // Content gaps empty / unavailable explanation
+      await tester.pumpWidget(
+        AppRepositories(
+          session: _testSession,
+          child: const MaterialApp(
+            home: RiskLeaderboardScreen(live: true, initialInsights: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
       expect(
         find.text('Content gap analysis is unavailable in this release.'),
         findsOneWidget,

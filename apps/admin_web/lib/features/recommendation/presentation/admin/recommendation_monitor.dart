@@ -7,6 +7,27 @@ import 'recommendation_presentation_copy.dart';
 
 enum RecommendationMonitorTab { overview, history, attention }
 
+/// Reports the selected destination to retained recommendation pages.
+class RecommendationMonitorActivity extends InheritedWidget {
+  const RecommendationMonitorActivity({
+    super.key,
+    required this.active,
+    required super.child,
+  });
+
+  final bool active;
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<RecommendationMonitorActivity>()
+          ?.active ??
+      true;
+
+  @override
+  bool updateShouldNotify(RecommendationMonitorActivity oldWidget) =>
+      oldWidget.active != active;
+}
+
 class RecommendationMonitor extends StatefulWidget {
   const RecommendationMonitor({
     super.key,

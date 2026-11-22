@@ -7,8 +7,10 @@ import { createBookingPayment } from '../src/modules/commerce/booking-payment-se
 import { BillplzSandboxGateway, type SandboxBill } from '../src/modules/commerce/billplz-sandbox';
 import { billplzSandboxReturn, paymentWebhook,getBookingPaymentCommand } from '../src/modules/commerce/booking-payment-callables';
 
+import { XenditBookingGateway, xenditBookingReference } from '../src/modules/commerce/xendit-booking';
+
 vi.mock('firebase-functions/v2/https',()=>({onCall:(_opts:unknown,handler:unknown)=>handler,onRequest:(opts:unknown,handler:unknown)=>typeof opts==='function'?opts:handler,HttpsError:class extends Error{}}));
-vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
+vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key==='XENDIT_BOOKING_ENABLED'?'false':key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
 vi.mock('firebase-admin/firestore',()=>({getFirestore:()=>db}));
 vi.mock('../src/modules/coaching/coach-identity-reader',()=>({readCoachIdentity:async()=>({exists:true,disabled:false,emailVerified:true})}));
 let memory:MemoryStore,id:string;
@@ -46,6 +48,31 @@ async function invoke(raw:string) {
   const req={method:'POST',is:(type:string)=>type==='application/x-www-form-urlencoded',rawBody:Buffer.from(raw)};
   await paymentWebhook(req as never,response as never);return {status,result};
 }
+it('authenticates Xendit events and settles against a provider lookup', async () => {
+  const sessionId = 'ps-661f87c614802d6c402cd82d';
+  const row = memory.documents.get(`orgs/org-1/transactions/${id}`)!;
+  Object.assign(row, { provider: 'xendit', billId: sessionId, collectionId: 'xendit' });
+  const get = vi.spyOn(XenditBookingGateway.prototype, 'get').mockResolvedValue({
+    ...bill(), id: sessionId, collection_id: 'xendit',
+    reference_1: xenditBookingReference('org-1', id),
+  });
+  async function callback(token: string, reference?: string, paymentSessionId = sessionId) {
+    let status = 0;
+    await paymentWebhook({
+      is: (type: string) => type === 'application/json',
+      method: 'POST', get: () => token,
+      body: { event: 'payment_session.completed', data: { payment_session_id: paymentSessionId, reference_id: reference } },
+    } as never, { sendStatus: (code: number) => { status = code; } } as never);
+    return status;
+  }
+  expect(await callback('wrong-token')).toBe(401);
+  expect(await callback('synthetic-api-key', 'order_12345_PAY')).toBe(204);
+  expect(await callback('synthetic-api-key', undefined, 'sample-session')).toBe(204);
+  expect(get).not.toHaveBeenCalled();
+  expect(await callback('synthetic-api-key')).toBe(204);
+  expect(await callback('synthetic-api-key')).toBe(204);
+  expect(memory.documents.get(`orgs/org-1/bookings/${id}`)?.status).toBe('confirmed');
+});
 it('rejects tampering before provider lookup or ingress writes',async()=>{
   const get=vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill());
   expect((await invoke(signed().replace('amount=12000','amount=1'))).status).toBe(401);

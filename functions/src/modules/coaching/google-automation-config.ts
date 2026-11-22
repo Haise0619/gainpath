@@ -6,5 +6,5 @@ export function googleAutomationConfig():AutomaticDeliveryConfig {
  // Keep the activation timestamp genuinely absent in disabled deployments.
  // A declared Firebase string parameter would materialize its empty default.
  const raw=process.env.GOOGLE_BOOKING_AUTOMATION_ACTIVATED_AT??'';
- return {enabled:automaticGoogleEnabled.value(),organizationId:process.env.GOOGLE_GYM_ORGANIZATION_ID??'',activatedAtMillis:raw?Date.parse(raw):NaN,allowedRecipients:automaticGoogleRecipients.value().split(',').map(s=>s.trim()).filter(Boolean),testCoachId:process.env.GOOGLE_BOOKING_AUTOMATION_TEST_COACH_ID??'',testBookingId:process.env.GOOGLE_BOOKING_AUTOMATION_TEST_BOOKING_ID??''};
+ return {enabled:automaticGoogleEnabled.value(),calendarEnabled:process.env.GOOGLE_BOOKING_CALENDAR_AUTOMATION_ENABLED==='true',organizationId:process.env.GOOGLE_GYM_ORGANIZATION_ID??'',activatedAtMillis:raw?Date.parse(raw):NaN,allowedRecipients:automaticGoogleRecipients.value().split(',').map(s=>s.trim()).filter(Boolean),testCoachId:process.env.GOOGLE_BOOKING_AUTOMATION_TEST_COACH_ID??'',testBookingId:process.env.GOOGLE_BOOKING_AUTOMATION_TEST_BOOKING_ID??''};
 }

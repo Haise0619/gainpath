@@ -306,8 +306,10 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
       minimumSize: const Size(48, 48),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      textStyle: const TextStyle(
-          fontSize: 13, height: 1.12, fontWeight: FontWeight.w700),
+      textStyle: Theme.of(context)
+          .textTheme
+          .labelLarge
+          ?.copyWith(fontSize: 13, height: 1.12, fontWeight: FontWeight.w700),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
     final primaryButton = Tooltip(

@@ -13,7 +13,7 @@ export function createCanonicalRecommendationAdmin(deps: RecommendationCommandDe
   return async(incoming: InsightsRequest): Promise<unknown> => {
     try {
       const e=object(incoming.data); keys(e,['schemaVersion','operation','data']); const q=object(e.data);
-      if(e.schemaVersion!==1||Buffer.byteLength(JSON.stringify(e))>16384||!['session.access','admin.queue.list','admin.queue.detail','admin.queue.decide','delivery.process','admin.ai.members','admin.ai.member','admin.ai.planner','admin.ai.outreach.generate','admin.ai.outreach.send'].includes(String(e.operation))) throw new DomainError('invalid-argument','Invalid canonical command.');
+      if(e.schemaVersion!==1||Buffer.byteLength(JSON.stringify(e))>16384||!['session.access','admin.queue.list','admin.queue.detail','admin.queue.decide','delivery.process','admin.ai.members','admin.ai.member.search','admin.ai.member','admin.ai.planner','admin.ai.outreach.generate','admin.ai.outreach.send'].includes(String(e.operation))) throw new DomainError('invalid-argument','Invalid canonical command.');
       const org=requiredIdentifier(q.organizationId,'organization'), request={...incoming,data:q};
       const auth=await authorizeRecommendationSession(request,deps);
       await deps.store.transact(async tx=>{if(!deps.runtime?.scopedDataset && await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical Admin required.');await requireQueueAdmin(tx,auth,org);});

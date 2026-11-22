@@ -8,3 +8,13 @@ it('applies the original reporting scan limits to the combined response',()=>{co
 it('preserves existing financial and booking metrics while combining only the eligible current census',()=>{const existing={schemaVersion:1,organizationId:'gainpath',startAtMillis:0,endAtMillis:1,currentAccounts:{members:4,coaches:2},receipts:{confirmedMinor:9000},bookings:{created:2},daily:[{receiptsMinor:9000}],sourceCounts:{members:7,bookings:2,transactions:1}} as never,fyp={...existing as object,currentAccounts:{members:18,coaches:7},receipts:{confirmedMinor:0},sourceCounts:{members:27,bookings:0,transactions:0}} as never;
  const r=mergeUnifiedOperationalReports(existing,fyp,{simulatedRevenueMinor:10000} as never);expect(r.currentAccounts).toEqual({members:22,coaches:9});expect(r.sourceCounts).toEqual({members:34,bookings:2,transactions:1});expect(r.receipts).toEqual({confirmedMinor:9000});expect(r.bookings).toEqual({created:2});expect(r.unified.illustrativeRevenueMinor).toBe(19000);expect(r.unified.sampleBusiness.simulatedRevenueMinor).toBe(10000);expect(existing).toMatchObject({currentAccounts:{members:4}});
 });
+
+it('merges score bands only when both compatible sources provide them', () => {
+  const existing = workout(), sample = workout(true);
+  existing.forms[0].scoreBands = {below60: 0, from60To79: 0, from80To100: 2};
+  sample.forms[0].scoreBands = {below60: 1, from60To79: 2, from80To100: 0};
+  expect(mergeUnifiedWorkoutReports(existing, sample).forms[0].scoreBands)
+    .toEqual({below60: 1, from60To79: 2, from80To100: 2});
+  delete sample.forms[0].scoreBands;
+  expect(mergeUnifiedWorkoutReports(existing, sample).forms[0].scoreBands).toBeUndefined();
+});

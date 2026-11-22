@@ -138,6 +138,36 @@ void main() {
     await expectLater(
         gpu.invoke(1, Float32List(256 * 256 * 3)), throwsStateError);
   });
+  test('GPU output views respect codec byte offsets and survive the next reply',
+      () async {
+    var invocation = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async {
+      final heatmap = Float32List(64 * 64 * 39);
+      heatmap[0] = ++invocation + .25;
+      heatmap[heatmap.length - 1] = -2.5;
+      return {
+        'ownerThread': 17,
+        'nativeMicros': 100,
+        'copyMicros': 20,
+        'outputs': [
+          Uint8List(195 * 4),
+          Uint8List(4),
+          heatmap.buffer.asUint8List(),
+          Uint8List(117 * 4),
+        ],
+      };
+    });
+    final gpu = BlazePoseGpuSession('views', ownerThread: 17);
+    final tensor = Float32List(256 * 256 * 3);
+    final first = (await gpu.invoke(1, tensor)).outputs[3]!;
+    final second = (await gpu.invoke(1, tensor)).outputs[3]!;
+    expect(first.first, 1.25);
+    expect(second.first, 2.25);
+    expect(second.last, -2.5);
+    expect(second.length, 64 * 64 * 39);
+    await gpu.close();
+  });
   test('busy call is rejected and closing cannot resurrect a late result',
       () async {
     final reply = Completer<Map<String, Object>>();

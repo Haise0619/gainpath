@@ -15,7 +15,8 @@ class _Package {
   final Set<String> dependencies = {};
 }
 
-String _path(FileSystemEntity entity) => p.normalize(entity.absolute.path).replaceAll('\\', '/');
+String _path(FileSystemEntity entity) =>
+    p.normalize(entity.absolute.path).replaceAll('\\', '/');
 
 Iterable<File> _dartFiles(Directory directory) sync* {
   if (!directory.existsSync()) return;
@@ -88,8 +89,9 @@ String? _forbidden(_Package owner, String target, Set<String> apps) {
 /// alternatives. When available, pub's resolved graph supplies external edges.
 /// Dev dependencies never become runtime edges. Tests may access another
 /// package's src, but may not resurrect the legacy root package.
-/// Package tools may reference their own lib, tool, and test/support sources;
-/// these diagnostic directives never become runtime edges.
+/// Package tests may import shared workspace test support. Package tools may
+/// reference their own lib, tool, and test/support sources. These directives
+/// never become runtime edges.
 List<String> checkArchitecture(Directory root) {
   root = root.absolute;
   final failures = <String>{};
@@ -98,6 +100,7 @@ List<String> checkArchitecture(Directory root) {
     failures.add('${root.path}/pubspec.yaml: legacy root app package');
   }
   final owners = <String, _Package>{};
+  final sharedTestSupport = Directory('${root.path}/test_support').uri;
   final ownerPaths = <String>{};
   void addOwner(Directory directory, bool isApp) {
     if (!ownerPaths.add(_path(directory))) return;
@@ -247,6 +250,11 @@ List<String> checkArchitecture(Directory root) {
           var boundary = owner == null
               ? root.absolute.uri
               : owner.directory.absolute.uri.resolve(isTest ? '' : 'lib/');
+          if (owner != null &&
+              isTest &&
+              normalized.toString().startsWith(sharedTestSupport.toString())) {
+            boundary = sharedTestSupport;
+          }
           if (owner != null && isTool) {
             for (final folder in ['tool/', 'test/support/']) {
               final diagnosticBoundary =
@@ -323,12 +331,10 @@ List<String> checkArchitecture(Directory root) {
       failures.add('${root.path}/$folder: legacy root app runner');
     }
   }
-  for (final folder in ['test', 'tool']) {
+  for (final folder in ['test', 'test_support', 'tool']) {
     for (final file in _dartFiles(Directory('${root.path}/$folder'))) {
       scan(file, null,
-          isTest: folder == 'test',
-          isTool: folder == 'tool',
-          runtime: false);
+          isTest: folder != 'tool', isTool: folder == 'tool', runtime: false);
     }
   }
   for (final owner in owners.values) {

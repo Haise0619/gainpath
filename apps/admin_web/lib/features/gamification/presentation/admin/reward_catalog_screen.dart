@@ -121,10 +121,18 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
       final repository =
           context.read<RewardCatalogRepository>() as RewardManagementRepository;
       final changes = context.read<AuthBloc?>()?.stream;
+      RewardFulfilmentRepository? fulfilmentRepo;
+      try {
+        final source = context.read<AdminMemberDirectoryRepository>();
+        if (source is RewardFulfilmentRepository) {
+          fulfilmentRepo = source as RewardFulfilmentRepository;
+        }
+      } catch (_) {}
       return StreamBuilder<Object?>(
           stream: changes,
           builder: (_, __) => RewardManagementScreen(
               repository: repository,
+              fulfilmentRepository: fulfilmentRepo,
               sessionChanges: changes,
               onVerify: _verifyReward));
     }

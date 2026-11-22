@@ -38,26 +38,40 @@ Duration workoutHubMotion(BuildContext context, [int milliseconds = 240]) =>
 
 class WorkoutHubBadge extends StatelessWidget {
   const WorkoutHubBadge(
-      {super.key, required this.icon, required this.label, required this.tone});
+      {super.key,
+      required this.icon,
+      required this.label,
+      required this.tone,
+      this.fill,
+      this.ink});
   final IconData icon;
   final String label;
   final WorkoutHubTone tone;
+  final Color? fill;
+  final Color? ink;
+
   @override
-  Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-          color: tone.fill, borderRadius: BorderRadius.circular(6)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        ExcludeSemantics(child: Icon(icon, size: 14, color: tone.ink)),
-        const SizedBox(width: 5),
-        Flexible(
-            child: Text(label,
+  Widget build(BuildContext context) {
+    final effectiveFill = fill ?? tone.fill;
+    final effectiveInk = ink ?? tone.ink;
+    return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+        decoration: BoxDecoration(
+            color: effectiveFill, borderRadius: BorderRadius.circular(6)),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            ExcludeSemantics(child: Icon(icon, size: 13, color: effectiveInk)),
+            const SizedBox(width: 4.5),
+            Text(label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: tone.ink,
+                    color: effectiveInk,
                     fontSize: 12,
-                    height: 1.25,
-                    fontWeight: FontWeight.w600))),
-      ]));
+                    height: 1.15,
+                    fontWeight: FontWeight.w600)),
+          ]),
+        ));
+  }
 }
 
 /// Owns interaction feedback only. Domain state and persistence stay upstream.

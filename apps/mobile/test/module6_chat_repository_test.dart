@@ -7,6 +7,33 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_chat_repository
 
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'org');
+  test('carries only branch context and parses the nearby action', () async {
+    final request = <String, dynamic>{};
+    final repository = FirebaseChatRepository(
+      scope: scope,
+      activeScope: () => scope,
+      currentUid: () => scope.userId,
+      transport: (data) async {
+        request.addAll(data);
+        return {
+          'text': 'Open Find a gym.',
+          'responseId': 'nearby-r',
+          'nearbyGym': true
+        };
+      },
+    );
+    final result = await repository.generateReply(
+      text: 'Which gym iz nearest to me?',
+      history: [
+        ChatMessage('A private previous reply', false,
+            attachment: BranchChatAttachment(
+                'org', {'branchId': 'north', 'displayName': 'North Gym'}))
+      ],
+    );
+    expect(result.attachment, isA<NearbyGymsAttachment>());
+    expect(request['branchContext'], 'North Gym');
+    expect(request.containsKey('history'), isFalse);
+  });
   test('verified tomorrow slots take priority over an eligible directory',
       () async {
     final start = ((DateTime.now()

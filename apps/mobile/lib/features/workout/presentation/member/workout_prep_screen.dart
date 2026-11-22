@@ -23,6 +23,7 @@ import 'widgets/workout_exercise_image.dart';
 import 'widgets/workout_hub_visuals.dart';
 import 'widgets/workout_hub_sections.dart';
 import '../../domain/routine_attempt.dart';
+import '../../domain/workout_activity_summary.dart';
 
 class WorkoutPrepScreen extends StatelessWidget {
   const WorkoutPrepScreen(
@@ -51,6 +52,7 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.workoutStateUnavailable = false,
       this.onRetryWorkout,
       this.organizationId,
+      this.activitySummary,
       this.trackers = const ExerciseTrackerDispatcher(),
       this.preferencesFactory = createWorkoutPreferences,
       this.routes = const WorkoutPrepRoutes()});
@@ -77,8 +79,22 @@ class WorkoutPrepScreen extends StatelessWidget {
   final bool workoutStateUnavailable;
   final VoidCallback? onRetryWorkout;
   final String? organizationId;
+  final WorkoutActivitySummary? activitySummary;
   final WorkoutPrepRoutes routes;
   final ExerciseTrackerDispatcher trackers;
+
+  WorkoutActivitySummary _resolveActivity(BuildContext context) {
+    if (!live) {
+      try {
+        final repo = context.read<WorkoutRepository>();
+        return calculateWeeklyWorkoutActivity(
+          now: DateTime.now(),
+          legacyHistory: repo.history,
+        );
+      } catch (_) {}
+    }
+    return WorkoutActivitySummary.empty();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -251,26 +267,13 @@ class WorkoutPrepScreen extends StatelessWidget {
       identity: identity,
       hero: hero,
       onSettings: onOpenSettings,
-      plan: WorkoutHubSection(
-          title: 'Training Plan',
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            WorkoutHubDestination(
-                title: planName ??
-                    (hasPlan
-                        ? 'Your training schedule'
-                        : 'Make room for your next goal'),
-                subtitle: planSubtitle,
-                icon: Icons.calendar_month_outlined,
-                action: hasPlan ? 'View Plan' : 'Explore programs',
-                onTap: onOpenPrograms),
-            if (onReturnToPlanned != null)
-              Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                      onPressed: onReturnToPlanned,
-                      child: const Text('Back to planned workout'))),
-          ])),
+      plan: WorkoutHubTrainingPlanCard(
+        hasPlan: hasPlan,
+        planTitle: planName,
+        planSubtitle: planSubtitle,
+        onOpenPrograms: onOpenPrograms,
+        onReturnToPlanned: onReturnToPlanned,
+      ),
       exercises: !hasWorkout
           ? const []
           : [
@@ -303,61 +306,29 @@ class WorkoutPrepScreen extends StatelessWidget {
           ? TextButton(
               onPressed: openRoutine, child: const Text('Routine preview'))
           : null,
-      activity: WorkoutHubSection(
-          title: 'Your Activity',
-          child: LayoutBuilder(builder: (context, c) {
-            final cards = [
-              WorkoutHubDestination(
-                  title: 'History',
-                  subtitle: 'Past sessions',
-                  icon: Icons.history_rounded,
-                  onTap: onOpenRoutineHistory),
-              WorkoutHubDestination(
-                  title: 'Progress',
-                  subtitle: 'Trends & goals',
-                  icon: Icons.insights_outlined,
-                  onTap: onOpenProgress),
-            ];
-            return c.maxWidth < 330 ||
-                    MediaQuery.textScalerOf(context).scale(14) > 21
-                ? Column(
-                    children: [cards[0], const SizedBox(height: 8), cards[1]])
-                : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(child: cards[0]),
-                    const SizedBox(width: 10),
-                    Expanded(child: cards[1])
-                  ]);
-          })),
-      help: WorkoutHubSection(
-          title: 'Help & Equipment',
-          child: Column(children: [
-            WorkoutHubDestination(
-                title: 'Equipment',
-                subtitle: 'Browse equipment & scan for guides',
-                icon: Icons.fitness_center_outlined,
-                onTap: onBrowseEquipment ??
-                    onOpenEquipment ??
-                    (live
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const EquipmentScannerScreen())))),
-            const SizedBox(height: 8),
-            WorkoutHubDestination(
-                title: 'Camera setup',
-                subtitle: 'Guide to distance & angle',
-                icon: Icons.videocam_outlined,
-                onTap: () => Navigator.push(
+      activity: WorkoutHubActivityCard(
+        summary: activitySummary ?? _resolveActivity(context),
+        onOpenRoutineHistory: onOpenRoutineHistory,
+        onOpenProgress: onOpenProgress,
+      ),
+      help: WorkoutHubEquipmentGuidanceCard(
+        onBrowseEquipment: onBrowseEquipment ??
+            onOpenEquipment ??
+            (live
+                ? null
+                : () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const CameraSetupScreen()))),
-            if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
-              TextButton(
-                  onPressed: () => _startPosePreview(context),
-                  child: const Text('Try live camera preview')),
-          ])),
+                        builder: (_) =>
+                            const EquipmentScannerScreen()))),
+        onCameraSetup: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const CameraSetupScreen())),
+        onTryPosePreview: const bool.fromEnvironment('GAINPATH_POSE_PREVIEW')
+            ? () => _startPosePreview(context)
+            : null,
+      ),
     );
   }
 
@@ -708,6 +679,7 @@ class _WorkoutExerciseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = WorkoutHubPalette.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final equipment = exercise is PublishedRoutineExercise
         ? (exercise as PublishedRoutineExercise).tutorial.equipment.trim()
         : '';
@@ -715,12 +687,41 @@ class _WorkoutExerciseRow extends StatelessWidget {
         ? ExercisePresentation.forExercise(exercise as PublishedRoutineExercise,
             organizationId: organizationId ?? '', trackers: trackers)
         : null;
+
+    final (modeFill, modeInk, modeIcon) = switch (presentation?.mode) {
+      WorkoutExerciseMode.aiTracked => (
+          isDark ? const Color(0xFF302046) : const Color(0xFFF1E9FB),
+          isDark ? const Color(0xFFD8C5FF) : const Color(0xFF6A26B8),
+          Icons.videocam_rounded,
+        ),
+      WorkoutExerciseMode.videoTimed => (
+          isDark ? const Color(0xFF142C51) : const Color(0xFFE8EEF5),
+          isDark ? const Color(0xFFA8C7FA) : const Color(0xFF3B6790),
+          Icons.timer_outlined,
+        ),
+      WorkoutExerciseMode.unavailable => (
+          isDark ? const Color(0xFF451A1A) : const Color(0xFFFEE2E2),
+          isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C),
+          Icons.info_outline_rounded,
+        ),
+      WorkoutExerciseMode.manual => (
+          isDark ? const Color(0xFF262626) : const Color(0xFFF3F4F6),
+          isDark ? const Color(0xFFD4D4D4) : const Color(0xFF4B5563),
+          Icons.checklist_rounded,
+        ),
+      _ => (
+          palette.primary.fill,
+          palette.primary.ink,
+          Icons.videocam_rounded,
+        ),
+    };
     final modeTone = switch (presentation?.mode) {
       WorkoutExerciseMode.videoTimed => palette.info,
       WorkoutExerciseMode.unavailable => palette.caution,
       WorkoutExerciseMode.manual => palette.neutral,
       _ => palette.primary,
     };
+
     final completed = status != null && isExerciseTargetComplete(status!);
     final stateLabel = switch (status) {
       RoutineExerciseStatus.completed ||
@@ -735,14 +736,41 @@ class _WorkoutExerciseRow extends StatelessWidget {
       RoutineExerciseStatus.instructionsReviewed => 'Reviewed',
       _ => null,
     };
-    final stateIcon = completed
-        ? Icons.check_rounded
-        : status == RoutineExerciseStatus.skipped
-            ? Icons.skip_next_rounded
-            : status == RoutineExerciseStatus.instructionsReviewed
-                ? Icons.menu_book_outlined
-                : Icons.timelapse_rounded;
+    final (statusFill, statusInk, stateIcon) = switch (status) {
+      RoutineExerciseStatus.completed ||
+      RoutineExerciseStatus.timerCompleted ||
+      RoutineExerciseStatus.selfReportedCompleted =>
+        (
+          isDark ? const Color(0xFF123526) : const Color(0xFFDCFCE7),
+          isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D),
+          Icons.check_circle_rounded,
+        ),
+      RoutineExerciseStatus.partial ||
+      RoutineExerciseStatus.timerPartial ||
+      RoutineExerciseStatus.selfReportedPartial =>
+        (
+          isDark ? const Color(0xFF3A2B14) : const Color(0xFFFEF3E2),
+          isDark ? const Color(0xFFFCD34D) : const Color(0xFFD97706),
+          Icons.schedule_rounded,
+        ),
+      RoutineExerciseStatus.skipped => (
+          isDark ? const Color(0xFF262626) : const Color(0xFFF3F4F6),
+          isDark ? const Color(0xFFA3A3A3) : const Color(0xFF6B7280),
+          Icons.skip_next_rounded,
+        ),
+      RoutineExerciseStatus.instructionsReviewed => (
+          isDark ? const Color(0xFF0C4A6E) : const Color(0xFFE0F2FE),
+          isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1),
+          Icons.menu_book_outlined,
+        ),
+      _ => (
+          palette.caution.fill,
+          palette.caution.ink,
+          completed ? Icons.check_rounded : Icons.timelapse_rounded,
+        ),
+    };
     final stateTone = completed ? palette.success : palette.caution;
+
     final target =
         presentation?.targetLabel.replaceAll(' · Self-reported', '') ??
             '${exercise.sets} sets × ${exercise.reps} reps';
@@ -760,6 +788,20 @@ class _WorkoutExerciseRow extends StatelessWidget {
       details,
       'Open exercise instructions'
     ].where((s) => s.isNotEmpty).join('. ');
+
+    final cardBg = isDark ? theme.colorScheme.surface : Colors.white;
+    final cardBorder =
+        isDark ? const Color(0xFF2C223D) : const Color(0xFFF0EBF5);
+    final thumbBg =
+        isDark ? const Color(0xFF221734) : const Color(0xFFF7F5FA);
+    final thumbBorder =
+        isDark ? const Color(0xFF33244D) : const Color(0xFFEFE9F6);
+    final titleColor = isDark ? Colors.white : const Color(0xFF1E1430);
+    final subtitleColor =
+        isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final chevronColor =
+        isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+
     return Tooltip(
       message: details.isEmpty ? exercise.name : details,
       child: Semantics(
@@ -768,86 +810,161 @@ class _WorkoutExerciseRow extends StatelessWidget {
         excludeSemantics: true,
         onTap: onTap,
         child: Material(
-          color: theme.colorScheme.surface,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: cardBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: cardBorder, width: 1),
+          ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                          width: 56,
-                          height: 60,
-                          child: Stack(children: [
-                            Positioned.fill(
-                                top: 4,
-                                child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: WorkoutExerciseImage(
-                                        url: exercise.imageUrl))),
-                            Positioned(
-                                top: 0,
-                                left: 0,
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                      color: completed
-                                          ? palette.success.ink
-                                          : AppColors.ink,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: Colors.white, width: 2)),
-                                  child: completed
-                                      ? Icon(Icons.check_rounded,
-                                          size: 15, color: palette.success.fill)
-                                      : Text('$index',
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700)),
-                                )),
-                          ])),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                            Text(exercise.name,
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 4),
-                            Text(target,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant)),
-                            if (presentation != null || stateLabel != null) ...[
-                              const SizedBox(height: 8),
-                              Wrap(spacing: 6, runSpacing: 6, children: [
-                                if (presentation != null)
-                                  WorkoutHubBadge(
-                                      icon: presentation.icon,
-                                      label: presentation.mode ==
-                                              WorkoutExerciseMode.manual
-                                          ? 'Manual · Self-reported'
-                                          : presentation.label,
-                                      tone: modeTone),
-                                if (stateLabel != null)
-                                  WorkoutHubBadge(
-                                      icon: stateIcon,
-                                      label: stateLabel,
-                                      tone: stateTone),
-                              ]),
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 76,
+                    height: 76,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: thumbBg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: thumbBorder,
+                                width: 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: WorkoutExerciseImage(
+                                  url: exercise.imageUrl,
+                                  fit: BoxFit.contain,
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          left: 4,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: completed
+                                  ? const Color(0xFF16A34A)
+                                  : const Color(0xFF231834),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x22000000),
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: completed
+                                ? const Icon(
+                                    Icons.check_rounded,
+                                    size: 12,
+                                    color: Colors.white,
+                                  )
+                                : Text(
+                                    '$index',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          exercise.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: titleColor,
+                            height: 1.25,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          target,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: subtitleColor,
+                            height: 1.2,
+                          ),
+                        ),
+                        if (presentation != null || stateLabel != null) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              if (presentation != null)
+                                WorkoutHubBadge(
+                                  icon: modeIcon,
+                                  label: presentation.mode ==
+                                          WorkoutExerciseMode.manual
+                                      ? 'Manual · Self-reported'
+                                      : presentation.label,
+                                  tone: modeTone,
+                                  fill: modeFill,
+                                  ink: modeInk,
+                                ),
+                              if (stateLabel != null)
+                                WorkoutHubBadge(
+                                  icon: stateIcon,
+                                  label: stateLabel,
+                                  tone: stateTone,
+                                  fill: statusFill,
+                                  ink: statusInk,
+                                ),
                             ],
-                          ])),
-                      const SizedBox(width: 4),
-                      Icon(Icons.chevron_right_rounded,
-                          color: theme.colorScheme.onSurfaceVariant, size: 20),
-                    ])),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: chevronColor,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

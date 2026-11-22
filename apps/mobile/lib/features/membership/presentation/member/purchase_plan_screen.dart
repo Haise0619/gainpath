@@ -19,9 +19,10 @@ class PurchasePlanScreen extends StatelessWidget {
       this.connected = false,
       this.repository,
       this.renewalPreview,
-      this.renewal = false});
+      this.renewal = false,
+      this.upgrade = false});
   final MembershipPlan plan;
-  final bool connected, renewal;
+  final bool connected, renewal, upgrade;
   final MembershipCommerceRepository? repository;
   final MembershipRenewalPreview? renewalPreview;
   @override
@@ -29,18 +30,24 @@ class PurchasePlanScreen extends StatelessWidget {
       ? MembershipRepositoryGuard(
           repository: repository!, child: _body(repository!))
       : MembershipFeatureHost(connected: connected, builder: _body);
-  Widget _body(MembershipCommerceRepository repo) =>
-      _PurchaseForm(repository: repo, plan: plan, renewal: renewal,
-          renewalPreview: renewalPreview);
+  Widget _body(MembershipCommerceRepository repo) => _PurchaseForm(
+      repository: repo,
+      plan: plan,
+      renewal: renewal,
+      upgrade: upgrade,
+      renewalPreview: renewalPreview);
 }
 
 class _PurchaseForm extends StatefulWidget {
   const _PurchaseForm(
-      {required this.repository, required this.plan, required this.renewal,
+      {required this.repository,
+      required this.plan,
+      required this.renewal,
+      required this.upgrade,
       required this.renewalPreview});
   final MembershipCommerceRepository repository;
   final MembershipPlan plan;
-  final bool renewal;
+  final bool renewal, upgrade;
   final MembershipRenewalPreview? renewalPreview;
   @override
   State<_PurchaseForm> createState() => _PurchaseFormState();
@@ -77,6 +84,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     try {
       final code = _promo.text.trim().toUpperCase();
       final q = await widget.repository.quote(widget.plan.id, code);
+      if ((q['upgradeExpiresAtMillis'] is int) != widget.upgrade) {
+        if (mounted) {
+          setState(() => _message =
+              'Your membership or upgrade availability changed. Return to Membership and refresh.');
+        }
+        return;
+      }
       if (mounted) {
         setState(() {
           _quote = q;
@@ -152,78 +166,96 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     final preview = widget.renewal ? widget.renewalPreview : null;
     final estimate = preview?.estimatedExpiry(_quote?['durationDays']);
     return Scaffold(
-      appBar: AppBar(
-          title:
-              Text(widget.renewal ? 'Extend your membership' : 'Review order')),
-      body: PageBody(children: [
-        Panel(
-            background: AppColors.primaryTint,
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.plan.name,
-                  style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 8),
-              Text(widget.plan.tagline),
-              const SizedBox(height: 8),
-              Text(widget.renewal
-                  ? 'Renew anytime. Your remaining membership time will be preserved.'
-                  : 'One-time membership purchase'),
-              if (preview != null) ...[
-                const SizedBox(height: 12),
-                Text('${preview.active ? 'Current membership' : 'Previous membership'}: ${preview.tier.label}'),
-                Text('${preview.active ? 'Current expiry' : 'Expired'}: ${membershipDate(preview.expiryMillis)}'),
-              ],
-            ])),
-        const SizedBox(height: 18),
-        TextField(
-            controller: _promo,
-            enabled: !_busy && !_submitted,
-            decoration:
-                const InputDecoration(labelText: 'Promo code (optional)'),
-            onChanged: (_) => setState(() => _quote = null)),
-        TextButton(
-            onPressed: _busy || _submitted ? null : _apply,
-            child: const Text('Verify price / apply code')),
-        if (_busy) const LinearProgressIndicator(),
-        if (_message != null)
-          Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(_message!)),
-        if (_quote != null)
+        appBar: AppBar(
+            title: Text(widget.upgrade
+                ? 'Upgrade to Premium'
+                : widget.renewal
+                    ? 'Extend your membership'
+                    : 'Review order')),
+        body: PageBody(children: [
           Panel(
-              child: Column(children: [
-            DetailRow(widget.renewal ? 'Additional time' : 'Duration', '${_quote!['durationDays']} days'),
-            if (_quote!['baseAmountMinor'] != null)
-              DetailRow('Original price',
-                  membershipMoney(_quote!['baseAmountMinor'])),
-            if (_quotedCode.isNotEmpty) DetailRow('Promo code', _quotedCode),
-            if (_quote!['baseAmountMinor'] is num &&
-                _quote!['amountMinor'] is num)
-              DetailRow(
-                  'Discount',
-                  membershipMoney((_quote!['baseAmountMinor'] as num) -
-                      (_quote!['amountMinor'] as num))),
-            const Divider(),
-            DetailRow('Total', membershipMoney(_quote!['amountMinor'])),
-          ])),
-        const SizedBox(height: 16),
-        if (estimate != null)
-          Padding(padding: const EdgeInsets.only(bottom: 12),
-              child: Text('Estimated new expiry: ${membershipDate(estimate)}',
-                  style: Theme.of(context).textTheme.titleMedium)),
-        if (widget.renewal)
-          const Padding(
-              padding: EdgeInsets.only(bottom: 12),
+              background: AppColors.primaryTint,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.plan.name,
+                        style: Theme.of(context).textTheme.headlineMedium),
+                    const SizedBox(height: 8),
+                    Text(widget.plan.tagline),
+                    const SizedBox(height: 8),
+                    Text(widget.renewal
+                        ? 'Renew anytime. Your remaining membership time will be preserved.'
+                        : widget.upgrade
+                            ? 'Pay the prorated difference for your remaining Basic time. Premium starts after payment is confirmed.'
+                            : 'One-time membership purchase'),
+                    if (preview != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                          '${preview.active ? 'Current membership' : 'Previous membership'}: ${preview.tier.label}'),
+                      Text(
+                          '${preview.active ? 'Current expiry' : 'Expired'}: ${membershipDate(preview.expiryMillis)}'),
+                    ],
+                  ])),
+          const SizedBox(height: 18),
+          if (!widget.upgrade)
+            TextField(
+                controller: _promo,
+                enabled: !_busy && !_submitted,
+                decoration:
+                    const InputDecoration(labelText: 'Promo code (optional)'),
+                onChanged: (_) => setState(() => _quote = null)),
+          TextButton(
+              onPressed: _busy || _submitted ? null : _apply,
+              child: Text(widget.upgrade
+                  ? 'Refresh upgrade price'
+                  : 'Verify price / apply code')),
+          if (_busy) const LinearProgressIndicator(),
+          if (_message != null)
+            Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(_message!)),
+          if (_quote != null)
+            Panel(
+                child: Column(children: [
+              if (widget.upgrade)
+                DetailRow('Expiry stays the same',
+                    membershipDate(_quote!['upgradeExpiresAtMillis']))
+              else
+                DetailRow(widget.renewal ? 'Additional time' : 'Duration',
+                    '${_quote!['durationDays']} days'),
+              if (!widget.upgrade && _quote!['baseAmountMinor'] != null)
+                DetailRow('Original price',
+                    membershipMoney(_quote!['baseAmountMinor'])),
+              if (_quotedCode.isNotEmpty) DetailRow('Promo code', _quotedCode),
+              if (!widget.upgrade &&
+                  _quote!['baseAmountMinor'] is num &&
+                  _quote!['amountMinor'] is num)
+                DetailRow(
+                    'Discount',
+                    membershipMoney((_quote!['baseAmountMinor'] as num) -
+                        (_quote!['amountMinor'] as num))),
+              const Divider(),
+              DetailRow('Total', membershipMoney(_quote!['amountMinor'])),
+            ])),
+          const SizedBox(height: 16),
+          if (estimate != null)
+            Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text('Estimated new expiry: ${membershipDate(estimate)}',
+                    style: Theme.of(context).textTheme.titleMedium)),
+          if (widget.renewal)
+            const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                    'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
+          const Text('One-time payment. No automatic recurring charges.'),
+          PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
+          const SizedBox(height: 16),
+          FilledButton(
+              onPressed: _busy || _quote == null ? null : _pay,
               child: Text(
-                  'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
-        const Text('One-time payment. No automatic recurring charges.'),
-        PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
-        const SizedBox(height: 16),
-        FilledButton(
-            onPressed: _busy || _quote == null ? null : _pay,
-            child:
-                Text(_submitted ? 'Recover checkout' : 'Continue to Payment')),
-      ]));
+                  _submitted ? 'Recover checkout' : 'Continue to Payment')),
+        ]));
   }
 }
 
@@ -371,7 +403,8 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                     if (_payment['clearedAtMillis'] != null)
                       Text(
                           'Payment cleared ${membershipDate(_payment['clearedAtMillis'])}'),
-                    PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
+                    PaymentEnvironmentDetails(
+                        sandbox: widget.repository.sandbox),
                   ]),
               const SizedBox(height: 12),
               if (status == 'expired' || status == 'failed')
@@ -379,8 +412,11 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                     'Checkout closed. You may start a fresh checkout from plans. A late cleared payment will require Admin review.'),
               if (status == 'expired' || status == 'failed')
                 FilledButton.tonal(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
-                        builder: (_) => BrowsePlansScreen(repository: widget.repository))),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => BrowsePlansScreen(
+                                repository: widget.repository))),
                     child: const Text('Return to plans')),
               if (status == 'reconciliation_required' && !refundRequested)
                 const Text(

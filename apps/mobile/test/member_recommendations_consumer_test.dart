@@ -189,7 +189,7 @@ void main() {
     await expectLater(load, throwsA(isA<MemberRecommendationUnavailable>()));
   });
   for (final width in [320.0, 360.0, 390.0]) {
-    testWidgets('delivered feed and history at $width and 200 percent',
+    testWidgets('delivered feed at $width and 200 percent',
         (t) async {
       t.view.physicalSize = Size(width, 844);
       t.view.devicePixelRatio = 1;
@@ -231,9 +231,8 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Coach Alex'), findsOneWidget);
       expect(actions, isEmpty);
-      await t.tap(find.text('History'));
-      await t.pumpAndSettle();
-      expect(requests, [false, true]);
+      expect(find.text('History'), findsNothing);
+      expect(requests, [false]);
       await t.scrollUntilVisible(find.text('View Coach'), 160,
           scrollable: find.byType(Scrollable).first);
       await t.tap(find.text('View Coach'));

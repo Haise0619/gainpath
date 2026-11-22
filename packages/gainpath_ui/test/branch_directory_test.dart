@@ -5,6 +5,67 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 void main() {
+  testWidgets(
+      'Admin directory shows scoped counts and manages unmapped branches',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: BranchDirectoryPage(
+        admin: true,
+        request: (input) async => input['action'] == 'list'
+            ? {
+                'records': [
+                  {
+                    'branchId': 'north',
+                    'displayName': 'North Gym',
+                    'status': 'active'
+                  },
+                  {
+                    'branchId': 'south',
+                    'displayName': 'South Gym',
+                    'status': 'inactive'
+                  },
+                ],
+                'nextAfterId': 'south',
+              }
+            : input['action'] == 'branchVisits'
+                ? {'records': []}
+                : {'coaches': 1, 'equipment': 0, 'bookings': 0, 'visits': 0},
+        openDirections: (_) async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Branch Management'), findsOneWidget);
+    expect(find.text('Total branches'), findsOneWidget);
+    expect(find.text('Loaded branches'), findsOneWidget);
+    await tester.tap(find.text('Inactive').first);
+    await tester.pumpAndSettle();
+    expect(find.text('North Gym'), findsNothing);
+    expect(find.text('South Gym'), findsOneWidget);
+    await tester.ensureVisible(find.text('Manage Branch'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Manage Branch'));
+    await tester.pumpAndSettle();
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('South Gym'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    await tester.tap(find.text('Check-in & visits'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Generate QR'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Only active branches can issue a gym check-in QR.'),
+        findsOneWidget);
+    await tester.tap(find.text('Back to branches'));
+    await tester.pumpAndSettle();
+    expect(find.text('North Gym'), findsNothing);
+    expect(find.text('South Gym'), findsOneWidget);
+  });
+
   testWidgets('Admin branch detail passes the actual branch ID to drill-downs',
       (tester) async {
     final routes = <String>[];
@@ -15,15 +76,24 @@ void main() {
         onOpenCoaches: (branchId) => routes.add('coaches/$branchId'),
         onOpenReports: (branchId) => routes.add('reports/$branchId'),
         request: (input) async => input['action'] == 'list'
-            ? {'records': [{'branchId': 'north', 'displayName': 'North Gym'}]}
+            ? {
+                'records': [
+                  {'branchId': 'north', 'displayName': 'North Gym'}
+                ]
+              }
             : {'coaches': 1, 'equipment': 0, 'bookings': 0, 'visits': 0},
       ),
     ));
     await tester.pumpAndSettle();
     for (final label in ['Coaches', 'Reports']) {
-      await tester.tap(find.text('North Gym'));
+      await tester.ensureVisible(find.text('Manage Branch'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Manage Branch'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(label));
       await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Back to branches'));
       await tester.pumpAndSettle();
     }
     expect(routes, ['coaches/north', 'reports/north']);
@@ -44,17 +114,26 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add branch'));
+    await tester.tap(find.text('Add Branch'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Upload cover'));
     await tester.tap(find.text('Upload cover'));
     await tester.pumpAndSettle();
-    expect(find.byWidgetPredicate((widget) =>
-        widget is Image && widget.image is MemoryImage), findsOneWidget);
-    expect(tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Save branch')).onPressed, isNull);
+    expect(
+        find.byWidgetPredicate(
+            (widget) => widget is Image && widget.image is MemoryImage),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Save Branch'))
+            .onPressed,
+        isNull);
     upload.completeError(StateError('fixture upload rejected'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Cover upload failed').hitTestable(), findsOneWidget);
+    expect(find.textContaining('Cover upload failed').hitTestable(),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('Discard selected cover'));
     await tester.tap(find.text('Discard selected cover'));
     await tester.pumpAndSettle();
     expect(find.byType(Image), findsNothing);
@@ -77,24 +156,22 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add branch'));
+    await tester.tap(find.text('Add Branch'));
     await tester.pumpAndSettle();
-    final editorList =
-        find.descendant(of: find.byType(AlertDialog), matching: find.byType(ListView));
-    await tester.drag(editorList, const Offset(0, -2000));
+    expect(find.byType(AlertDialog), findsNothing);
+    await tester.tap(find.text('Save Branch'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save branch'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Enter a branch ID').hitTestable(), findsOneWidget);
+    expect(find.textContaining('branch ID').hitTestable(), findsWidgets);
     expect(saves, 0);
-    await tester.drag(editorList, const Offset(0, 2000));
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Branch ID'), 'north');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Branch name'), 'North Gym');
+    await tester.tap(find.text('Save Branch'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, 'Branch ID'), 'north');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Branch name'), 'North Gym');
-    await tester.tap(find.text('Save branch'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Branch could not be saved').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('Save branch'));
+    expect(find.textContaining('Branch could not be saved').hitTestable(),
+        findsOneWidget);
+    await tester.tap(find.text('Save Branch'));
     await tester.pumpAndSettle();
     expect(saves, 2);
     expect(find.byType(AlertDialog), findsNothing);
@@ -109,7 +186,11 @@ void main() {
       request: (input) async => switch (input['action']) {
         'list' => {
             'records': [
-              {'branchId': 'main', 'displayName': 'Main gym'}
+              {
+                'branchId': 'main',
+                'displayName': 'Main gym',
+                'status': 'active'
+              }
             ]
           },
         'branchVisits' => {'records': []},
@@ -121,9 +202,12 @@ void main() {
       },
     )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Main gym'));
+    await tester.ensureVisible(find.text('Manage Branch'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Gym visits'));
+    await tester.tap(find.text('Manage Branch'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Check-in & visits'));
+    await tester.tap(find.text('Check-in & visits'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Generate QR'));
     await tester.pumpAndSettle();
@@ -166,7 +250,7 @@ void main() {
       openDirections: (_) async => true,
     )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Use my location'));
+    await tester.tap(find.text('Near me'));
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('Near gym')).dy,
         lessThan(tester.getTopLeft(find.text('Far gym')).dy));
@@ -197,7 +281,7 @@ void main() {
       },
     )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Use my location'));
+    await tester.tap(find.text('Near me'));
     await tester.pumpAndSettle();
     expect(find.text('Location access is off.'), findsOneWidget);
     await tester.tap(find.text('Old gym'));

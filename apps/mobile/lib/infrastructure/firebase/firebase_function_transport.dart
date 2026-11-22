@@ -14,7 +14,10 @@ HttpsCallable firebaseCallable(
   if (functions != null) return functions.httpsCallable(name, options: options);
   // New scoped services keep their own fixed region; canonical rollback
   // aliases and endpoint inventory remain unchanged.
-  if (name == 'fypDatasetCommand' || name == 'fypDatasetSessionCommand') {
+  if (name == 'fypDatasetCommand' ||
+      name == 'fypDatasetSessionCommand' ||
+      name == 'passwordRecovery' ||
+      name == 'branchManagementCommand') {
     final client = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
     if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
       client.useFunctionsEmulator(

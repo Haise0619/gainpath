@@ -1,3 +1,4 @@
+import {cloudEvent} from '@google-cloud/functions-framework';
 import { getAuth, type Auth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
@@ -76,3 +77,7 @@ export const module13FypWorkoutConsentChanged = onDocumentWritten({
     await processFypWorkoutHistory({db, auth: getAuth(), release}, event.params.memberId);
   });
 });
+
+// Declare CloudEvent transport explicitly for Functions Framework production startup.
+cloudEvent('module13FypWorkoutBackupCreated', (raw: unknown) => module13FypWorkoutBackupCreated(raw as Parameters<typeof module13FypWorkoutBackupCreated>[0]));
+cloudEvent('module13FypWorkoutConsentChanged', (raw: unknown) => module13FypWorkoutConsentChanged(raw as Parameters<typeof module13FypWorkoutConsentChanged>[0]));

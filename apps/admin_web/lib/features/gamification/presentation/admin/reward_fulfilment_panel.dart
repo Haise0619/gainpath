@@ -184,6 +184,8 @@ class _RewardFulfilmentPanelState extends State<RewardFulfilmentPanel>
                       child: Image.network(voucher.imageUrl,
                           height: 160,
                           fit: BoxFit.contain,
+                          webHtmlElementStrategy:
+                              WebHtmlElementStrategy.prefer,
                           errorBuilder: (_, __, ___) =>
                               const Text('Reward cover unavailable')))),
             Text(voucher.title, style: Theme.of(context).textTheme.titleMedium),

@@ -16,7 +16,7 @@ void main() {
     await t.runAsync(loadDemoRenderFonts);
     addTearDown(await installFypOfflineFonts());
     final dir =
-        Directory('../../build/commercial-checkout-20261113/admin-renders')
+        Directory('../../build/admin-transaction-display/admin-renders')
           ..createSync(recursive: true);
     for (final width in [1024.0, 1440.0]) {
       for (final selected in [true, false]) {
@@ -46,7 +46,7 @@ void main() {
                         isCurrent: () => true,
                         initialBookingId: 'booking-1')))));
         await t.pumpAndSettle();
-        final label = selected ? 'E-Wallet · GrabPay' : 'Not recorded';
+        final label = selected ? 'E-Wallet · GrabPay' : 'Legacy booking';
         await t.scrollUntilVisible(find.text(label), 300,
             scrollable: find.byType(Scrollable).first);
         await t.pumpAndSettle();

@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_mobile/features/content/presentation/member/member_announcements.dart';
+import '../../../test_support/announcement_render_fonts.dart';
 
 Announcement entry(String id,
         {AnnouncementStatus status = AnnouncementStatus.published,
@@ -32,8 +36,100 @@ class _Reader implements AnnouncementReader {
   }
 }
 
+Future<void> _capture(WidgetTester tester, String name) async {
+  final directory = Platform.environment['GAINPATH_ANNOUNCEMENT_SCREENSHOTS'];
+  if (directory == null) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const Key('announcement-fixture-mobile')));
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    try {
+      final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!
+          .buffer
+          .asUint8List();
+      await File('$directory/fixture-$name.png').writeAsBytes(bytes);
+    } finally {
+      image.dispose();
+    }
+  });
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  test('display window includes the Malaysian start and excludes the end', () {
+    final start = DateTime.parse('2026-11-20T00:00:00+08:00');
+    final end = DateTime.parse('2026-11-21T00:00:00+08:00');
+    final announcement =
+        entry('Boundary').copyWith(validFrom: start, validTo: end);
+    const tick = Duration(microseconds: 1);
+    expect(announcement.displayStatusAt(start.subtract(tick)),
+        AnnouncementDisplayStatus.scheduled);
+    expect(
+        announcement.displayStatusAt(start), AnnouncementDisplayStatus.active);
+    expect(announcement.displayStatusAt(end.subtract(tick)),
+        AnnouncementDisplayStatus.active);
+    expect(
+        announcement.displayStatusAt(end), AnnouncementDisplayStatus.expired);
+  });
+
+  testWidgets('compact cards prioritize important content and open details',
+      (tester) async {
+    final theme = await announcementFixtureTheme();
+    tester.view.physicalSize = const Size(412, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final reader = _Reader()
+      ..items = [
+        entry('Weekend recovery workshop'),
+        Announcement(
+          id: 'cable-servicing',
+          title: 'Cable stations reopen at noon',
+          validFrom: DateTime.now().subtract(const Duration(days: 2)),
+          validTo: DateTime.now().add(const Duration(days: 2)),
+          priority: AnnouncementPriority.important,
+          category: AnnouncementCategory.maintenance,
+          audience: AnnouncementAudience.branches,
+          targetBranchIds: const ['central'],
+          targetBranchNames: const ['Central Gym'],
+          body:
+              'Routine servicing is in progress. The cable stations reopen at noon. Please use the free weights area until then.',
+        ),
+        entry('Training floor reminders', start: -3),
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: theme,
+      builder: (_, child) => RepaintBoundary(
+        key: const Key('announcement-fixture-mobile'),
+        child: child!,
+      ),
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Member Home')),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: MemberAnnouncements(reader: reader, compact: true),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('Cable stations reopen at noon')).dy,
+        lessThan(tester.getTopLeft(find.text('Weekend recovery workshop')).dy));
+    expect(find.text('Training floor reminders'), findsNothing);
+    await _capture(tester, 'member-home');
+    await tester.tap(find.text('Read more').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Central Gym'), findsOneWidget);
+    await _capture(tester, 'member-detail');
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View all'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Load more announcements'));
+    await tester.tap(find.text('Load more announcements'));
+    await tester.pumpAndSettle();
+    expect(find.text('Training floor reminders'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets(
       'Member announcements component renders and refreshes real announcements instead of unavailable',
       (tester) async {

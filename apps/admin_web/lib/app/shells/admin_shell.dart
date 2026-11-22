@@ -33,16 +33,21 @@ import '../../features/membership/presentation/admin/refunds_screen.dart';
 import '../../features/analytics/presentation/admin/reports_screen.dart';
 import '../../features/content/presentation/admin/system_settings_screen.dart';
 import '../../features/identity/presentation/admin/members_screen.dart';
+import '../../features/identity/presentation/admin/member_provision_page.dart'
+    show MemberSetupRequest;
 import '../../features/identity/presentation/admin/coaches_screen.dart';
 import '../../features/identity/presentation/admin/coach_review_discard_guard.dart';
 import '../../features/identity/presentation/admin/coach_review_notification_button.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show AuthSession, BookingListRepository;
+    show AppRole, AuthSession, BookingListRepository;
+import '../../features/operations_calendar/operations_calendar_data.dart';
+import '../../features/operations_calendar/operations_calendar_screen.dart';
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import '../di/coach_availability_factory.dart';
 import '../di/booking_factory.dart';
+import 'gainpath_logo_data.dart';
 import '../../features/recommendation/application/admin_ai_repository.dart';
 import '../../features/recommendation/presentation/admin/admin_ai_pages.dart';
 import '../../features/recommendation/presentation/admin/recommendation_monitor.dart';
@@ -86,6 +91,10 @@ class AdminShell extends StatefulWidget {
       {super.key,
       this.liveSession,
       this.datasetTransportFactory,
+      this.coachBranchRequest,
+      this.memberSetupRequest,
+      this.branchRequest,
+      this.branchCoverPicker,
       this.canonicalRecommendationFactory,
       this.allowContentRemoval =
           const bool.fromEnvironment('ADMIN_CONTENT_REMOVAL_ENABLED')});
@@ -93,13 +102,109 @@ class AdminShell extends StatefulWidget {
   final bool allowContentRemoval;
   final AuthSession? liveSession;
   final FypDatasetTransportFactory? datasetTransportFactory;
+  final Future<Map<String, dynamic>> Function(Map<String, Object?>)?
+      coachBranchRequest;
+  final BranchRequest? branchRequest;
+  final MemberSetupRequest? memberSetupRequest;
+  final Future<String?> Function()? branchCoverPicker;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
 }
 
 class _AdminShellState extends State<AdminShell> {
+  final _announcementsKey = GlobalKey<AnnouncementsScreenState>();
+  Future<Map<String, ({String name, bool active})>>
+      _announcementBranches() async {
+    final scope = widget.liveSession!.scope;
+    final callable = FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+        .httpsCallable('branchManagementCommand');
+    final branches = <String, ({String name, bool active})>{};
+    final cursors = <String>{};
+    String? cursor;
+    do {
+      final response = await callable.call({
+        'action': 'list',
+        'organizationId': scope.organizationId,
+        if (cursor != null) 'afterId': cursor,
+      });
+      if (!mounted || widget.liveSession?.scope != scope) {
+        throw StateError('Admin session changed.');
+      }
+      final result = response.data as Map;
+      for (final branch in (result['records'] as List).cast<Map>()) {
+        branches[branch['branchId'] as String] = (
+          name: branch['displayName'] as String,
+          active: branch['status'] == 'active',
+        );
+      }
+      cursor = result['nextAfterId'] as String?;
+      if (cursor != null && !cursors.add(cursor)) {
+        throw StateError('Branch directory pagination did not advance.');
+      }
+    } while (cursor != null);
+    return branches;
+  }
+
+  static const _calendarPath = '/console/operations-calendar';
+  static const _announcementsPath = '/console/announcements';
+  static final _routeId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+  late final _calendarRepository =
+      FirebaseOperationsCalendarRepository(_requestBranch);
+  String? _calendarBranch;
+  String? _announcementDrillDownId;
+  String? _focusedBookingId;
+  String? _focusedCoachBranch;
+  String? _focusedScheduleDate;
+  DateTime? _reportDrillDownDate;
   String? _reportDrillDownBranch;
+
+  bool get _calendarEnabled {
+    final session = widget.liveSession;
+    return session != null &&
+        session.role == AppRole.admin &&
+        session.datasetScope == null &&
+        !session.needsVerification &&
+        session.accountLifecycleState == 'active';
+  }
+
+  String? _routeIdentifier(String? value) =>
+      value != null && _routeId.hasMatch(value) ? value : null;
+
+  DateTime? _parseCivilDate(String? value) {
+    if (value == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+      return null;
+    }
+    final result = DateTime.tryParse('${value}T00:00:00Z');
+    return result != null && _dateKey(result) == value ? result : null;
+  }
+
+  String _dateKey(DateTime day) => day.toIso8601String().split('T').first;
+
+  void _openCalendarSource(OperationsEvent event) {
+    if (event.type == CalendarEventType.announcement) {
+      _select(_indexOfLabel('Announcements'), announcementId: event.sourceId);
+      return;
+    }
+    if (event.coachId == null) return;
+    final day = event.start.toUtc().add(const Duration(hours: 8));
+    _select(
+      _indexOfLabel('Coaches'),
+      coachId: event.coachId,
+      coachBranch: event.branchId,
+      bookingId:
+          event.type == CalendarEventType.booking ? event.sourceId : null,
+      scheduleDate:
+          event.type == CalendarEventType.availability ? _dateKey(day) : null,
+    );
+  }
+
+  void _openCalendarCoach(OperationsEvent event) {
+    if (event.coachId != null) {
+      _select(_indexOfLabel('Coaches'), coachId: event.coachId);
+    }
+  }
+
   String? _coachDrillDownBranch;
   late final AdminAiRepository? _adminAi = widget.liveSession == null
       ? null
@@ -140,7 +245,17 @@ class _AdminShellState extends State<AdminShell> {
           () =>
               mounted &&
               context.read<AuthBloc>().state.session == widget.liveSession);
+  static const _addMemberPath = '/console/members/add';
+  bool _addingMember = false;
+  String? _memberProvisionBranch;
+  Future<bool> Function()? _canLeaveMemberProvisioning;
+  static const _addCoachPath = '/console/coaches/add';
+  static const _coachesPath = '/console/coaches';
+  BranchAdminRoute _branchRoute = const BranchAdminRoute();
+  Future<bool> Function()? _canLeaveBranchEditor;
   final _coachReviewGuard = CoachReviewDiscardGuard();
+  bool _addingCoach = false;
+  Future<bool> Function()? _canLeaveCoachProvisioning;
   int _index = 0;
   String? _scopedCoachIdForBookings;
   String? _scopedCoachIdForSchedule;
@@ -150,7 +265,7 @@ class _AdminShellState extends State<AdminShell> {
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches', 'Payments'};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  AdminConsoleNavigation? _reportRoutes;
+  AdminConsoleNavigation? _consoleRoutes;
   ReportsCategory _lastReportCategory = ReportsCategory.overview;
   int get _reportsIndex => _firstChildIndexOfGroup('Reports');
   bool get _inReports => _groupLabelFor(_index) == 'Reports';
@@ -160,26 +275,114 @@ class _AdminShellState extends State<AdminShell> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final routes = AdminConsoleNavigation.maybeOf(context);
-    if (!identical(routes, _reportRoutes)) {
-      _reportRoutes?.removeListener(_readReportRoute);
-      _reportRoutes = routes;
-      _readReportRoute();
-      routes?.addListener(_readReportRoute);
+    if (!identical(routes, _consoleRoutes)) {
+      _consoleRoutes?.removeListener(_readConsoleRoute);
+      _consoleRoutes = routes;
+      _readConsoleRoute();
+      routes?.addListener(_readConsoleRoute);
     }
   }
 
-  void _readReportRoute() {
-    final segments = _reportRoutes?.uri.pathSegments ?? <String>[];
-    if (segments.isNotEmpty && segments.first == 'reports') {
+  void _readConsoleRoute() {
+    final uri = _consoleRoutes?.uri;
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (segments.length >= 2 &&
+        segments[0] == 'console' &&
+        segments[1] == 'branches') {
+      final index = _indexOfLabel('Branches');
+      final route = BranchAdminRoute.parse(segments.sublist(2));
+      if (index != _index || route != _branchRoute) {
+        _select(index, updateHistory: false, branchRoute: route);
+      }
+    } else if (uri?.path == _calendarPath && _calendarEnabled) {
+      final index = _indexOfLabel('Operations Calendar');
+      final branch = _routeIdentifier(uri!.queryParameters['branch']);
+      if (index != _index || branch != _calendarBranch) {
+        _select(index, updateHistory: false, calendarBranch: branch);
+      }
+    } else if (uri?.path == _coachesPath &&
+        _calendarEnabled &&
+        uri!.queryParameters.containsKey('coach')) {
+      final coachId = _routeIdentifier(uri.queryParameters['coach']);
+      final bookingId = _routeIdentifier(uri.queryParameters['booking']);
+      final date = _parseCivilDate(uri.queryParameters['date']);
+      final scheduleDate = date == null ? null : _dateKey(date);
+      final branch = _routeIdentifier(uri.queryParameters['branch']);
+      final index = _indexOfLabel('Coaches');
+      final currentCoach = _scopedCoachIdForBookings ??
+          _scopedCoachIdForSchedule ??
+          _scopedCoachIdForReview;
+      if (coachId != null &&
+          (index != _index ||
+              coachId != currentCoach ||
+              bookingId != _focusedBookingId ||
+              scheduleDate != _focusedScheduleDate ||
+              branch != _focusedCoachBranch)) {
+        _select(index,
+            updateHistory: false,
+            coachId: coachId,
+            coachBranch: branch,
+            bookingId: bookingId,
+            scheduleDate: scheduleDate);
+      }
+    } else if (uri?.path == _announcementsPath &&
+        _calendarEnabled &&
+        uri!.queryParameters.containsKey('announcement')) {
+      final id = _routeIdentifier(uri.queryParameters['announcement']);
+      final index = _indexOfLabel('Announcements');
+      if (id != null && (index != _index || id != _announcementDrillDownId)) {
+        _select(index, updateHistory: false, announcementId: id);
+      }
+    } else if (uri?.path == _addMemberPath) {
+      final branch = uri!.queryParameters['branch'];
+      final branchId =
+          branch != null && RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(branch)
+              ? branch
+              : null;
+      if (_addingMember && _memberProvisionBranch == branchId) return;
+      _select(_indexOfLabel('Members'),
+          updateHistory: false,
+          addMember: _memberSetupEnabled,
+          memberBranch: branchId);
+    } else if (uri?.path == _addCoachPath) {
+      if (_addingCoach) return;
+      final session = widget.liveSession;
+      _select(_indexOfLabel('Coaches'),
+          updateHistory: false,
+          addCoach: session != null && session.datasetScope == null);
+    } else if (segments.isNotEmpty && segments.first == 'reports') {
       final name = segments.length > 1 ? segments[1] : 'overview';
       final category =
           ReportsCategory.values.where((c) => c.name == name).firstOrNull ??
               ReportsCategory.overview;
-      _select(_reportsIndex + category.index, updateHistory: false);
+      final branch = category == ReportsCategory.branches
+          ? uri?.queryParameters['branch']
+          : null;
+      final date = category == ReportsCategory.branches
+          ? _parseCivilDate(uri?.queryParameters['date'])
+          : null;
+      if (!_inReports ||
+          _reportCategory != category ||
+          _reportDrillDownBranch != branch ||
+          _reportDrillDownDate != date) {
+        _select(_reportsIndex + category.index,
+            updateHistory: false, reportBranch: branch, reportDate: date);
+      }
     } else if (segments.length == 2 && segments.first == 'console') {
       final index =
           _flatPages.indexWhere((page) => _pageSlug(page) == segments[1]);
-      if (index >= 0) _select(index, updateHistory: false);
+      if (index >= 0 &&
+          (index != _index ||
+              _addingCoach ||
+              _addingMember ||
+              (_flatPages[index].label == 'Coaches' &&
+                  (_focusedBookingId != null ||
+                      _focusedScheduleDate != null ||
+                      _scopedCoachIdForReview != null)) ||
+              (_flatPages[index].label == 'Announcements' &&
+                  _announcementDrillDownId != null))) {
+        _select(index, updateHistory: false);
+      }
     } else if (segments.isEmpty || _inReports) {
       _select(0, updateHistory: false);
     }
@@ -190,7 +393,7 @@ class _AdminShellState extends State<AdminShell> {
       : page.label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
   @override
   void dispose() {
-    _reportRoutes?.removeListener(_readReportRoute);
+    _consoleRoutes?.removeListener(_readConsoleRoute);
     super.dispose();
   }
 
@@ -228,15 +431,8 @@ class _AdminShellState extends State<AdminShell> {
             onProcessVoucher: _openRewardCollection)),
     _NavGroup(
         Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
-      _NavPage(
-          Icons.groups_outlined,
-          Icons.groups_rounded,
-          'Members',
-          'Search, filter, and view member accounts',
-          MembersScreen(
-              live: widget.liveSession != null,
-              branchRequest: _memberSetupEnabled ? _requestBranch : null,
-              memberSetup: _memberSetupEnabled ? _requestMemberSetup : null)),
+      _NavPage(Icons.groups_outlined, Icons.groups_rounded, 'Members',
+          'Search, filter, and view member accounts', const MembersScreen()),
       _NavPage(
           Icons.sports_outlined,
           Icons.sports_rounded,
@@ -252,78 +448,15 @@ class _AdminShellState extends State<AdminShell> {
         Icons.location_on,
         'Branches',
         'Manage gym locations',
-        BranchDirectoryPage(
-          admin: true,
-          onOpenBookings: (branchId) {
-            final session = widget.liveSession;
-            if (session == null) return;
-            final bookings = context.read<BookingListRepository>();
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AdminBookingListRoute(
-                session: session,
-                repository: bookings,
-                branchId: branchId,
-              ),
-            ));
-          },
-          onOpenMembers: (branchId) {
-            final session = widget.liveSession;
-            if (session == null) return;
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: Text('Members · $branchId')),
-                body: MembersScreen(
-                  live: true,
-                  branchId: branchId,
-                  memberSetup: _memberSetupEnabled ? _requestMemberSetup : null,
-                  branchRequest: (input) async {
-                    if (context.read<AuthBloc>().state.session?.scope != session.scope) {
-                      throw StateError('Admin session changed.');
-                    }
-                    final response = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-                        .httpsCallable('branchManagementCommand')
-                        .call({...input, 'organizationId': session.scope.organizationId});
-                    if (!mounted || context.read<AuthBloc>().state.session?.scope != session.scope) {
-                      throw StateError('Admin session changed.');
-                    }
-                    return Map<String, dynamic>.from(response.data as Map);
-                  },
-                ),
-              ),
-            ));
-          },
-          onOpenReports: (branchId) {
-            _select(_reportsIndex + ReportsCategory.branches.index,
-                reportBranch: branchId);
-          },
-          onOpenCoaches: (branchId) {
-            final index = _flatPages.indexWhere((page) => page.label == 'Coaches');
-            if (index < 0) return;
-            setState(() {
-              _coachDrillDownBranch = branchId;
-              _scopedCoachIdForBookings = null;
-              _scopedCoachIdForSchedule = null;
-            });
-            _select(index);
-          },
-          pickCover: () async {
-            final file = await openFile(acceptedTypeGroups: const [
-              XTypeGroup(label: 'Images', extensions: ['jpg', 'jpeg', 'png']),
-            ]);
-            if (file == null) return null;
-            if (await file.length() > 2 * 1024 * 1024) {
-              throw StateError('Cover images must be 2 MB or less.');
-            }
-            return base64Encode(await file.readAsBytes());
-          },
-          openDirections: (uri) => launchUrl(uri, webOnlyWindowName: '_blank'),
-          request: (input) async {
-            final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-                .httpsCallable('branchManagementCommand')
-                .call({...input, 'organizationId': widget.liveSession!.scope.organizationId});
-            return Map<String, dynamic>.from(result.data as Map);
-          },
-        ),
+        const SizedBox.shrink(),
+      ),
+    if (_calendarEnabled)
+      const _NavPage(
+        Icons.calendar_month_outlined,
+        Icons.calendar_month_rounded,
+        'Operations Calendar',
+        '',
+        SizedBox.shrink(),
       ),
     _NavGroup(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded,
         'Recommendations', [
@@ -336,7 +469,16 @@ class _AdminShellState extends State<AdminShell> {
               live: widget.liveSession != null,
               insightsRepository: _fypRecommendations?.insights,
               queueRepository: _fypRecommendations?.queue,
-              canonicalRepository: _canonicalRecommendations)),
+              canonicalRepository: _canonicalRecommendations,
+              relatedLinks: {
+                for (final destination in const [
+                  'AI Content Planner',
+                  'AI Member Outreach',
+                  'Delivery Issues',
+                  'Exercise Guidance Insights',
+                ])
+                  destination: () => _select(_indexOfLabel(destination)),
+              })),
       _NavPage(
           Icons.auto_awesome_outlined,
           Icons.auto_awesome,
@@ -461,7 +603,7 @@ class _AdminShellState extends State<AdminShell> {
               : 'Points-shop inventory and stock',
           RewardCatalogScreen(live: widget.liveSession != null)),
       _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
-          'Broadcast messages to every member', const AnnouncementsScreen()),
+          'Manage updates across gym locations', const SizedBox.shrink()),
       _NavPage(
           Icons.smart_toy_outlined,
           Icons.smart_toy_rounded,
@@ -496,11 +638,83 @@ class _AdminShellState extends State<AdminShell> {
     return pages;
   }
 
+  Widget _branchDirectory({required bool active}) => BranchDirectoryPage(
+        admin: true,
+        adminVisible: active,
+        adminRoute: _branchRoute,
+        onAdminNavigate: (route, {required bool replace}) => _select(
+          _indexOfLabel('Branches'),
+          branchRoute: route,
+          replaceBranchRoute: replace,
+        ),
+        onEditorLeaveCheckChanged: (route, check) {
+          if (_branchRoute == route) _canLeaveBranchEditor = check;
+        },
+        adminOperation: _buildBranchOperation,
+        onOpenCalendar: !_calendarEnabled
+            ? null
+            : (branchId) {
+                _select(_indexOfLabel('Operations Calendar'),
+                    calendarBranch: branchId);
+              },
+        onOpenReports: (branchId) {
+          _select(_reportsIndex + ReportsCategory.branches.index,
+              reportBranch: branchId);
+        },
+        onOpenCoaches: (branchId) {
+          final index = _indexOfLabel('Coaches');
+          if (index < 0) return;
+          setState(() => _coachDrillDownBranch = branchId);
+          _select(index);
+        },
+        pickCover: widget.branchCoverPicker ?? _pickBranchCover,
+        openDirections: (uri) => launchUrl(uri, webOnlyWindowName: '_blank'),
+        request: _requestBranch,
+      );
+
+  Future<String?> _pickBranchCover() async {
+    final file = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(label: 'Images', extensions: ['jpg', 'jpeg', 'png']),
+    ]);
+    if (file == null) return null;
+    if (await file.length() > 2 * 1024 * 1024) {
+      throw StateError('Cover images must be 2 MB or less.');
+    }
+    return base64Encode(await file.readAsBytes());
+  }
+
+  Future<Map<String, dynamic>> _requestBranch(
+      Map<String, Object?> input) async {
+    final override = widget.branchRequest;
+    if (override != null) return override(input);
+    final session = widget.liveSession!;
+    final auth = context.read<AuthBloc>();
+    if (auth.state.session?.scope != session.scope) {
+      throw StateError('Admin session changed.');
+    }
+    try {
+      final result =
+          await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+              .httpsCallable('branchManagementCommand')
+              .call({...input, 'organizationId': session.scope.organizationId});
+      if (!mounted || auth.state.session?.scope != session.scope) {
+        throw StateError('Admin session changed.');
+      }
+      return Map<String, dynamic>.from(result.data as Map);
+    } on FirebaseFunctionsException catch (error) {
+      if (input['action'] == 'save') {
+        throw BranchSaveException(code: error.code);
+      }
+      rethrow;
+    }
+  }
+
   bool get _memberSetupEnabled =>
       widget.liveSession != null && widget.liveSession!.datasetScope == null;
 
   Future<Map<String, dynamic>> _requestMemberSetup(
       Map<String, Object?> input) async {
+    if (widget.memberSetupRequest case final request?) return request(input);
     final session = widget.liveSession!;
     final auth = context.read<AuthBloc>();
     if (auth.state.session?.scope != session.scope) {
@@ -515,20 +729,21 @@ class _AdminShellState extends State<AdminShell> {
     return Map<String, dynamic>.from(reply.data as Map);
   }
 
-
-  Future<Map<String, dynamic>> _requestBranch(Map<String, Object?> input) async {
-    final session = widget.liveSession!;
-    final auth = context.read<AuthBloc>();
-    if (auth.state.session?.scope != session.scope) {
-      throw StateError('Admin session changed.');
+  Widget _buildBranchOperation(BranchAdminRoute route) {
+    if (route.section == BranchAdminSection.members) {
+      return MembersScreen(
+          live: true,
+          branchId: route.id,
+          branchRequest: _requestBranch,
+          memberSetup: _memberSetupEnabled ? _requestMemberSetup : null,
+          onOpenAddMember: () => _select(_indexOfLabel('Members'),
+              addMember: true, memberBranch: route.id));
     }
-    final reply = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-        .httpsCallable('branchManagementCommand')
-        .call({...input, 'organizationId': session.scope.organizationId});
-    if (!mounted || auth.state.session?.scope != session.scope) {
-      throw StateError('Admin session changed.');
-    }
-    return Map<String, dynamic>.from(reply.data as Map);
+    return AdminBookingListRoute(
+      session: widget.liveSession!,
+      repository: context.read<BookingListRepository>(),
+      branchId: route.id,
+    );
   }
 
   void _navigateToPaymentMode(PaymentsMode mode) {
@@ -610,14 +825,35 @@ class _AdminShellState extends State<AdminShell> {
     if (group != null) {
       crumbs.add(_Crumb(group, () => _select(_firstChildIndexOfGroup(group))));
     }
-    if (_scopedCoachIdForBookings != null) {
-      crumbs.add(_Crumb(_flatPages[_index].label,
-          () => setState(() => _scopedCoachIdForBookings = null)));
-      crumbs.add(_Crumb('Coach Bookings ($_scopedCoachIdForBookings)', null));
+    if (_branchRoute.section != BranchAdminSection.directory &&
+        _flatPages[_index].label == 'Branches') {
+      crumbs.add(_Crumb('Branches', () => _select(_index)));
+      if (_branchRoute.id case final String id) {
+        final overview = _branchRoute.section == BranchAdminSection.overview;
+        crumbs.add(_Crumb(
+          id,
+          overview
+              ? null
+              : () => _select(_index,
+                  branchRoute:
+                      BranchAdminRoute(BranchAdminSection.overview, id)),
+        ));
+      }
+      if (_branchRoute.section != BranchAdminSection.overview) {
+        crumbs.add(_Crumb(_branchRoute.label, null));
+      }
+    } else if (_addingMember) {
+      crumbs.add(_Crumb('Members', _returnToMemberList));
+      crumbs.add(const _Crumb('Add Member', null));
+    } else if (_addingCoach) {
+      crumbs.add(_Crumb('Coaches', () => _select(_index)));
+      crumbs.add(const _Crumb('Add Coach', null));
+    } else if (_scopedCoachIdForBookings != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label, () => _select(_index)));
+      crumbs.add(const _Crumb('Coach Bookings', null));
     } else if (_scopedCoachIdForSchedule != null) {
-      crumbs.add(_Crumb(_flatPages[_index].label,
-          () => setState(() => _scopedCoachIdForSchedule = null)));
-      crumbs.add(_Crumb('Coach Schedule ($_scopedCoachIdForSchedule)', null));
+      crumbs.add(_Crumb(_flatPages[_index].label, () => _select(_index)));
+      crumbs.add(const _Crumb('Coach Schedule', null));
     } else if (_scopedCoachIdForReview != null) {
       crumbs.add(_Crumb(_flatPages[_index].label, () async {
         if (!await _coachReviewGuard.canLeave() || !mounted) return;
@@ -630,31 +866,171 @@ class _AdminShellState extends State<AdminShell> {
     return crumbs;
   }
 
-  void _select(int flatIndex,
-      {bool updateHistory = true, String? reportBranch}) async {
+  Future<void> _select(int flatIndex,
+      {bool updateHistory = true,
+      String? reportBranch,
+      DateTime? reportDate,
+      String? calendarBranch,
+      String? coachId,
+      String? coachBranch,
+      String? bookingId,
+      String? scheduleDate,
+      String? announcementId,
+      bool addCoach = false,
+      bool addMember = false,
+      String? memberBranch,
+      bool replaceMemberRoute = false,
+      BranchAdminRoute branchRoute = const BranchAdminRoute(),
+      bool replaceBranchRoute = false}) async {
     if (flatIndex < 0) return;
+    final requestedUri = _consoleRoutes?.uri;
+    final previousBranch = _branchRoute;
+    if (previousBranch != branchRoute &&
+        !replaceBranchRoute &&
+        !await _mayLeaveBranchEditor()) {
+      if (mounted && !updateHistory && _consoleRoutes?.uri == requestedUri) {
+        _consoleRoutes?.go(context, previousBranch.uri);
+      }
+      return;
+    }
+    final leavingAddMember =
+        _addingMember && (!addMember || memberBranch != _memberProvisionBranch);
+    if (leavingAddMember && !await _canLeaveAddMember()) {
+      if (mounted && !updateHistory && _consoleRoutes?.uri == requestedUri) {
+        _consoleRoutes?.go(context, _memberAddUri(_memberProvisionBranch));
+      }
+      return;
+    }
+    final leavingAddCoach = _addingCoach && !addCoach;
+    if (leavingAddCoach && !await _canLeaveAddCoach()) {
+      if (mounted && !updateHistory && _consoleRoutes?.uri == requestedUri) {
+        _consoleRoutes?.go(context, Uri.parse(_addCoachPath));
+      }
+      return;
+    }
     if (flatIndex != _index && !await _coachReviewGuard.canLeave()) return;
-    if (!mounted) return;
+    if (_flatPages[_index].label == 'Announcements' &&
+        (flatIndex != _index || announcementId != _announcementDrillDownId)) {
+      if (await _announcementsKey.currentState?.canLeave() == false) {
+        if (!updateHistory && mounted && _consoleRoutes?.uri == requestedUri) {
+          _consoleRoutes?.go(
+              context,
+              Uri(
+                  path: _announcementsPath,
+                  queryParameters: _announcementDrillDownId == null
+                      ? null
+                      : {'announcement': _announcementDrillDownId!}));
+        }
+        return;
+      }
+    }
+    if (!mounted || (!updateHistory && _consoleRoutes?.uri != requestedUri)) {
+      return;
+    }
+    final replace = leavingAddCoach && flatIndex == _index;
     final owner = _groupLabelFor(flatIndex);
+    if (previousBranch != branchRoute) _canLeaveBranchEditor = null;
     setState(() {
       _index = flatIndex;
+      _addingCoach = addCoach;
+      _addingMember = addMember;
+      _memberProvisionBranch = addMember ? memberBranch : null;
+      _branchRoute = branchRoute;
       _reportDrillDownBranch = reportBranch;
-      _scopedCoachIdForBookings = null;
-      _scopedCoachIdForSchedule = null;
-      _scopedCoachIdForReview = null;
+      _reportDrillDownDate = reportDate;
+      if (_flatPages[flatIndex].label == 'Operations Calendar') {
+        _calendarBranch = calendarBranch;
+      }
+      _announcementDrillDownId = announcementId;
+      _focusedBookingId = bookingId;
+      _focusedScheduleDate = scheduleDate;
+      _focusedCoachBranch = coachBranch;
+      _scopedCoachIdForBookings = bookingId == null ? null : coachId;
+      _scopedCoachIdForSchedule = scheduleDate == null ? null : coachId;
+      _scopedCoachIdForReview =
+          bookingId == null && scheduleDate == null ? coachId : null;
       _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
     if (owner == 'Reports') _lastReportCategory = _reportCategory;
     if (updateHistory) {
-      _reportRoutes?.go(
-          context,
-          Uri.parse(owner == 'Reports'
-              ? '/reports/${_reportCategory.name}'
-              : flatIndex == 0
-                  ? '/'
-                  : '/console/${_pageSlug(_flatPages[flatIndex])}'));
+      final page = _flatPages[flatIndex];
+      final Uri uri;
+      if (owner == 'Reports') {
+        uri = Uri(
+          path: '/reports/${_reportCategory.name}',
+          queryParameters: reportBranch == null && reportDate == null
+              ? null
+              : {
+                  if (reportBranch != null) 'branch': reportBranch,
+                  if (reportDate != null) 'date': _dateKey(reportDate),
+                },
+        );
+      } else if (page.label == 'Branches') {
+        uri = branchRoute.uri;
+      } else if (page.label == 'Operations Calendar') {
+        uri = Uri(
+          path: _calendarPath,
+          queryParameters:
+              calendarBranch == null ? null : {'branch': calendarBranch},
+        );
+      } else if (coachId != null) {
+        uri = Uri(path: _coachesPath, queryParameters: {
+          'coach': coachId,
+          if (coachBranch != null) 'branch': coachBranch,
+          if (bookingId != null) 'booking': bookingId,
+          if (scheduleDate != null) 'date': scheduleDate,
+        });
+      } else if (announcementId != null) {
+        uri = Uri(
+            path: _announcementsPath,
+            queryParameters: {'announcement': announcementId});
+      } else if (addMember) {
+        uri = _memberAddUri(memberBranch);
+      } else {
+        uri = Uri.parse(addCoach
+            ? _addCoachPath
+            : flatIndex == 0
+                ? '/'
+                : '/console/${_pageSlug(page)}');
+      }
+      _consoleRoutes?.go(context, uri,
+          replace: replace || replaceBranchRoute || replaceMemberRoute);
     }
+  }
+
+  Uri _memberAddUri(String? branch) => Uri(
+        path: _addMemberPath,
+        queryParameters: branch == null ? null : {'branch': branch},
+      );
+
+  Future<bool> _canLeaveAddMember() async =>
+      await _canLeaveMemberProvisioning?.call() ?? true;
+
+  Future<void> _returnToMemberList() {
+    final homeBranch = _memberProvisionBranch;
+    return homeBranch == null
+        ? _select(_indexOfLabel('Members'), replaceMemberRoute: true)
+        : _select(_indexOfLabel('Branches'),
+            replaceMemberRoute: true,
+            branchRoute:
+                BranchAdminRoute(BranchAdminSection.members, homeBranch));
+  }
+
+  Future<void> _closeAddMember() async {
+    _canLeaveMemberProvisioning = null;
+    await _returnToMemberList();
+  }
+
+  Future<bool> _mayLeaveBranchEditor() async =>
+      await _canLeaveBranchEditor?.call() ?? true;
+
+  Future<bool> _canLeaveAddCoach() async =>
+      await _canLeaveCoachProvisioning?.call() ?? true;
+
+  void _closeAddCoach() {
+    setState(() => _addingCoach = false);
+    _consoleRoutes?.go(context, Uri.parse(_coachesPath), replace: true);
   }
 
   void _toggleGroup(String label) {
@@ -668,7 +1044,20 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Future<void> _openCoachAlert(String coachId) async {
-    if (!await _coachReviewGuard.canLeave() || !mounted) return;
+    if (!await _mayLeaveBranchEditor() ||
+        !await _canLeaveAddCoach() ||
+        !await _canLeaveAddMember() ||
+        !await _coachReviewGuard.canLeave() ||
+        !mounted) {
+      return;
+    }
+    if (_addingCoach) _closeAddCoach();
+    final fromAddMember = _addingMember;
+    final fromBranches = _flatPages[_index].label == 'Branches';
+    final fromCalendar = _flatPages[_index].label == 'Operations Calendar' ||
+        _focusedBookingId != null ||
+        _focusedScheduleDate != null ||
+        _announcementDrillDownId != null;
     final index = _indexOfLabel('Coaches');
     setState(() {
       _index = index;
@@ -678,12 +1067,29 @@ class _AdminShellState extends State<AdminShell> {
       _scopedCoachIdForSchedule = null;
       _scopedCoachIdForReview = coachId;
       _notificationCoachId = coachId;
+      _focusedBookingId = null;
+      _focusedCoachBranch = null;
+      _focusedScheduleDate = null;
+      _announcementDrillDownId = null;
+      _addingMember = false;
+      _memberProvisionBranch = null;
+      _branchRoute = const BranchAdminRoute();
+      _canLeaveBranchEditor = null;
       _notificationReviewGeneration++;
     });
+    if (fromBranches || fromAddMember || fromCalendar) {
+      _consoleRoutes?.go(context, Uri.parse(_coachesPath));
+    }
   }
 
   Future<void> _signOut() async {
-    if (!await _coachReviewGuard.canLeave() || !mounted) return;
+    if (!await _mayLeaveBranchEditor() ||
+        !await _canLeaveAddCoach() ||
+        !await _canLeaveAddMember() ||
+        !await _coachReviewGuard.canLeave() ||
+        !mounted) {
+      return;
+    }
     final ok = await confirmDialog(context,
         title: 'Sign out of the console?',
         message: 'You will need to sign in again next time.',
@@ -729,6 +1135,7 @@ class _AdminShellState extends State<AdminShell> {
               if (!useDrawer) navigation,
               Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _TopBar(
                         onOpenNavigation: useDrawer
@@ -737,10 +1144,17 @@ class _AdminShellState extends State<AdminShell> {
                         onOpenCoachAlert: _openCoachAlert,
                         liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
-                        subtitle: _inReports ? '' : current.subtitle,
+                        subtitle: current.label == 'Branches'
+                            ? ''
+                            : _addingCoach
+                                ? 'Create a coach account and assign branches'
+                                : _inReports
+                                    ? ''
+                                    : current.subtitle,
                         onSignOut: _signOut),
                     Expanded(
                       child: IndexedStack(
+                        sizing: StackFit.expand,
                         index: _inReports ? _reportsIndex : _index,
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
@@ -754,12 +1168,9 @@ class _AdminShellState extends State<AdminShell> {
                                 key: const ValueKey('retained-reports'),
                                 live: session != null,
                                 initialBranchId: _reportDrillDownBranch,
-                                branchRequest: session == null ? null : (input) async {
-                                  final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-                                      .httpsCallable('branchManagementCommand')
-                                      .call({...input, 'organizationId': session.scope.organizationId});
-                                  return Map<String, dynamic>.from(result.data as Map);
-                                },
+                                initialDate: _reportDrillDownDate,
+                                branchRequest:
+                                    session == null ? null : _requestBranch,
                                 active: _inReports,
                                 category: _lastReportCategory,
                                 onCategoryChanged: (category) =>
@@ -769,6 +1180,49 @@ class _AdminShellState extends State<AdminShell> {
                               !_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
                           }
+                          if (session != null && d.label == 'Branches') {
+                            return _branchDirectory(
+                                active: entry.key == _index);
+                          }
+                          if (d.label == 'Operations Calendar') {
+                            return OperationsCalendarScreen(
+                              key: ValueKey(session?.scope),
+                              repository: _calendarRepository,
+                              initialBranchId: _calendarBranch,
+                              onOpenSource: _openCalendarSource,
+                              onOpenCoach: _openCalendarCoach,
+                              onOpenReport: (branch, day) => _select(
+                                _reportsIndex + ReportsCategory.branches.index,
+                                reportBranch: branch,
+                                reportDate: day,
+                              ),
+                            );
+                          }
+                          if (d.label == 'Announcements') {
+                            return AnnouncementsScreen(
+                              key: _announcementsKey,
+                              loadBranches: session == null
+                                  ? null
+                                  : _announcementBranches,
+                              initialAnnouncementId: _announcementDrillDownId,
+                            );
+                          }
+                          if (session != null && d.label == 'Members') {
+                            return MembersScreen(
+                              live: true,
+                              branchRequest: _requestBranch,
+                              memberSetup: _memberSetupEnabled
+                                  ? _requestMemberSetup
+                                  : null,
+                              addingMember: _addingMember,
+                              provisionBranchId: _memberProvisionBranch,
+                              onOpenAddMember: () =>
+                                  _select(entry.key, addMember: true),
+                              onCloseAddMember: _closeAddMember,
+                              onProvisionLeaveCheckChanged: (check) =>
+                                  _canLeaveMemberProvisioning = check,
+                            );
+                          }
                           if (session != null && d.label == 'Coaches') {
                             if (_scopedCoachIdForBookings != null) {
                               final repository =
@@ -776,6 +1230,12 @@ class _AdminShellState extends State<AdminShell> {
                               return AdminBookingListRoute(
                                   session: session,
                                   repository: repository,
+                                  key: ValueKey(_focusedBookingId),
+                                  branchId: _focusedCoachBranch,
+                                  bookingId: _focusedBookingId,
+                                  loadBranches: _focusedBookingId == null
+                                      ? null
+                                      : _announcementBranches,
                                   coachId: _scopedCoachIdForBookings!);
                             }
                             if (_scopedCoachIdForSchedule != null) {
@@ -784,6 +1244,13 @@ class _AdminShellState extends State<AdminShell> {
                               return AdminCoachScheduleRoute(
                                   session: session,
                                   repository: repository,
+                                  key: ValueKey((
+                                    _scopedCoachIdForSchedule,
+                                    _focusedScheduleDate,
+                                    _focusedCoachBranch
+                                  )),
+                                  initialBranchId: _focusedCoachBranch,
+                                  initialLocalDate: _focusedScheduleDate,
                                   coachId: _scopedCoachIdForSchedule!);
                             }
                             return CoachesScreen(
@@ -793,6 +1260,13 @@ class _AdminShellState extends State<AdminShell> {
                                     _notificationCoachId,
                                 discardGuard: _coachReviewGuard,
                                 live: true,
+                                branchRequest: widget.coachBranchRequest,
+                                addingCoach: _addingCoach,
+                                onOpenAddCoach: () =>
+                                    _select(entry.key, addCoach: true),
+                                onCloseAddCoach: _closeAddCoach,
+                                onProvisionLeaveCheckChanged: (check) =>
+                                    _canLeaveCoachProvisioning = check,
                                 onOpenBookings: (id) => setState(() {
                                       _scopedCoachIdForBookings = id;
                                       _scopedCoachIdForSchedule = null;
@@ -845,7 +1319,12 @@ class _AdminShellState extends State<AdminShell> {
                                     mode: PaymentsMode.reconciliation,
                                     onNavigateMode: _navigateToPaymentMode);
                           }
-                          if (session == null) return d.page;
+                          if (d.page is RiskLeaderboardScreen) {
+                            return RecommendationMonitorActivity(
+                              active: entry.key == _index,
+                              child: d.page,
+                            );
+                          }
                           return d.page;
                         }).toList(),
                       ),
@@ -1186,37 +1665,59 @@ class _Sidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-                collapsed ? 0 : 18, 14, collapsed ? 0 : 18, 14),
+          Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: EdgeInsets.symmetric(
+              horizontal: collapsed ? 0 : 18,
+              vertical: 10,
+            ),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.hairline)),
+            ),
             child: Row(
               mainAxisAlignment: collapsed
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
+                Image.asset(
+                  'assets/images/gainpath_logo.png',
+                  width: 38,
+                  height: 38,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Image.memory(
+                    kGainPathLogoBytes,
+                    width: 38,
+                    height: 38,
+                    fit: BoxFit.contain,
                   ),
-                  child: const Icon(Icons.accessibility_new_rounded,
-                      color: AppColors.overlay, size: 22),
                 ),
                 if (!collapsed) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('GainPath',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        Text('Admin Console',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontSize: 12)),
+                        Text(
+                          'GainPath',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                    color: AppColors.ink,
+                                    letterSpacing: -0.2,
+                                    height: 1.15,
+                                  ),
+                        ),
+                        Text(
+                          'Admin Console',
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: 11.5,
+                                    color: AppColors.inkSoft,
+                                    height: 1.15,
+                                  ),
+                        ),
                       ],
                     ),
                   ),
@@ -1224,7 +1725,6 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1),
           const SizedBox(height: 8),
           Expanded(
             child: ListView(

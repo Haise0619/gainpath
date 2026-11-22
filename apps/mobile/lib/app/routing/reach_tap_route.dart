@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../infrastructure/audio/sound_effects.dart';
 import '../../features/gamification/application/mini_game_competition_coordinator.dart';
 import '../../features/gamification/presentation/member/game_competition_privacy.dart';
 import '../../features/gamification/presentation/member/game_competition_result_status.dart';
@@ -81,6 +82,7 @@ class _ReachTapRouteState extends State<ReachTapRoute>
           gameId: MiniGameContent.reachTapId);
     }
     _game = ReachTapController(
+        playEffect: SoundEffects.play,
         scope: captured.scope,
         activeScope: activeScope,
         camera: camera,

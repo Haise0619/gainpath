@@ -188,7 +188,7 @@ void main() {
         tester
             .widget<FilledButton>(find.byKey(const ValueKey('add-coach')))
             .onPressed,
-        isNull);
+        isNotNull);
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Publish profile'));

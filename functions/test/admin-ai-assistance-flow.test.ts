@@ -8,11 +8,24 @@ import {createAdminAiProvider} from '../src/modules/recommendation/admin-ai-assi
 import {assistanceFixture,now,admin} from './support/admin-ai-fixture';
 const root='orgs/gainpath',member='learner';
 describe('Admin-initiated outreach uses the existing canonical Inbox',()=>{
+  it('sends the complete catalog beyond 24 entries, saved aliases and honest coverage to Planner',async()=>{
+    const f=assistanceFixture();
+    for(let i=0;i<29;i++)f.d.set(root+'/exerciseVideos/movement-'+i,{isActive:true,exerciseName:'Movement '+i,aliases:['Alias '+i],difficulty:'Beginner',category:'Accessory',muscleGroup:'Core',equipment:'Bodyweight'});
+    f.d.set(root+'/gymEquipment/dumbbell',{isActive:true,name:'Dumbbells'});
+    let input:any;f.deps.aiProvider=async request=>{input=request.input;throw Error('Fixture captured; no real request');};
+    await expect(f.call('planner',{type:'exercise',days:30,instructions:'',requestId:'full-catalog'})).rejects.toThrow('Fixture captured');
+    expect(input.catalog.exercises).toHaveLength(30);expect(input.catalog.exercises.find((e:any)=>e.id==='movement-28').aliases).toEqual(['Alias 28']);
+    expect(input.equipmentAvailability).toEqual(['Dumbbells']);expect(input.coverage.difficulties.Beginner).toBe(30);
+    expect(input.evidence.difficulty_Advanced).toBe('Advanced: 0 active exercises.');
+  });
   for(const type of ['exercise','routine','program'])it(`generates ${type} drafts from current catalog facts without catalog writes`,async()=>{
     const f=assistanceFixture(),before=[...f.d.keys()];
-    f.deps.aiProvider=async request=>({providerSource:'mock_or_recorded',cacheHit:false,model:'fixture',latencyMillis:4,usage:{inputTokens:1,outputTokens:1,thinkingTokens:0,totalTokens:2},text:JSON.stringify({summary:'Catalog variety opportunities.',suggestions:[1,2,3].map(i=>({type,name:'New '+type+' '+i,description:'A draft for Admin review.',whyRecommended:'Expands the current catalog.',difficulty:'Beginner',category:'Accessory',muscleGroups:['Legs'],equipment:'Bodyweight',instructions:['Move carefully.'],durationMinutes:20,goal:'Muscle gain',exercises:type==='routine'?[{exerciseId:DEMO_EXERCISES.squat,sets:3,reps:8,restSeconds:60}]:[],routineIds:type==='program'?['routine']:[],evidenceKeys:['catalog_count']}))})});
+    f.d.set(root+'/exerciseVideos/bridge',{isActive:true,exerciseName:'Glute Bridge',category:'Accessory',difficulty:'Beginner',equipment:'Bodyweight',editRevision:1});
+    let providerInput:any;
+    f.deps.aiProvider=async request=>{providerInput=request.input;return{providerSource:'mock_or_recorded',cacheHit:false,model:'fixture',latencyMillis:4,usage:{inputTokens:1,outputTokens:1,thinkingTokens:0,totalTokens:2},text:JSON.stringify({summary:'Catalog variety opportunities.',suggestions:[1,2,3].map(i=>({type,name:(type==='exercise'?['Dead Bug','Heel Slide','Bird Dog'][i-1]:'New '+type+' '+i),description:'A draft for Admin review.',contentGap:'Expands current coverage.',whyRecommended:'Adds another training option.',difficulty:'Beginner',evidenceKeys:['catalog_count'],...(type==='exercise'?{canonicalName:['Dead Bug','Heel Slide','Bird Dog'][i-1],aliases:[],variantOfExerciseId:'',variantDifference:'',category:'Accessory',primaryMuscleGroup:'Core',equipment:'Bodyweight',instructions:['Start on the floor.','Move carefully.']}:type==='routine'?{muscleGroups:['Legs'],equipment:'Bodyweight',durationMinutes:12,goal:'Muscle gain',exercises:[{exerciseId:DEMO_EXERCISES.squat,sets:3,reps:8,restSeconds:60},{exerciseId:'bridge',sets:3,reps:10,restSeconds:60}]}:{weeks:4,goal:'Muscle gain',trainingDays:[{weekday:1,routineId:'routine',routineDay:1,category:'Lower Body'},{weekday:4,routineId:'routine',routineDay:1,category:'Lower Body'}]})}))})};};
+    before.push(root+'/exerciseVideos/bridge');
     const result=await f.call('planner',{type,days:30,instructions:'',requestId:'planner'}) as any;
-    expect(result.suggestions).toHaveLength(3);expect(result.grounding.enabled).toBe(false);expect([...f.d.keys()]).toEqual(before);
+    expect(providerInput.catalog.exercises).toHaveLength(2);expect(result.suggestions).toHaveLength(3);expect(result.grounding.enabled).toBe(false);expect([...f.d.keys()]).toEqual(before);
   });
   it('does not call AI for an empty catalog or when Admin authority is missing',async()=>{
     const f=assistanceFixture();f.d.delete(root+'/exerciseVideos/'+DEMO_EXERCISES.squat);
@@ -105,7 +118,7 @@ describe('Admin-initiated outreach uses the existing canonical Inbox',()=>{
   });
   it('Gemini transport uses the existing bounded schema adapter without exposing identity',async()=>{
     let body:any;const provider=createAdminAiProvider({apiKey:'fixture',fetcher:async(_url,init)=>{body=JSON.parse(String(init?.body));return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:'{"recommendations":[]}'}]}}]}));}});
-    await provider({task:'outreach',input:{features:{experience:'beginner'},candidates:[]}});
-    expect(body.generationConfig.responseSchema.properties.recommendations).toBeDefined();expect(JSON.stringify(body)).not.toContain(member+'@');expect(body.tools).toBeUndefined();
+    await provider({task:'outreach',input:{features:{experience:'beginner'},candidates:[{id:'C1',kind:'content',factors:[]}]}});
+    expect(body.generationConfig.responseSchema.properties.recommendations).toBeDefined();expect(JSON.stringify(body)).not.toContain(member+'@');expect(body.tools).toBeUndefined();expect(body.systemInstruction.parts[0].text).toContain('"enum":["C1"]');expect(body.generationConfig.responseSchema.properties.recommendations.items.required).toEqual(['candidateId','message']);
   });
 });

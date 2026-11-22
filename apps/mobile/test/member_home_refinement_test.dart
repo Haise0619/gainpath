@@ -1,3 +1,5 @@
+import '../../../test_support/fyp_render_support.dart'
+    show installFypOfflineFonts;
 import 'booking_history_coach_fix_test.dart' show bookingJson;
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -42,11 +44,12 @@ PublishedRoutine homeRoutine({int reps = 8}) =>
 RoutineAttempt homeAttempt(
         {bool finished = false,
         bool completed = false,
+        String id = 'attempt',
         DateTime? at,
         PublishedRoutine? routine,
         SessionScope? scope}) =>
     RoutineAttempt(
-        id: 'attempt',
+        id: id,
         scope: scope ?? homeScope,
         routine: routine ?? homeRoutine(),
         day: 1,
@@ -272,9 +275,13 @@ void main() {
       await t.ensureVisible(find.text(label));
       await t.tap(find.text(label));
       expect(opened, same(a));
+      expect(find.text('Workouts completed'), findsOneWidget);
       expect(
-          find.text(finished ? '1 completed workout' : '0 completed workouts'),
-          findsOneWidget);
+          t
+              .widget<Text>(
+                  find.byKey(const ValueKey('home-weekly-completion-count')))
+              .data,
+          finished ? '1' : '0');
     });
   }
   testWidgets('claimed check-in shows actual streak and no Claim button',
@@ -282,6 +289,8 @@ void main() {
     t.view.physicalSize = const Size(360, 820);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
+    final restore = await installFypOfflineFonts();
+    addTearDown(restore);
     await t.pumpWidget(homeTestApp(checkIn: homeCheckIn(claimed: true)));
     await t.pumpAndSettle();
     expect(find.text('3-day streak'), findsOneWidget);
@@ -304,7 +313,12 @@ void main() {
     await t.tap(find.text('Claim +10'));
     await t.pumpAndSettle();
     expect(claims, 1);
-    expect(find.text('0 completed workouts'), findsOneWidget);
+    expect(
+        t
+            .widget<Text>(
+                find.byKey(const ValueKey('home-weekly-completion-count')))
+            .data,
+        '0');
     expect(find.text('Form scored'), findsNothing);
   });
 }

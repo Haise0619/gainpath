@@ -4,12 +4,19 @@ import 'recommendation_monitor.dart';
 import '../../application/canonical_admin_recommendation_repository.dart';
 import '../../application/recommendation_queue.dart' show malaysiaTime;
 
+part 'recommendation_details_drawer.dart';
+
 class CanonicalAdminRecommendationPanel extends StatefulWidget {
   const CanonicalAdminRecommendationPanel(
-      {super.key, required this.repository, this.tab, this.clock});
+      {super.key,
+      required this.repository,
+      this.tab,
+      this.clock,
+      this.relatedLinks = const {}});
   final CanonicalAdminRecommendationRepository repository;
   final RecommendationMonitorTab? tab;
   final DateTime Function()? clock;
+  final Map<String, VoidCallback> relatedLinks;
   @override
   State<CanonicalAdminRecommendationPanel> createState() =>
       _CanonicalAdminRecommendationPanelState();
@@ -18,15 +25,18 @@ class CanonicalAdminRecommendationPanel extends StatefulWidget {
 class _CanonicalAdminRecommendationPanelState
     extends State<CanonicalAdminRecommendationPanel> {
   final _records = <CanonicalAdminRecommendation>[];
+  final _searchController = TextEditingController();
+  DialogRoute<bool>? _detailsRoute;
   String _search = '', _kind = 'all', _status = 'all';
-  String _date = 'all';
+  String _date = 'all', _source = 'all';
   DateTimeRange? _dates;
   int _sortColumn = 7;
   int _filterRevision = 0;
   bool _ascending = false;
   String? _next, _error;
   bool _loading = false, _working = false;
-  int _generation = 0;
+  int _generation = 0, _reviewEpoch = 0;
+  bool _active = true;
   DateTime get _now => (widget.clock ?? DateTime.now)().toUtc();
   @override
   void initState() {
@@ -38,6 +48,8 @@ class _CanonicalAdminRecommendationPanelState
   void didUpdateWidget(covariant CanonicalAdminRecommendationPanel old) {
     super.didUpdateWidget(old);
     if (!identical(old.repository, widget.repository)) {
+      _dismissDetails();
+      _working = false;
       _records.clear();
       _next = null;
       _load();
@@ -174,174 +186,87 @@ class _CanonicalAdminRecommendationPanelState
     return _ascending ? stable : -stable;
   }
 
-  Future<void> _review(CanonicalAdminRecommendation cached) async {
-    if (_working || _loading) {
-      return;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = RecommendationMonitorActivity.of(context);
+    if (_active && !active) {
+      _reviewEpoch++;
+      _working = false;
+      _dismissDetails();
     }
-    final repo = widget.repository, generation = _generation;
+    _active = active;
+  }
+
+  void _dismissDetails() {
+    final route = _detailsRoute;
+    _detailsRoute = null;
+    if (route == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = route.navigator;
+      if (navigator?.mounted == true && route.isActive) {
+        navigator!.removeRoute(route);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _dismissDetails();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<bool> _review(CanonicalAdminRecommendation cached) async {
+    if (!_active || _working || _loading || _detailsRoute != null) return false;
+    final repo = widget.repository,
+        generation = _generation,
+        epoch = _reviewEpoch;
+    bool reviewCurrent() =>
+        _active && epoch == _reviewEpoch && _current(repo, generation);
     setState(() {
       _working = true;
       _error = null;
     });
     try {
-      final lead = await repo.detail(cached);
-      if (!_current(repo, generation)) {
-        _lost();
-        return;
+      final record = await repo.detail(cached);
+      if (!reviewCurrent()) {
+        if (mounted && identical(repo, widget.repository) && !repo.isCurrent) {
+          _lost();
+        }
+        return false;
       }
-      setState(() => _working = false);
-      if (!mounted) {
-        return;
+      final navigator = Navigator.of(context);
+      final route = DialogRoute<bool>(
+        context: context,
+        barrierColor: const Color(0x55312644),
+        builder: (_) => reviewCurrent()
+            ? _RecommendationDetailsDrawer(
+                record: record,
+                status: _label(record),
+                issue: _issue(record),
+                onDeliveryIssues: widget.relatedLinks['Delivery Issues'],
+              )
+            : const SizedBox.shrink(),
+      );
+      setState(() {
+        _detailsRoute = route;
+        _working = false;
+      });
+      try {
+        final navigated = await navigator.push(route);
+        return navigated != true && reviewCurrent();
+      } finally {
+        if (mounted && identical(_detailsRoute, route)) {
+          setState(() => _detailsRoute = null);
+        }
       }
-      await showDialog<void>(
-          context: context,
-          builder: (ctx) => Dialog(
-              alignment: Alignment.centerRight,
-              insetPadding: const EdgeInsets.all(12),
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _drawerHeader(ctx),
-                            Wrap(spacing: 8, runSpacing: 8, children: [
-                              _badge(lead.typeLabel, AppColors.primary),
-                              _badge(lead.aiMethodLabel, AppColors.info),
-                              _statusBadge(lead),
-                            ]),
-                            const SizedBox(height: 16),
-                            _detailSection(
-                                'Member', lead.memberLabel ?? lead.memberId),
-                            _detailSection(
-                                'Recommended ${lead.typeLabel.toLowerCase()}',
-                                lead.targetLabel),
-                            _detailSection(
-                                'Exercise / goal', lead.exerciseLabel),
-                            _detailSection(
-                                'Workout context',
-                                lead.ai?.workoutContext ??
-                                    lead.evidenceSummary ??
-                                    'Workout context was not recorded for this recommendation.'),
-                            _detailSection(
-                                'Fitness goals',
-                                lead.ai?.fitnessGoals.isNotEmpty == true
-                                    ? lead.ai!.fitnessGoals.join(' · ')
-                                    : 'Fitness goals were not recorded for this recommendation.'),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                  color: AppColors.primaryTint,
-                                  borderRadius: BorderRadius.circular(14)),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                        lead.ai?.method == 'gemini'
-                                            ? 'Gemini personalized reason'
-                                            : 'Recommendation reason',
-                                        style: Theme.of(ctx)
-                                            .textTheme
-                                            .titleMedium
-                                            ?.copyWith(
-                                                color: AppColors.primaryDark)),
-                                    const SizedBox(height: 8),
-                                    Text(lead.summary,
-                                        style:
-                                            Theme.of(ctx).textTheme.bodyLarge),
-                                  ]),
-                            ),
-                            if (lead.ai?.factors.isNotEmpty == true) ...[
-                              const SizedBox(height: 16),
-                              Text('Selection factors',
-                                  style: Theme.of(ctx).textTheme.titleMedium),
-                              for (final factor in lead.ai!.factors)
-                                Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Text(factor)),
-                            ],
-                            if (lead.explanations.isNotEmpty) ...[
-                              const SizedBox(height: 16),
-                              Text('Supporting context',
-                                  style: Theme.of(ctx).textTheme.titleMedium),
-                              for (final reason in lead.explanations)
-                                Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Text(reason)),
-                            ],
-                            const SizedBox(height: 20),
-                            Text(
-                                lead.source == 'admin_outreach'
-                                    ? 'AI analysis & delivery'
-                                    : 'Ranking comparison',
-                                style: Theme.of(ctx).textTheme.titleMedium),
-                            const SizedBox(height: 8),
-                            _detailSection(
-                                'Recommendation source',
-                                lead.source == 'admin_outreach'
-                                    ? 'Admin outreach'
-                                    : 'Automatic'),
-                            if (lead.sentBy != null)
-                              _detailSection('Sent by', lead.sentBy!),
-                            _detailSection('AI method', lead.aiMethodLabel),
-                            _detailSection(
-                                'Eligible candidates',
-                                lead.ai?.technical['candidateCount']
-                                        ?.toString() ??
-                                    'Not recorded'),
-                            if (lead.source == 'admin_outreach')
-                              _detailSection(
-                                  'Gemini selected content', lead.targetLabel)
-                            else ...[
-                              _detailSection('Rule-based first choice',
-                                  lead.ai?.ruleFirstLabel ?? 'Not recorded'),
-                              _detailSection(
-                                  'Gemini first choice',
-                                  lead.ai?.geminiFirstLabel ??
-                                      (lead.ai?.method == 'rule_fallback'
-                                          ? 'Rule-based result used'
-                                          : 'Not recorded')),
-                              _detailSection(
-                                  'Did Gemini change the first choice?',
-                                  switch (lead.ai?.changedTopChoice) {
-                                    true => 'Yes',
-                                    false => 'No',
-                                    null => lead.ai?.method == 'rule_fallback'
-                                        ? 'Rule-based result used'
-                                        : 'Not recorded',
-                                  }),
-                            ],
-                            _detailSection('Delivery status', _label(lead)),
-                            _detailSection('Created',
-                                '${malaysiaTime(lead.createdAt)} MYT'),
-                            _detailSection(
-                                'Delivered',
-                                lead.deliveredAt == null
-                                    ? 'Delivery has not been confirmed'
-                                    : '${malaysiaTime(lead.deliveredAt!)} MYT'),
-                            ExpansionTile(
-                                tilePadding: EdgeInsets.zero,
-                                title: const Text('Technical Details'),
-                                children: [
-                                  Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                          'Member account: ${lead.memberId}\nRecord: ${lead.id}\nRevision: ${lead.revision}\nPolicy: ${lead.policyVersion}\nEvidence: ${lead.evidenceFingerprint}\nExpires: ${malaysiaTime(lead.expiresAt)} MYT${lead.ai?.model == null ? '' : '\nModel: ${lead.ai!.model}'}${_aiTechnical(lead)}'))
-                                ]),
-                            const SizedBox(height: 12),
-                            Wrap(spacing: 8, runSpacing: 8, children: [
-                              TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Close')),
-                            ])
-                          ])))));
     } catch (_) {
-      if (!_current(repo, generation)) {
-        _lost();
-        return;
+      if (!reviewCurrent()) {
+        if (mounted && identical(repo, widget.repository) && !repo.isCurrent) {
+          _lost();
+        }
+        return false;
       }
       setState(() {
         _working = false;
@@ -350,73 +275,44 @@ class _CanonicalAdminRecommendationPanelState
         _error =
             'Recommendation details could not be verified. Reload records before reviewing again.';
       });
+      return false;
     }
   }
 
-  Widget _detailSection(String label, String value) => Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: AppColors.inkSoft)),
-        const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.bodyLarge),
-      ]));
+  bool get _hasFilters =>
+      _search.isNotEmpty ||
+      _kind != 'all' ||
+      _source != 'all' ||
+      _status != 'all' ||
+      _date != 'all';
 
-  Widget _drawerHeader(BuildContext context) {
-    final title = Text('Recommendation details',
-        style: Theme.of(context).textTheme.titleLarge);
-    final close = IconButton(
-        tooltip: 'Close details',
-        onPressed: () => Navigator.pop(context),
-        icon: const Icon(Icons.close_rounded));
-    if (MediaQuery.sizeOf(context).width < 600 &&
-        MediaQuery.textScalerOf(context).scale(20) > 28) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Align(alignment: Alignment.centerRight, child: close),
-        title,
-      ]);
-    }
-    return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [Expanded(child: title), close]);
+  void _resetFilters() {
+    _searchController.clear();
+    setState(() {
+      _kind = _source = _status = _date = 'all';
+      _search = '';
+      _dates = null;
+      _filterRevision++;
+    });
   }
 
-  String _aiTechnical(CanonicalAdminRecommendation record) {
-    final fields = record.ai?.technical ?? const <String, Object?>{};
-    const labels = {
-      'candidateCount': 'Eligible candidates',
-      'latencyMillis': 'AI generation duration (ms)',
-      'inputTokens': 'Input tokens',
-      'outputTokens': 'Output tokens',
-      'changedOrder': 'Changed rule ranking',
-      'fallbackReason': 'Fallback reason',
-    };
-    return fields.entries
-        .map((entry) => '\n${labels[entry.key]}: ${entry.value}')
-        .join();
-  }
-
-  Widget _badge(String label, Color color) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.09),
-          borderRadius: BorderRadius.circular(8)),
-      child: Text(label,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: color, fontWeight: FontWeight.w600)));
-
-  Widget _statusBadge(CanonicalAdminRecommendation record) => _badge(
-      _label(record),
-      _issue(record)
-          ? AppColors.warning
-          : record.status == 'delivered'
-              ? AppColors.success
-              : AppColors.inkSoft);
+  InputDecoration _filterDecoration(String label,
+          {Widget? prefix, String? hint}) =>
+      InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: prefix,
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.hairline),
+        ),
+      );
 
   Widget _filter(
           String key,
@@ -432,7 +328,7 @@ class _CanonicalAdminRecommendationPanelState
               initialValue: value,
               key: ValueKey('$key-$value-$_filterRevision'),
               isExpanded: true,
-              decoration: InputDecoration(labelText: label),
+              decoration: _filterDecoration(label),
               items: choices
                   .map((choice) => DropdownMenuItem(
                       value: choice.$1, child: Text(choice.$2)))
@@ -440,187 +336,356 @@ class _CanonicalAdminRecommendationPanelState
               onChanged: _working || _loading ? null : changed));
 
   Widget _metrics(List<CanonicalAdminRecommendation> records, double width) {
-    final columns = width >= 1200
-        ? 6
-        : width >= 680
-            ? 3
-            : width >= 260 && MediaQuery.textScalerOf(context).scale(14) < 22
-                ? 2
-                : 1;
-    final cardWidth = (width - (columns - 1) * 12) / columns;
+    final layout = width >= 600 ? (width - 24) / 3 : width;
+    final loading = _loading && records.isEmpty;
+    final delivered =
+        records.where((record) => record.status == 'delivered').length;
+    final issues = records.where(_issue).length;
     final values = [
       (
         'Total recommendations',
         records.length,
         Icons.auto_awesome_outlined,
-        AppColors.primary
+        AppColors.primaryDark
       ),
+      (
+        'Delivered',
+        delivered,
+        Icons.mark_email_read_outlined,
+        const Color(0xff21734c)
+      ),
+      (
+        'Delivery issues',
+        issues,
+        Icons.error_outline_rounded,
+        const Color(0xff865014)
+      ),
+    ];
+    final types = [
       (
         'Tutorials',
         records.where((r) => r.kind == 'content').length,
-        Icons.play_circle_outline,
-        AppColors.info
+        const Color(0xff7041cf)
       ),
       (
         'Coaches',
         records.where((r) => r.kind == 'trainer').length,
-        Icons.people_outline_rounded,
-        AppColors.primary
+        const Color(0xff4280cf)
       ),
       (
         'Routines',
         records.where((r) => r.kind == 'routine').length,
-        Icons.fitness_center_rounded,
-        AppColors.primary
-      ),
-      (
-        'Delivered',
-        records.where((r) => r.status == 'delivered').length,
-        Icons.mark_email_read_outlined,
-        AppColors.success
-      ),
-      (
-        'Delivery issues',
-        records.where(_issue).length,
-        Icons.error_outline_rounded,
-        AppColors.warning
+        const Color(0xff598d77)
       ),
     ];
-    return Wrap(spacing: 12, runSpacing: 12, children: [
-      for (final value in values)
-        Container(
-            width: cardWidth,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.hairline)),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(value.$3, color: value.$4, size: 22),
-              const SizedBox(height: 14),
-              Text(_loading && records.isEmpty ? '—' : '${value.$2}',
-                  style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 2),
-              Text(value.$1, style: Theme.of(context).textTheme.bodySmall),
-            ])),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(spacing: 12, runSpacing: 12, children: [
+        for (final value in values)
+          SizedBox(
+              width: layout,
+              child: _surface(
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text(value.$1,
+                                  style:
+                                      Theme.of(context).textTheme.bodyMedium),
+                              const SizedBox(height: 5),
+                              Text(loading ? '—' : '${value.$2}',
+                                  key: ValueKey(
+                                      'recommendation-metric-${value.$1}'),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.ink)),
+                            ])),
+                        const SizedBox(width: 8),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: value.$4.withValues(alpha: .09),
+                              borderRadius: BorderRadius.circular(8)),
+                          child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(value.$3, color: value.$4, size: 19)),
+                        ),
+                      ]),
+                ),
+              )),
+      ]),
+      const SizedBox(height: 12),
+      _surface(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Wrap(
+                spacing: 20,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('Recommendation types',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.ink, fontWeight: FontWeight.w700)),
+                  for (final type in types)
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.circle, size: 8, color: type.$3),
+                      const SizedBox(width: 6),
+                      Text(type.$1),
+                      const SizedBox(width: 6),
+                      Text(loading ? '—' : '${type.$2}',
+                          key: ValueKey('recommendation-metric-${type.$1}'),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ]),
+                ]),
+            if (records.isNotEmpty &&
+                types.fold(0, (sum, type) => sum + type.$2) ==
+                    records.length) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                    height: 6,
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final type in types)
+                            if (type.$2 > 0)
+                              Expanded(
+                                  flex: type.$2,
+                                  child: ColoredBox(color: type.$3)),
+                        ])),
+              ),
+            ],
+          ]),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Statistics cover ${records.length} loaded, currently authorized records. Filters apply to the list below.',
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: AppColors.inkSoft),
+      ),
     ]);
   }
+
+  Widget _surface(Widget child) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: AppColors.hairline),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      );
 
   void _sort(int column, bool ascending) => setState(() {
         _sortColumn = column;
         _ascending = ascending;
       });
 
-  Widget _cell(String text, double width, {int lines = 2}) => SizedBox(
-      width: width,
-      child: Tooltip(
-          message: text,
-          child: Text(text, maxLines: lines, overflow: TextOverflow.ellipsis)));
+  Widget _textCell(String text, {bool strong = false, int lines = 2}) =>
+      Tooltip(
+        message: text,
+        child: Text(text,
+            maxLines: lines,
+            overflow: TextOverflow.ellipsis,
+            style:
+                strong ? const TextStyle(fontWeight: FontWeight.w700) : null),
+      );
 
-  Widget _table(List<CanonicalAdminRecommendation> visible) => Container(
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: AppColors.hairline),
-          borderRadius: BorderRadius.circular(14)),
-      clipBehavior: Clip.antiAlias,
-      child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-              sortColumnIndex: _sortColumn,
-              sortAscending: _ascending,
-              headingRowColor:
-                  const WidgetStatePropertyAll(AppColors.surfaceAlt),
-              headingTextStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.inkSoft, fontWeight: FontWeight.w700),
-              dataTextStyle: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: AppColors.ink),
-              horizontalMargin: 16,
-              columnSpacing: 18,
-              dataRowMinHeight: 86,
-              dataRowMaxHeight: 100,
-              columns: [
-                DataColumn(label: _cell('Member', 110), onSort: _sort),
-                DataColumn(label: _cell('Type', 80), onSort: _sort),
-                DataColumn(label: _cell('Exercise / Goal', 100), onSort: _sort),
-                DataColumn(
-                    label: _cell('Recommended content', 150), onSort: _sort),
-                DataColumn(label: _cell('Reason', 180)),
-                DataColumn(label: _cell('AI Method', 110), onSort: _sort),
-                DataColumn(label: _cell('Status', 128), onSort: _sort),
-                DataColumn(
-                    label: _cell('Created Date · MYT', 120), onSort: _sort),
-                DataColumn(label: _cell('Details', 60)),
-              ],
-              rows: [
-                for (final record in visible)
-                  DataRow(key: ValueKey(record.id), cells: [
-                    DataCell(_cell(record.memberLabel ?? record.memberId, 110)),
-                    DataCell(SizedBox(
-                        width: 80,
-                        child: _badge(record.typeLabel, AppColors.primary))),
-                    DataCell(_cell(_contextLabel(record), 100)),
-                    DataCell(_cell(record.targetLabel, 150)),
-                    DataCell(_cell(record.summary, 180, lines: 3)),
-                    DataCell(SizedBox(
-                        width: 110,
-                        child: _badge(record.aiMethodLabel, AppColors.info))),
-                    DataCell(SizedBox(width: 128, child: _statusBadge(record))),
-                    DataCell(_cell(malaysiaTime(record.createdAt), 120)),
-                    DataCell(TextButton(
-                        onPressed:
-                            _working || _loading ? null : () => _review(record),
-                        child: const Text('View'))),
-                  ]),
-              ])));
+  Widget _detailsAction(CanonicalAdminRecommendation record) =>
+      _RecommendationDetailsAction(
+        key: ValueKey('recommendation-open-${record.id}'),
+        target: record.targetLabel,
+        onReview: _working || _loading || _detailsRoute != null
+            ? null
+            : () => _review(record),
+      );
+
+  Widget _typeBadge(CanonicalAdminRecommendation record) =>
+      _recommendationBadge(record.typeLabel, AppColors.primaryDark);
+
+  Widget _statusBadge(CanonicalAdminRecommendation record) {
+    final status = _label(record);
+    return Tooltip(
+      message: status,
+      child: _recommendationBadge(status, _statusColor(_issue(record), record),
+          icon: record.status == 'delivered'
+              ? Icons.check_circle_outline_rounded
+              : _issue(record)
+                  ? Icons.error_outline_rounded
+                  : Icons.schedule_rounded),
+    );
+  }
+
+  Widget _sourceCell(CanonicalAdminRecommendation record) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _textCell(_recommendationSource(record), strong: true, lines: 1),
+            _textCell(record.aiMethodLabel, lines: 1),
+          ]);
+
+  Widget _table(List<CanonicalAdminRecommendation> visible, double width) {
+    final columns = [
+      ('Member', .155, 0),
+      ('Recommended content', .197, 3),
+      ('Type', .095, 1),
+      ('Source / AI method', .15, 5),
+      ('Delivery status', .17, 6),
+      ('Created Date · MYT', .125, 7),
+      ('Details', .108, null),
+    ];
+    final activeColumn =
+        columns.indexWhere((column) => column.$3 == _sortColumn);
+    return KeyedSubtree(
+      key: const ValueKey('recommendation-table'),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerTheme: const DividerThemeData(color: AppColors.hairline),
+        ),
+        child: DataTable(
+          dividerThickness: .8,
+          sortColumnIndex: activeColumn < 0 ? null : activeColumn,
+          sortAscending: _ascending,
+          headingRowColor: const WidgetStatePropertyAll(AppColors.surfaceAlt),
+          headingTextStyle: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppColors.inkSoft, fontWeight: FontWeight.w700),
+          dataTextStyle: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: AppColors.ink),
+          horizontalMargin: 12,
+          columnSpacing: 10,
+          headingRowHeight: 49,
+          dataRowMinHeight: 63,
+          dataRowMaxHeight: 72,
+          columns: [
+            for (final column in columns)
+              DataColumn(
+                columnWidth: FixedColumnWidth((width - 2) * column.$2),
+                label: Flexible(
+                    child: Text(column.$1,
+                        maxLines: 2, overflow: TextOverflow.ellipsis)),
+                onSort: column.$3 == null
+                    ? null
+                    : (_, ascending) => _sort(column.$3!, ascending),
+              ),
+          ],
+          rows: [
+            for (final record in visible)
+              DataRow(
+                key: ValueKey(record.id),
+                color: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.hovered)
+                        ? AppColors.surfaceAlt
+                        : null),
+                cells: [
+                  DataCell(
+                      _textCell(_recommendationMember(record), strong: true)),
+                  DataCell(Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _textCell(record.targetLabel, strong: true, lines: 1),
+                      _textCell(record.exerciseLabel, lines: 1),
+                    ],
+                  )),
+                  DataCell(_typeBadge(record)),
+                  DataCell(_sourceCell(record)),
+                  DataCell(_statusBadge(record)),
+                  DataCell(_textCell(malaysiaTime(record.createdAt))),
+                  DataCell(_detailsAction(record)),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _card(CanonicalAdminRecommendation record) => Container(
-      key: ValueKey(record.id),
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: AppColors.hairline),
-          borderRadius: BorderRadius.circular(14)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(record.memberLabel ?? record.memberId,
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          _badge(record.typeLabel, AppColors.primary),
-          _badge(record.aiMethodLabel, AppColors.info),
-          _statusBadge(record),
+        key: ValueKey(record.id),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 6),
+        decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.hairline))),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _textCell(record.targetLabel, strong: true),
+          const SizedBox(height: 2),
+          _textCell(_recommendationMember(record)),
+          _textCell(record.exerciseLabel),
+          const SizedBox(height: 8),
+          Wrap(spacing: 7, runSpacing: 6, children: [
+            _typeBadge(record),
+            _statusBadge(record),
+          ]),
+          const SizedBox(height: 8),
+          Text('${_recommendationSource(record)} · ${record.aiMethodLabel}',
+              style: Theme.of(context).textTheme.bodySmall),
+          Wrap(
+            spacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('${malaysiaTime(record.createdAt)} MYT',
+                  style: Theme.of(context).textTheme.bodySmall),
+              _detailsAction(record),
+            ],
+          ),
         ]),
-        const SizedBox(height: 14),
-        Text(record.targetLabel,
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 4),
-        Text(_contextLabel(record)),
-        const SizedBox(height: 8),
-        Text(record.summary),
-        const SizedBox(height: 12),
-        Text('${malaysiaTime(record.createdAt)} MYT',
-            style: Theme.of(context).textTheme.bodySmall),
-        Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-                onPressed: _working || _loading ? null : () => _review(record),
-                child: const Text('View'))),
-      ]));
+      );
+
+  Widget _sortMenu() => PopupMenuButton<int>(
+        tooltip: 'Sort recommendations',
+        onSelected: (column) =>
+            _sort(column, column == _sortColumn ? !_ascending : column != 7),
+        itemBuilder: (_) => [
+          for (final option in const [
+            (7, 'Created date'),
+            (0, 'Member'),
+            (3, 'Recommended content'),
+            (1, 'Type'),
+            (2, 'Exercise / Goal'),
+            (5, 'AI method'),
+            (6, 'Delivery status')
+          ])
+            PopupMenuItem(value: option.$1, child: Text(option.$2)),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Text(_sortColumn == 7
+              ? (_ascending ? 'Oldest first' : 'Newest first')
+              : (_ascending ? 'Sort ↑' : 'Sort ↓')),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) =>
       LayoutBuilder(builder: (context, constraints) {
         final current = widget.repository.isCurrent;
+        if (!current && _detailsRoute != null) _dismissDetails();
         final records = current ? _records : <CanonicalAdminRecommendation>[];
         final tab = widget.tab ?? RecommendationMonitorTab.overview;
         final visible = records
             .where((record) =>
                 (tab != RecommendationMonitorTab.attention || _issue(record)) &&
                 (_kind == 'all' || record.kind == _kind) &&
+                (_source == 'all' ||
+                    _recommendationSourceKey(record) == _source) &&
                 (_status == 'all' ||
                     (_status == 'expired'
                         ? _label(record) == 'Expired'
@@ -631,17 +696,54 @@ class _CanonicalAdminRecommendationPanelState
                     .contains(_search))
             .toList()
           ..sort(_compare);
-        final width = constraints.maxWidth - 40;
+        final padding = constraints.maxWidth >= 650 ? 28.0 : 14.0;
+        final width = constraints.maxWidth - 2 * padding;
         final wide =
-            width >= 1100 && MediaQuery.textScalerOf(context).scale(14) < 22;
-        final filterWidth = width < 240 ? width : 210.0;
+            width >= 1030 && MediaQuery.textScalerOf(context).scale(14) < 18;
+        final filterWidth = width < 240
+            ? width - 26
+            : width >= 850
+                ? 174.0
+                : 198.0;
         final dateLabel = _dates == null
             ? 'Custom dates'
             : '${_dates!.start.toIso8601String().split('T').first} – ${_dates!.end.toIso8601String().split('T').first}';
         return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(padding),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (current) ...[
+                Text(
+                    tab == RecommendationMonitorTab.attention
+                        ? 'Delivery Issues'
+                        : 'Recommendations Overview',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink)),
+                const SizedBox(height: 5),
+                Text(
+                    tab == RecommendationMonitorTab.attention
+                        ? 'Inspect unresolved or ineligible recommendation delivery.'
+                        : 'Monitor AI recommendations, delivery outcomes and recommendation sources.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.inkSoft)),
+                if (tab == RecommendationMonitorTab.overview &&
+                    widget.relatedLinks.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 9, runSpacing: 2, children: [
+                    for (final link in widget.relatedLinks.entries)
+                      TextButton.icon(
+                          onPressed: link.value,
+                          icon:
+                              const Icon(Icons.arrow_outward_rounded, size: 15),
+                          label: Text(link.key)),
+                  ]),
+                ],
+                const SizedBox(height: 18),
+              ],
               if (!current)
                 const Text(
                     'Your Admin session changed. Reopen Recommendations.')
@@ -650,96 +752,111 @@ class _CanonicalAdminRecommendationPanelState
                     'Recommendations are unavailable while evidence, permission and delivery policies await review.')
               else ...[
                 _metrics(records, width),
-                const SizedBox(height: 12),
-                Text(
-                    'Statistics cover ${records.length} loaded, currently authorized records. Filters apply to the list below.',
-                    style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 28),
+                const SizedBox(height: 21),
                 Text(
                     tab == RecommendationMonitorTab.attention
                         ? 'Delivery issues'
                         : 'Recent recommendations',
                     style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                    tab == RecommendationMonitorTab.attention
-                        ? 'Prepared, expired before delivery or no longer eligible records.'
-                        : 'Automatic and gym-sent recommendations with their saved delivery outcomes.',
-                    style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 16),
-                Wrap(spacing: 12, runSpacing: 12, children: [
-                  SizedBox(
-                      width: width < 300 ? width : 300,
-                      child: TextField(
-                          decoration: const InputDecoration(
-                              labelText: 'Search member or content',
-                              prefixIcon: Icon(Icons.search_rounded)),
-                          onChanged: (value) => setState(
-                              () => _search = value.trim().toLowerCase()))),
-                  _filter(
-                      'type',
-                      'Type',
-                      _kind,
-                      const [
-                        ('all', 'All types'),
-                        ('routine', 'Routine'),
-                        ('content', 'Tutorial'),
-                        ('trainer', 'Coach')
-                      ],
-                      (value) => setState(() => _kind = value ?? 'all'),
-                      filterWidth),
-                  _filter(
-                      'status',
-                      'Status',
-                      _status,
-                      const [
-                        ('all', 'All statuses'),
-                        ('pending', 'Awaiting delivery'),
-                        ('prepared', 'Delivery unverified'),
-                        ('expired', 'Expired before delivery'),
-                        ('delivered', 'Delivered'),
-                        ('dismissed', 'Dismissed'),
-                        ('withdrawn', 'Withdrawn')
-                      ],
-                      (value) => setState(() => _status = value ?? 'all'),
-                      filterWidth),
-                  _filter('date', 'Created date · MYT', _date, [
-                    const ('all', 'All dates'),
-                    const ('7', 'Last 7 days'),
-                    const ('30', 'Last 30 days'),
-                    const ('90', 'Last 90 days'),
-                    ('custom', dateLabel)
-                  ], (value) {
-                    if (value == 'custom') {
-                      _calendar();
-                    } else {
-                      setState(() {
-                        _date = value ?? 'all';
-                        _dates = null;
-                      });
-                    }
-                  }, filterWidth),
-                  OutlinedButton.icon(
-                      onPressed: _loading || _working ? null : () => _load(),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Refresh')),
-                ]),
-                const SizedBox(height: 12),
-                Text(
-                    '${visible.length} shown · ${records.length} records loaded · dates in Malaysia time',
-                    style: Theme.of(context).textTheme.bodySmall),
-                if (!wide)
-                  TextButton.icon(
-                      onPressed: () =>
-                          _sort(7, _sortColumn == 7 ? !_ascending : false),
-                      icon: Icon(
-                          _ascending
-                              ? Icons.arrow_upward_rounded
-                              : Icons.arrow_downward_rounded,
-                          size: 16),
-                      label:
-                          Text(_ascending ? 'Oldest first' : 'Newest first')),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+                _surface(Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Wrap(
+                        spacing: 9,
+                        runSpacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                              width: width < 264 ? width - 26 : 238,
+                              child: TextField(
+                                  controller: _searchController,
+                                  decoration: _filterDecoration('Search',
+                                      hint: 'Member or content',
+                                      prefix: const Icon(Icons.search_rounded,
+                                          size: 18)),
+                                  onChanged: (value) => setState(() =>
+                                      _search = value.trim().toLowerCase()))),
+                          _filter(
+                              'type',
+                              'Type',
+                              _kind,
+                              const [
+                                ('all', 'All types'),
+                                ('routine', 'Routine'),
+                                ('content', 'Tutorial'),
+                                ('trainer', 'Coach')
+                              ],
+                              (value) => setState(() => _kind = value ?? 'all'),
+                              filterWidth),
+                          _filter(
+                              'source',
+                              'Source',
+                              _source,
+                              const [
+                                ('all', 'All sources'),
+                                ('automatic', 'Automatic'),
+                                ('admin_outreach', 'Admin Outreach'),
+                                ('withheld', 'Withheld'),
+                              ],
+                              (value) =>
+                                  setState(() => _source = value ?? 'all'),
+                              filterWidth),
+                          _filter(
+                              'status',
+                              'Status',
+                              _status,
+                              const [
+                                ('all', 'All statuses'),
+                                ('pending', 'Awaiting delivery'),
+                                ('prepared', 'Delivery unverified'),
+                                ('expired', 'Expired before delivery'),
+                                ('delivered', 'Delivered'),
+                                ('dismissed', 'Dismissed'),
+                                ('withdrawn', 'Withdrawn')
+                              ],
+                              (value) =>
+                                  setState(() => _status = value ?? 'all'),
+                              filterWidth),
+                          _filter('date', 'Created date · MYT', _date, [
+                            const ('all', 'All dates'),
+                            const ('7', 'Last 7 days'),
+                            const ('30', 'Last 30 days'),
+                            const ('90', 'Last 90 days'),
+                            ('custom', dateLabel)
+                          ], (value) {
+                            if (value == 'custom') {
+                              _calendar();
+                            } else {
+                              setState(() {
+                                _date = value ?? 'all';
+                                _dates = null;
+                              });
+                            }
+                          }, filterWidth),
+                          OutlinedButton.icon(
+                              onPressed:
+                                  _loading || _working ? null : () => _load(),
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Refresh')),
+                          if (_hasFilters)
+                            TextButton(
+                                onPressed: _resetFilters,
+                                child: const Text('Reset filters')),
+                        ]))),
+                const SizedBox(height: 5),
+                Wrap(
+                  spacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${visible.length} shown · ${records.length} records loaded · dates in Malaysia time',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (visible.isNotEmpty) _sortMenu(),
+                  ],
+                ),
+                const SizedBox(height: 5),
                 if (_loading || _working)
                   const LinearProgressIndicator(
                       semanticsLabel: 'Loading recommendations'),
@@ -778,9 +895,11 @@ class _CanonicalAdminRecommendationPanelState
                             textAlign: TextAlign.center),
                       ])),
                 if (visible.isNotEmpty)
-                  wide
-                      ? _table(visible)
-                      : Column(children: visible.map(_card).toList()),
+                  _surface(wide
+                      ? _table(visible, width)
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: visible.map(_card).toList())),
                 const SizedBox(height: 16),
                 if (_next != null)
                   OutlinedButton.icon(

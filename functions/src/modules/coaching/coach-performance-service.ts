@@ -12,7 +12,7 @@ import { validatedPremiumCoachVoucherSnapshot } from '../commerce/premium-coach-
 export const COMMISSION_POLICY = { version: 'sandbox-coach-80-v1', coachBasisPoints: 8000, currency: 'MYR', environment: 'sandbox' } as const;
 export function commissionFor(booking: DocumentData, payment: DocumentData | undefined, basisPoints = 8000) {
   if (booking.status !== 'completed' || !payment || payment.schemaVersion !== 1 || payment.environment !== 'sandbox'
-    || payment.provider !== 'billplz' || payment.currency !== 'MYR' || payment.paymentStatus !== 'cleared'
+    || !['billplz', 'xendit'].includes(String(payment.provider)) || payment.currency !== 'MYR' || payment.paymentStatus !== 'cleared'
     || payment.fulfilmentStatus !== 'confirmed' || payment.refundReviewRequired === true
     || (payment.refundStatus !== undefined && payment.refundStatus !== 'none')
     || !Number.isSafeInteger(payment.amountMinor) || Number(payment.amountMinor) <= 0 || Number(payment.amountMinor) > 100000000) return null;

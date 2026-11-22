@@ -14,6 +14,13 @@ void main() {
     final r = ReviewFake();
     r.record = PaymentReviewRecord({
       ...r.record.data,
+      'provider': 'xendit',
+      'createdAtMillis': 1795010340000,
+      'paymentConfirmedAtMillis': 1795010400000,
+      'sessionLocalDate': '2026-11-19',
+      'sessionStartLabel': '11:00',
+      'sessionEndLabel': '12:00',
+      'sessionTimeZone': 'Asia/Kuala_Lumpur',
       'selectedPaymentMethodCategory': 'ewallet',
       'selectedPaymentMethodCode': 'grabpay',
       'selectedPaymentMethodLabel': 'GrabPay',
@@ -31,8 +38,8 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('E-Wallet · GrabPay'), findsOneWidget);
     expect(find.text('Preferred payment method'), findsOneWidget);
-    expect(find.text('Processing gateway'), findsOneWidget);
-    expect(find.text('Billplz Sandbox'), findsOneWidget);
+    expect(find.text('Payment provider'), findsOneWidget);
+    expect(find.text('Xendit'), findsOneWidget);
   });
   testWidgets('legacy invoice has graceful unrecorded method fallback',
       (t) async {
@@ -46,7 +53,7 @@ void main() {
             isCurrent: () => true,
             initialBookingId: 'booking-1')));
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(find.text('Not recorded'), 300,
+    await t.scrollUntilVisible(find.text('Legacy booking'), 300,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Legacy booking'), findsOneWidget);
   });

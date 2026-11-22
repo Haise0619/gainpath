@@ -98,6 +98,7 @@ class FirebaseBookingPaymentRepository
             if (gatewayCode != null) 'gatewayCode': gatewayCode,
             if (selectedPaymentMethodCode != null)
               'selectedPaymentMethodCode': selectedPaymentMethodCode,
+            if (selectedPaymentMethodCode != null) 'supportsXendit': true,
             if (quoteToken != null) 'quoteToken': quoteToken,
             if (usePremiumVoucher) 'usePremiumVoucher': true
           }),
@@ -147,8 +148,11 @@ class FirebaseBookingPaymentRepository
   Future<BookingPaymentMethods> loadPaymentSelections(String bookingId) async {
     try {
       return BookingPaymentMethods.fromJson(
-          await _call('getBookingPaymentCommand',
-              {'bookingId': bookingId, 'includeSelectionMethods': true}),
+          await _call('getBookingPaymentCommand', {
+            'bookingId': bookingId,
+            'includeSelectionMethods': true,
+            'supportsXendit': true,
+          }),
           bookingId: bookingId);
     } on FormatException {
       throw const BookingException('invalid-response');

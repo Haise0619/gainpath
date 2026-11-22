@@ -57,5 +57,5 @@ void main(){
   await tester.tap(find.text('Recommendations').first);await waitForFypWidget(tester,find.text('Exercise Insights'),description:'Original Insights tab');await waitForFypWidget(tester,find.textContaining('Configuration revision 1'),description:'Actual scoped insights');await capture('insights');
   await tester.tap(find.text('Trainer Matching'));await waitForFypWidget(tester,find.textContaining('Pending: 4'),description:'Preserved Trainer lead queue');final refresh=find.ancestor(of:find.text('Refresh queue'),matching:find.byWidgetPredicate((w)=>w is FilledButton));expect(tester.widget<FilledButton>(refresh).onPressed,isNull);expect(find.widgetWithText(FilledButton,'Send'),findsNothing);await capture('trainer');
   expect(gateway.authSignInRequests,1);expect(gateway.protectedSessionRequests,0);
- });
+ }, skip: Platform.environment['UNIFIED_EMULATOR_PASSWORD'] == null);
 }

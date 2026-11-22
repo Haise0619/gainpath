@@ -48,5 +48,11 @@ it('preserves a protected typed recommendation reference rather than discarding 
 });
 it('cannot bypass recommendation redaction with a malformed type tag',async()=>{
   const s=store(),id=`recommendation-${'c'.repeat(64)}`,data={schemaVersion:1,type:['recommendation'],recipientId:'member-1',recommendationId:'c'.repeat(64),recommendationKind:'trainer',title:'PRIVATE source text',message:'PRIVATE goal',createdAtMillis:now,read:false};
-  await expect(memberCommand(s,auth,{...base,action:'inbox'},()=>now,{list:async()=>[{id,data}]})).rejects.toThrow();
+  expect(await memberCommand(s,auth,{...base,action:'inbox'},()=>now,{list:async()=>[{id,data}]})).toMatchObject({records:[]});
+});
+it('isolates a malformed recommendation and retains other notices without exposing its raw message',async()=>{
+  const s=store(),good={id:'good',data:{schemaVersion:1,recipientId:'member-1',title:'Booking',message:'View booking',createdAtMillis:now,read:false}};
+  const bad={id:'bad',data:{...good.data,type:'recommendation',recommendationId:'b'.repeat(64),recommendationKind:'trainer',message:'PRIVATE'}};
+  const result=await memberCommand(s,auth,{...base,action:'inbox'},()=>now,{list:async()=>[bad,good],projectRecommendation:async()=>{throw new Error('Invalid historical record');}});
+  expect(result).toMatchObject({records:[{id:'good'}]});expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });

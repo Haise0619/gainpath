@@ -27,7 +27,7 @@ function branches(value: unknown): string[] {
   if (new Set(ids).size !== ids.length) throw new InputValidationError('Branch assignments must be unique.');
   return ids;
 }
-function professional(raw: DocumentData): DocumentData {
+export function professional(raw: DocumentData): DocumentData {
   const result: DocumentData = {};
   for (const [key, max, empty] of [['displayName', 80, false], ['specialty', 80, false], ['bio', 1000, true]] as const) {
     if (typeof raw[key] !== 'string') throw new InputValidationError('Professional text fields are required.');

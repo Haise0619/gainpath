@@ -2,7 +2,7 @@ import type {DocumentData,DocumentStore} from '../../platform/firestore/store';
 import {DomainError} from '../../platform/errors';
 import {syncAutomaticGymBooking,type SyncDependencies} from './gym-booking-sync';
 import type {BookingEmailNotification} from './google-booking-delivery';
-export interface AutomaticDeliveryConfig {enabled:boolean;organizationId:string;activatedAtMillis:number;allowedRecipients:readonly string[];testCoachId:string;testBookingId:string}
+export interface AutomaticDeliveryConfig {enabled:boolean;calendarEnabled?:boolean;organizationId:string;activatedAtMillis:number;allowedRecipients:readonly string[];testCoachId:string;testBookingId:string}
 export interface BookingChangeEvent {organizationId:string;bookingId:string;revision:string;eventAtMillis:number;before:DocumentData;after:DocumentData}
 const identifier=(v:unknown):v is string=>typeof v==='string'&&/^[\w-]{1,128}$/.test(v);
 export function automaticScopeConfigured(config:AutomaticDeliveryConfig){
@@ -11,11 +11,27 @@ export function automaticScopeConfigured(config:AutomaticDeliveryConfig){
 export function automaticBookingInScope(event:BookingChangeEvent,config:AutomaticDeliveryConfig){
  return automaticScopeConfigured(config)&&event.organizationId===config.organizationId&&event.bookingId===config.testBookingId&&event.after.organizationId===config.organizationId&&event.after.bookingId===config.testBookingId&&event.after.coachId===config.testCoachId&&Number.isSafeInteger(event.after.createdAtMillis)&&Number(event.after.createdAtMillis)>=config.activatedAtMillis&&Number(event.after.createdAtMillis)<=event.eventAtMillis;
 }
+export function automaticCalendarInScope(event:BookingChangeEvent,config:AutomaticDeliveryConfig){
+ return config.calendarEnabled===true&&identifier(config.organizationId)&&
+  event.organizationId===config.organizationId&&event.after.organizationId===config.organizationId&&
+  identifier(event.bookingId)&&event.after.bookingId===event.bookingId&&identifier(event.after.coachId)&&
+  Number.isSafeInteger(config.activatedAtMillis)&&config.activatedAtMillis>0&&
+  Number.isSafeInteger(event.eventAtMillis)&&event.eventAtMillis>=config.activatedAtMillis;
+}
 export function automaticBookingChange(before:DocumentData,after:DocumentData):BookingEmailNotification['type']|undefined{
  if(before.status==='pending_hold'&&after.status==='confirmed')return 'confirmed';
  if(before.status==='confirmed'&&after.status==='cancelled')return 'cancelled';
  if(before.status==='confirmed'&&after.status==='confirmed'&&(before.startAtMillis!==after.startAtMillis||before.endAtMillis!==after.endAtMillis))return 'rescheduled';
  return undefined;
+}
+export async function deliverAutomaticCalendar(store:DocumentStore,event:BookingChangeEvent,config:AutomaticDeliveryConfig,deps:SyncDependencies&{assertCurrent():Promise<void>},clock=Date.now){
+ const type=automaticBookingChange(event.before,event.after);
+ if(!type||!automaticCalendarInScope(event,config)||event.eventAtMillis>clock()+60000||clock()-event.eventAtMillis>3600000)return{status:'skipped'};
+ if(!event.revision||event.revision.length>256)throw new DomainError('invalid-argument','Booking revision required.');
+ await deps.assertCurrent();
+ const {status}=await syncAutomaticGymBooking(store,event.organizationId,event.bookingId,'calendar',{type,revision:event.revision},deps,clock);
+ if(status!=='delivered')throw new DomainError('unavailable','Calendar needs reconciliation.');
+ return{status};
 }
 export async function deliverAutomaticBooking(store:DocumentStore,event:BookingChangeEvent,config:AutomaticDeliveryConfig,deps:SyncDependencies&{assertCurrent():Promise<void>},clock=Date.now){
  const type=automaticBookingChange(event.before,event.after);

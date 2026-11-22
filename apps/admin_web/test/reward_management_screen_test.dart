@@ -293,6 +293,8 @@ void main() {
         MaterialApp(home: RewardManagementScreen(repository: repo)));
     await tester.pumpAndSettle();
     expect(repo.draftReads, 0);
+    await tester.tap(find.text('Reward policies'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Workout reward draft'));
     await tester.pumpAndSettle();
     expect(repo.draftReads, 1);

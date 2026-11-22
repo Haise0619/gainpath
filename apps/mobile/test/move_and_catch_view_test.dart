@@ -102,7 +102,7 @@ void main() {
             child: child!),
         home: MoveAndCatchView(
             controller: c, viewport: const ColoredBox(color: Colors.black))));
-    expect(find.text('Pausing in 2s · move into view'), findsOneWidget);
+    expect(find.text('Tracking interrupted · pausing in 2s'), findsOneWidget);
     await tester.ensureVisible(find.text('Pause'));
     expect(find.text('Pause'), findsOneWidget);
     expect(find.text('Resume'), findsNothing);

@@ -110,3 +110,17 @@ it('keeps validated activity and check-ins when rewards sources fail', async () 
   });
   expect(r).not.toHaveProperty('extensions');
 });
+
+it('reads independent members concurrently within four workers', async () => {
+  for (let i = 0; i < 9; i++) addMember('parallel' + i);
+  let active = 0, maximum = 0;
+  const result = await run({...reader, claims: async () => {
+    active++; maximum = Math.max(maximum, active);
+    await new Promise(resolve => setTimeout(resolve, 1));
+    active--; return [];
+  }});
+  expect(maximum).toBeGreaterThan(1);
+  expect(maximum).toBeLessThanOrEqual(4);
+  expect(result.coverage.activeMembers).toBe(9);
+  expect(result.totals.claims).toBe(0);
+});

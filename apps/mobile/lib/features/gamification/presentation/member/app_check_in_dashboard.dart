@@ -149,49 +149,116 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                              gradient: AppColors.heroGradient,
-                              borderRadius: BorderRadius.circular(22)),
-                          child: Row(children: [
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  const Text('YOUR POINTS',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          letterSpacing: 1)),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      SvgPicture.asset(
-                                        'assets/icons/reward_point.svg',
-                                        width: 32,
-                                        height: 32,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text(s?.balance.toString() ?? '—',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .displaySmall
-                                              ?.copyWith(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w800)),
-                                    ],
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.28),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: AppColors.heroGradient,
                                   ),
-                                  if (s == null)
-                                    const Text('Balance unavailable',
-                                        style: TextStyle(color: Colors.white)),
-                                ])),
-                            IconButton(
-                                tooltip: 'Points History',
-                                onPressed: () => _history(context),
-                                icon: const Icon(Icons.history_rounded,
-                                    color: Colors.white)),
-                          ])),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: Image.asset(
+                                  'assets/images/rewards_hero_banner.webp',
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.centerRight,
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox.shrink(),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.25),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('YOUR POINTS',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  letterSpacing: 1,
+                                                  fontWeight: FontWeight.w700)),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              SvgPicture.asset(
+                                                'assets/icons/reward_point.svg',
+                                                width: 32,
+                                                height: 32,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Text(s?.balance.toString() ?? '—',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .displaySmall
+                                                      ?.copyWith(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w800)),
+                                            ],
+                                          ),
+                                          if (s == null)
+                                            const Text('Balance unavailable',
+                                                style: TextStyle(
+                                                    color: Colors.white)),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF190F2E)
+                                            .withValues(alpha: 0.45),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.25),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: IconButton(
+                                        tooltip: 'Points History',
+                                        onPressed: () => _history(context),
+                                        icon: const Icon(Icons.history_rounded,
+                                            color: Colors.white, size: 22),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       AppCheckInCard(
                         state: state,

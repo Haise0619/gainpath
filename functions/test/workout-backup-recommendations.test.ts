@@ -1,3 +1,4 @@
+import {getFunction} from '@google-cloud/functions-framework/testing';
 import { describe, expect, it } from 'vitest';
 import type { Firestore } from 'firebase-admin/firestore';
 import { MemoryStore } from './memory-store';
@@ -5,7 +6,7 @@ import { createCanonicalRecommendationLifecycle } from '../src/modules/recommend
 import { createWorkoutBackupRuntime } from '../src/modules/recommendation/workout-backup-recommendation-runtime';
 import { demoWorkoutPayload, DEMO_EXERCISES, buildModule13DemoDataset } from '../src/modules/recommendation/demo-dataset';
 import { digestOf } from '../src/modules/workouts/workout-backup-validation';
-import { evaluateSavedWorkout } from '../src/modules/recommendation/workout-backup-recommendation-events';
+import { evaluateSavedWorkout, workoutEventPath } from '../src/modules/recommendation/workout-backup-recommendation-events';
 import {canonicalRecommendationPage} from '../src/modules/recommendation/canonical-recommendation-page';
 import {createCanonicalRecommendationBackend} from '../src/modules/recommendation/canonical-recommendation-backend';
 import type {DocumentStore} from '../src/platform/firestore/store';
@@ -56,6 +57,17 @@ function fixture(coachIsVerified: (uid:string)=>Promise<boolean> = async()=>fals
 }
 
 describe('AI personalized canonical delivery',()=>{
+  it('explicitly registers the production Firestore entrypoints with Functions Framework',()=>{
+    expect(getFunction('module13WorkoutBackupCreated')).toBeTypeOf('function');
+    expect(getFunction('module13WorkoutConsentChanged')).toBeTypeOf('function');
+  });
+  it('resolves authenticated Firestore snapshot paths when Eventarc omits wildcard params',()=>{
+    const path='orgs/gainpath/members/test-member/workoutBackups/session-example';
+    expect(workoutEventPath(path,{})).toEqual({organizationId:'gainpath',memberId:'test-member',key:'session-example'});
+    expect(workoutEventPath(path,{memberId:'other'})).toBeNull();
+    expect(workoutEventPath('orgs/gainpath/other/session-example',{})).toBeNull();
+    expect(workoutEventPath(undefined,{})).toBeNull();
+  });
   const grantAi=(f:ReturnType<typeof fixture>)=>{
     const consent=f.store.documents.get(consentPath)!;
     (consent.purposes as any).externalAiInference={...(consent.purposes as any).recommendationGeneration};
@@ -64,12 +76,7 @@ describe('AI personalized canonical delivery',()=>{
   const validInference=(request:Parameters<WorkoutRankingProvider>[0])=>({
     providerSource:'mock_or_recorded' as const,cacheHit:false,model:'fixture-model',latencyMillis:2,
     usage:{inputTokens:90,outputTokens:30,thinkingTokens:7,totalTokens:127},
-    text:JSON.stringify({recommendations:['content','routine','trainer'].flatMap(kind=>{
-      const candidates=request.candidates.filter(candidate=>candidate.kind===kind);
-      if(!candidates.length)return [];
-      return [{recommendationType:kind,selectedCandidateId:candidates[0].label,
-        ranking:candidates.map(candidate=>candidate.label),relevantWorkoutFactors:candidates[0].factors.slice(0,1)}];
-    })}),
+    text:JSON.stringify({rankedCandidateIds:request.candidates.map(candidate=>candidate.label)}),
   });
   const addRoutines=(f:ReturnType<typeof fixture>)=>{
     for(const [id,minutes] of [['short',15],['long',45]] as const)f.store.documents.set(root+'/content/'+id,{
@@ -79,18 +86,21 @@ describe('AI personalized canonical delivery',()=>{
         executionMode:'aiTracked',tutorialSteps:[{title:'Setup',description:'Stand comfortably.',imageUrl:''}]}],
     });
   };
+  it('manual Outreach can suggest profile routines without workouts while automatic profile behavior is unchanged',async()=>{
+    const f=fixture();addRoutines(f);f.store.documents.set(root+'/profiles/'+member,{goals:['buildMuscle'],experience:'beginner'});
+    const auto=await f.store.transact(tx=>f.deps.runtime.backupSuggestions!(tx,org,member,'fitness-profile',now,0));
+    const manual=await f.store.transact(tx=>f.deps.runtime.backupSuggestions!(tx,org,member,'fitness-profile',now,0,true));
+    expect(auto).toEqual([]);expect(manual.filter(s=>s.target.kind==='routine')).toHaveLength(2);
+    expect(manual.every(s=>!s.ai?.factors.includes('recent_activity'))).toBe(true);
+    expect([...f.store.documents.keys()].some(p=>p.includes('/canonicalRecommendations/'))).toBe(false);
+  });
   it('uses a permitted AI winner for actual Routine and Tutorial delivery and saves the method',async()=>{
     let calls=0;
     const provider:WorkoutRankingProvider=async request=>{
       calls++;
       return {providerSource:'mock_or_recorded',cacheHit:false,model:'test-model',latencyMillis:1,
         usage:{inputTokens:90,outputTokens:30,thinkingTokens:0,totalTokens:120},
-        text:JSON.stringify({recommendations:['content','routine'].map(kind=>{
-          const rows=request.candidates.filter(c=>c.kind===kind);
-          const labels=rows.map(c=>c.label).reverse();
-          return {recommendationType:kind,selectedCandidateId:labels[0],ranking:labels,
-            relevantWorkoutFactors:['exercise_match']};
-        })})};
+        text:JSON.stringify({rankedCandidateIds:request.candidates.map(candidate=>candidate.label).reverse()})};
     };
     const f=fixture(undefined,provider);addRoutines(f);
     const consent=f.store.documents.get(consentPath)!;
@@ -136,6 +146,47 @@ describe('AI personalized canonical delivery',()=>{
     });
   });
 
+  it('rejects a coach when every otherwise eligible opening lasts only thirty minutes',async()=>{
+    const f=fixture(async()=>true),seed=await buildModule13DemoDataset({nowMillis:now});
+    for(const [path,data] of Object.entries(seed.documents)){
+      if(path.startsWith(root+'/coaches/')||path.startsWith(root+'/coachProfiles/')||
+        path.startsWith(root+'/coachAvailability/')||path.startsWith(root+'/branches/')||
+        path.startsWith(root+'/settings/')||seed.coachIds.some(uid=>path==='users/'+uid||path===root+'/members/'+uid)){
+        const copy=structuredClone(data) as any;
+        if(path.startsWith(root+'/coachAvailability/')){
+          if(copy.weeklyAvailability)for(const slot of copy.weeklyAvailability.schedule)slot.endMinute=slot.startMinute+30;
+          if(copy.windows)for(const slot of copy.windows)slot.endAtMillis=slot.startAtMillis+30*60000;
+        }
+        f.store.documents.set(path,copy);
+      }
+    }
+    f.store.documents.get(root+'/members/'+member)!.branchIds=['main'];
+    f.store.documents.set(root+'/profiles/'+member,{goals:['generalFitness'],experience:'beginner'});
+    const candidates=await f.store.transact(tx=>f.deps.runtime.backupSuggestions!(tx,org,member,'fitness-profile',now,0));
+    expect(candidates).toEqual([]);
+  });
+
+  it('delivers one available goal-matched coach before any workout and deduplicates retries',async()=>{
+    const f=fixture(async()=>true);
+    const seed=await buildModule13DemoDataset({nowMillis:now});
+    for(const [path,data] of Object.entries(seed.documents)){
+      if(path.startsWith(root+'/coaches/')||path.startsWith(root+'/coachProfiles/')||
+        path.startsWith(root+'/coachAvailability/')||path.startsWith(root+'/branches/')||
+        path.startsWith(root+'/settings/')||seed.coachIds.some(uid=>path==='users/'+uid||path===root+'/members/'+uid)){
+        f.store.documents.set(path,data);
+      }
+    }
+    f.store.documents.get(root+'/members/'+member)!.branchIds=['main'];
+    expect(await f.lifecycle.backup(org,member,'fitness-profile')).toEqual([]);
+    f.store.documents.set(root+'/profiles/'+member,{goals:['generalFitness'],experience:'beginner',activity:'lightlyActive',heightCm:170,weightKg:71});
+    const ids=await f.lifecycle.backup(org,member,'fitness-profile');
+    expect(ids).toHaveLength(1);
+    const result=await f.lifecycle.member(auth,org,ids[0],'resolve',null,null);
+    expect(result).toMatchObject({kind:'trainer',exerciseLabel:'Fitness profile',aiMethod:'rule_fallback'});
+    expect(result.summary).toContain('general fitness');
+    expect(await f.lifecycle.backup(org,member,'fitness-profile')).toEqual([]);
+  });
+
   it('ranks actual Tutorials, Routines and verified Coaches once and atomically delivers all three to Inbox',async()=>{
     let calls=0;
     const f=fixture(async()=>true,async request=>{
@@ -150,11 +201,7 @@ describe('AI personalized canonical delivery',()=>{
       expect(coach.factors).toContain('coach_specialization');
       expect(coach.factors).not.toContain('exercise_match');
       expect(coach.factors).not.toContain('form_practice');
-      return {...validInference(request),text:JSON.stringify({recommendations:['content','routine','trainer'].map(kind=>{
-        const candidates=request.candidates.filter(candidate=>candidate.kind===kind).reverse();
-        return {recommendationType:kind,selectedCandidateId:candidates[0].label,
-          ranking:candidates.map(candidate=>candidate.label),relevantWorkoutFactors:candidates[0].factors.slice(0,1)};
-      })})};
+      return {...validInference(request),text:JSON.stringify({rankedCandidateIds:request.candidates.map(candidate=>candidate.label).reverse()})};
     });
     const seed=await buildModule13DemoDataset({nowMillis:now});
     for(const [path,data] of Object.entries(seed.documents)){
@@ -184,6 +231,13 @@ describe('AI personalized canonical delivery',()=>{
       expect(await f.lifecycle.member(auth,org,id,'resolve',null,null)).toMatchObject({state:'available',aiMethod:'gemini'});
     }
     expect(records.filter(record=>(record.suggestion as any).ai.changedOrder)).toHaveLength(3);
+    for (const record of records) {
+      const saved = record.suggestion as {targetLabel:string; ai:{geminiFirstLabel:string;ruleFirstLabel:string;changedTopChoice:boolean;candidateCount:number}};
+      expect(saved.ai.geminiFirstLabel).toBe(saved.targetLabel);
+      expect(saved.ai.ruleFirstLabel).not.toBe(saved.targetLabel);
+      expect(saved.ai.changedTopChoice).toBe(true);
+      expect(saved.ai.candidateCount).toBeGreaterThan(1);
+    }
     expect([...f.store.documents.keys()].filter(path=>path.startsWith(root+'/notifications/'))).toHaveLength(3);
     expect(await f.deliver(key)).toEqual([]);
     expect(await f.deliver(f.add('repeat-three-kind-practice',null))).toEqual([]);
@@ -192,6 +246,69 @@ describe('AI personalized canonical delivery',()=>{
       measurement:'three_kind_memory_store_with_mocked_gemini',calls,delivered:ids.length,
       durationMillis:performance.now()-started,realProviderCalls:0,
     }));
+  });
+
+  it('saves Gemini method and receipt for the single-type two-candidate Calf regression',async()=>{
+    let calls=0;
+    const f=fixture(undefined,async request=>{
+      calls++;
+      expect(request.context).toMatchObject({
+        goal:'muscle_gain',experience:'beginner',frequency:'regular',reps:'moderate',
+      });
+      expect(request.candidates.map(row=>row.label)).toEqual(['T1','T2']);
+      expect(request.candidates.every(row=>row.kind==='content')).toBe(true);
+      return {...validInference(request),text:JSON.stringify({rankedCandidateIds:['T2','T1']})};
+    });
+    grantAi(f);
+    f.store.documents.set(root+'/profiles/'+member,{goals:['buildMuscle'],experience:'beginner'});
+    f.store.documents.set(root+'/exerciseVideos/'+DEMO_EXERCISES.calf,{
+      exerciseName:'Standing calf raise',isActive:true,muscleCategory:'Calves',
+    });
+    for(const name of ['Beginner','Advanced']){
+      const publication=f.store.documents.get(root+'/content/'+name)!;
+      publication.exercises=(publication.exercises as any[]).map(entry=>({
+        ...entry,exerciseId:DEMO_EXERCISES.calf,name:'Standing calf raise',
+      }));
+    }
+    for(let i=0;i<5;i++)f.add('prior-calf-regression-'+i,null,{},now-10000-i*1000);
+    const id='calf-output-regression',key='session-'+id;
+    const payload=demoWorkoutPayload(member,id,DEMO_EXERCISES.calf,null,now-1000);
+    f.store.documents.set(workoutPath+'/'+key,{schemaVersion:1,kind:'session',id,key,
+      classification:'provisional_member_backup',digest:digestOf(payload),payloadJson:JSON.stringify(payload)});
+    const ids=await f.deliver(key);
+    expect(calls).toBe(1);
+    expect(ids).toHaveLength(1);
+    expect(f.store.documents.get(root+'/canonicalRecommendations/'+ids[0])).toMatchObject({
+      status:'delivered',suggestion:{ai:{method:'gemini',candidateCount:2,changedTopChoice:true}},
+    });
+    expect(f.store.documents.has(root+'/canonicalRecommendationDeliveries/'+ids[0])).toBe(true);
+    expect(await f.lifecycle.member(auth,org,ids[0],'resolve',null,null))
+      .toMatchObject({state:'available',aiMethod:'gemini'});
+  });
+
+  it('persists a precise validation code with rule delivery for an invented candidate ID',async()=>{
+    const f=fixture(undefined,async request=>({...validInference(request),
+      text:JSON.stringify({rankedCandidateIds:['T404','T1']})}));
+    grantAi(f);
+    const ids=await f.deliver(f.add('invalid-provider-id',null));
+    expect(ids).toHaveLength(1);
+    expect(f.store.documents.get(root+'/canonicalRecommendations/'+ids[0])).toMatchObject({
+      status:'delivered',suggestion:{ai:{method:'rule_fallback',
+        fallbackReason:'invalid_provider_output',validationFailure:'invalid_candidate_id'}},
+    });
+    expect(f.store.documents.has(root+'/canonicalRecommendationDeliveries/'+ids[0])).toBe(true);
+  });
+  it('delivers a singleton using rules without an inference request',async()=>{
+    let calls=0;
+    const f=fixture(undefined,async request=>{calls++;return validInference(request);});
+    grantAi(f);
+    f.store.documents.delete(root+'/content/Advanced');
+    const ids=await f.deliver(f.add('single-tutorial',null));
+    expect(ids).toHaveLength(1);
+    expect(calls).toBe(0);
+    expect(f.store.documents.get(root+'/canonicalRecommendations/'+ids[0])).toMatchObject({
+      status:'delivered',suggestion:{ai:{method:'rule_fallback',fallbackReason:'single_eligible_candidate'}},
+    });
   });
 
   it('uses rule delivery when a consented provider fails',async()=>{
@@ -213,9 +330,8 @@ describe('AI personalized canonical delivery',()=>{
       calls++;
       expect(request.context.goal).toBe('weight_management');
       const coaches=request.candidates.filter(candidate=>candidate.kind==='trainer');
-      expect(coaches).toHaveLength(1);
-      expect(coaches[0].factors).not.toContain('goal_match');
-      expect(coaches[0].factors).not.toContain('coach_specialization');
+      expect(coaches).toHaveLength(0);
+
       return validInference(request);
     });
     const seed=await buildModule13DemoDataset({nowMillis:now});
@@ -240,6 +356,8 @@ describe('AI personalized canonical delivery',()=>{
     const coaching=ids.map(id=>f.store.documents.get(root+'/canonicalRecommendations/'+id)!)
       .find(record=>(record.suggestion as any).target.kind==='trainer');
     expect(coaching).toBeDefined();
+    expect((coaching!.suggestion as any).ai).toMatchObject({method:'rule_fallback',fallbackReason:'single_eligible_candidate'});
+    expect((coaching!.suggestion as any).ai.model).toBeUndefined();
     expect((coaching!.suggestion as any).summary).not.toMatch(/specializes in weight management/);
   });
 
@@ -412,7 +530,9 @@ describe('automatic workout guidance', () => {
     expect(id).toBeTruthy();
     const detail=await f.lifecycle.member(auth,org,id,'resolve',null,null);
     expect(detail).toMatchObject({kind:'trainer',state:'available',specialization:'Beginner strength'});
-    const coachId=String((detail.target as {coachId:string}).coachId);
+    const bookingTarget = detail.target as {coachId:string;observedStartAtMillis:number;observedEndAtMillis:number};
+    expect(bookingTarget.observedEndAtMillis - bookingTarget.observedStartAtMillis).toBe(60 * 60000);
+    const coachId=String(bookingTarget.coachId);
     f.store.documents.get(root+'/coachProfiles/'+coachId+'/certificationState/current')!.certificationVerified=false;
     expect(await f.lifecycle.member(auth,org,id,'resolve',null,null)).toMatchObject({state:'unavailable',target:null});
   });

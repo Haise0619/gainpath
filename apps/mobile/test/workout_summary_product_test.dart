@@ -42,7 +42,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: RoutineAttemptDetailScreen(
             attempt: a, summaries: [sessions.measured(a.scope, 'camera')])));
-    await tester.scrollUntilVisible(find.text('Squat'), 150);
+    await tester.scrollUntilVisible(find.text('Squat').hitTestable(), 150);
     await tester.tap(find.text('Squat'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('90% estimated form'), 150);

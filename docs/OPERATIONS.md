@@ -231,6 +231,14 @@ flutter build apk --debug --no-pub --target lib/main.dart
 
 `flutter run` installs/launches on the target device and requires authorization for that device action. APK build alone does not install. Preserve the retained released/UAT APKs, signing evidence and private backups; verify package/certificate identity before any separately approved update. Do not use `flutter clean`, Gradle clean or blanket build deletion during this cleanup.
 
+### Android member sign-in with Google
+
+Google sign-in is enabled in `gainpath-0619`. The Xiaomi test APK's signing certificate is registered, and the Firebase Android configuration includes the corresponding Android and Web OAuth clients. The same-signer debug build has been installed and launched on Xiaomi. The previous APK is retained in `build/google-signin-20261117/`.
+
+In Firebase Authentication for `gainpath-0619`, enable Google in Sign-in method and select the project's support email. In Project settings, add the SHA-1 for each certificate used to sign `com.zyang.gainpath`. Download the refreshed Android Firebase config to `apps/mobile/android/app/google-services.json`. The matching client needs a Web OAuth entry (type 3) so the Google Services Gradle plugin generates `default_web_client_id`. [Firebase Android setup](https://firebase.google.com/docs/auth/android/google-signin)
+
+Rebuild the Android app and check with a test account. Sign in with an existing member's Google identity and verify the member keeps the same Firebase UID and profile. Use **Create an account → Sign up with Google** with a separate test identity to verify the terms prompt and new-member setup. Also check cancellation, logout, and the existing email login.
+
 ## Focused verification
 
 **Configurable workout rewards LOCAL ONLY, DISABLED (26 October):** owner-selected draft defaults are 100 points per eligible routine and one claim per Malaysia calendar day. Admin can prepare versioned points, eligible routine IDs, minimum completion/reps/tracked time, daily limits and future Beginner/Intermediate/Advanced amounts; every saved policy remains disabled, with no activation toggle and no difficulty multipliers. Published routine difficulty is preserved when present; legacy absence stays unknown. Routine completion remains separate from the Member summary’s Workout rewards · Not active status. Normal completion uses only a local hold repository, and the prepared status adapter cannot claim points. Future server transactions require a trusted AI-only routine attempt, accepted owned sessions meeting current publication targets and thresholds, no manual/mixed evidence, unconsumed session receipts, stable attempt ID and atomic award/balance/Malaysia-cap updates. Every receipt snapshots its policy/version; retries recover without duplicate credits. Physical release is hardcoded false, accepted model tuples remain empty and the prepared Member callable is not exported from index.ts. Provisional form scores, Premium1.5x and Stage C coaching vouchers remain held; existing daily check-in50/day and issued rewards are unchanged. All 222 focused checks pass (137 backend, 26 Admin, 53 Member, three domain, three local emulator), with analysis/typechecks/architecture, scoped review, private Admin Web and signed Android profile builds. Existing Rules deny forged policy/approval/attempt/cap records from clients. Artifacts: `build/module3-workout-rewards-20261026/`. No deployment, local Admin activation, device installation, Rules/index/IAM, reward-policy/balance/stock mutation or financial/provider operation occurred. Physical workout validation, a trusted routine-entry producer and separate release approval are still required; repeated exercise IDs within a day fail closed until trusted attribution exists.
@@ -631,11 +639,21 @@ Commits0c7164e/da31559 provide grouped bank/wallet/card preferences, branded ico
 
 The phone called an undeployed payment-method endpoint while read/create handlers still used38234a4. Committed54e23e9 reuses the existing protected payment-read callable for selection discovery. Seven existing matching handlers are now source-only updated; deployed archives, runtime/environment/secrets/IAM and unrelated Functions verified.225 backend/30 focused Mobile tests, type checks, scoped analysis, sealed-artifact review and clean Debug build pass. Same-signer APK installed/launched in place; hash/UID/data-directory/first-install preserved and prior APK retained. Owner confirms payment methods load. No provider payment/configuration or automated booking/bill creation; actual hosted-payment UAT remains pending. Admin bundle unchanged. [Fix, acceptance and rollback evidence](ux/member-coach-booking-commercial-checkout.md).
 
+## Workout flow visual feedback — 15 November 2026
+
+Local Member UI now has a purple remaining-rest ring/final-three-second pulse, compact saved completion, published next-exercise cover/mode/targets, and short Ready/accepted-rep animations. Existing camera, pose, counting, audio and business behavior is preserved. Fresh 96 affected Mobile tests, eight-file analysis and arm64 Debug build pass; actual Flutter portrait/landscape/200% renders were inspected. No Android device was connected; installation and physical camera performance remain pending. Details: docs/superpowers/plans/2026-11-15-workout-flow-feedback.md (from docs pages: superpowers/plans/2026-11-15-workout-flow-feedback.md).
+
+## Routine backup signature compatibility — 15 November 2026
+
+Authenticated Firebase backup HTTP400 was traced to the routine signature comparison. A reviewed fix compares parsed values and normalizes empty optional video references without rewriting records/digests or changing authorization, camera, counting or rewards.180 backup tests, production/test TypeScript compilation and24 existing account-backup compatibility checks pass. Owner retry now shows Synced;16 post-fix backup responses returned HTTP200 with no validation rejection. Details: docs/ux/workout-backup-signature-compatibility.md (from docs pages: ux/workout-backup-signature-compatibility.md).
+
+## Workout completion visual refresh — 15 November 2026
+
+Local Routine Summary now uses a lavender completion Hero with native green/gold medal illustration, responsive icon stats, published exercise covers and compact mode/status chips, plus a gold truthful rewards empty-state card. Partial completion, calculated values/visibility, expansion, navigation, save/sync and reward policy remain unchanged.43 affected tests, six-file analysis,15 actual Flutter page renders and arm64 Debug build pass; independent review is clear. APK not installed. Details: docs/superpowers/plans/2026-11-15-workout-completion-visuals.md (from docs pages: superpowers/plans/2026-11-15-workout-completion-visuals.md).
 
 ## AI coach voice V1 —15 November2026
 
 77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](integration/module2-ai-coach-voice-v1-implementation.md).
-
 
 ## Exercise completion handoff —16 November2026
 
@@ -643,4 +661,4 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 
 ## Admin Reports analytics — 16 November 2026
 
-Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. Backend60, Emulator13, Admin58 and Domain198 checks pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).

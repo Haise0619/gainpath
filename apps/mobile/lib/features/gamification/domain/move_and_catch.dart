@@ -33,6 +33,11 @@ class MoveCatchEngine {
   }
 
   static const _frameAgeMicros = 250000, _lossMicros = 500000;
+  static const _trackingWarningDelayMicros = 500000;
+  static const _steeringDeadZone = .08, _steeringEdge = .85;
+  static const _steeringTimeConstantMicros = 65000;
+  static const _fastSteeringTimeConstantMicros = 30000;
+  static const _fastSteeringDistance = .14;
   static const _calibrationMicros = 1200000, _countdownMicros = 3000000;
   static const _spawnIntervalMicros = 700000;
   final Random _random;
@@ -41,6 +46,7 @@ class MoveCatchEngine {
   int _score = 0, _caught = 0, _obstaclesHit = 0, _missed = 0;
   int _now = 0, _captureWatermark = -1, _activeMicros = 0;
   int? _lastTick, _lastPoseCapture, _calibrationCapture;
+  int? _lastPoseDelivery;
   int _stableMicros = 0, _unstableMicros = 0;
   int _countdownRemaining = 0, _spawnMicros = 0, _nextObjectId = 0;
   double _baselineX = .5, _baselineWidth = .3, _playerX = .5;
@@ -52,11 +58,15 @@ class MoveCatchEngine {
   int get obstaclesHit => _obstaclesHit;
   int get missed => _missed;
   int get activeMillis => _activeMicros ~/ 1000;
+
   /// Optional ordered discrete-event observer; reporting never changes play.
   void Function(String type)? onScoreEvent;
   void _reportScoreEvent(String type) {
-    try { onScoreEvent?.call(type); } catch (_) { /* Reporting is optional. */ }
+    try {
+      onScoreEvent?.call(type);
+    } catch (_) {/* Reporting is optional. */}
   }
+
   double get remainingSeconds =>
       max(0, durationMicros - _activeMicros) / 1000000;
   double get calibrationProgress =>
@@ -72,7 +82,8 @@ class MoveCatchEngine {
       (_phase == MoveCatchPhase.playing ||
           _phase == MoveCatchPhase.countdown) &&
       _lastPoseCapture != null &&
-      !trackingReady &&
+      _lastPoseDelivery != null &&
+      _now - _lastPoseDelivery! >= _trackingWarningDelayMicros &&
       _now - _lastPoseCapture! < trackingGraceMicros;
   int get trackingGraceSeconds => inTrackingGrace
       ? ((trackingGraceMicros - (_now - _lastPoseCapture!)) / 1000000).ceil()
@@ -113,19 +124,23 @@ class MoveCatchEngine {
     }
     _captureWatermark = capturedAtMicros;
     _lastPoseCapture = capturedAtMicros;
+    _lastPoseDelivery = nowMicros;
     if (_phase == MoveCatchPhase.calibrating) {
       _calibrate(centerX, shoulderWidth, capturedAtMicros);
     } else if (_stableMicros >= _calibrationMicros) {
-      final lean = centerX - _baselineX;
-      final target = lean.abs() <= _baselineWidth * .04
-          ? .5
-          : (.5 + lean / (_baselineWidth * .6) * .42).clamp(.08, .92);
-      // Time-based smoothing reaches 86% of a movement in 50ms. The old
-      // per-frame .25 blend needed several detector frames to reach the edge.
+      final lean = (centerX - _baselineX) / _baselineWidth;
+      final travel = ((lean.abs() - _steeringDeadZone) /
+              (_steeringEdge - _steeringDeadZone))
+          .clamp(0.0, 1.0);
+      final target = .5 + lean.sign * travel * .42;
       final delta = previousCapture == null
           ? 50000
           : (capturedAtMicros - previousCapture).clamp(1000, 100000);
-      final alpha = 1 - exp(-delta / 25000);
+      final distance = (target - _playerX).abs();
+      final response = distance >= _fastSteeringDistance
+          ? _fastSteeringTimeConstantMicros
+          : _steeringTimeConstantMicros;
+      final alpha = 1 - exp(-delta / response);
       _playerX = (_playerX + alpha * (target - _playerX)).clamp(.08, .92);
     }
   }
@@ -188,10 +203,9 @@ class MoveCatchEngine {
     }
     if (previous == null) return;
     final elapsed = nowMicros - previous;
-    if (elapsed > _frameAgeMicros) {
-      _phase = MoveCatchPhase.paused;
-      return;
-    }
+    // A delayed foreground callback is not a user pause. Rebase the clock
+    // without simulating falling objects or awarding collisions in the gap.
+    if (elapsed > _frameAgeMicros) return;
     // This local, non-reward game keeps playing briefly at the last known
     // basket position. Stale input cannot move it or extend the warning.
     if (elapsed <= 0) return;
@@ -300,6 +314,7 @@ class MoveCatchEngine {
     _nextObjectId = 0;
     _lastTick = nowMicros;
     _lastPoseCapture = null;
+    _lastPoseDelivery = null;
     _calibrationCapture = null;
     _baselineX = .5;
     _baselineWidth = .3;

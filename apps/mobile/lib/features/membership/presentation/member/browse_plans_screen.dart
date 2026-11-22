@@ -71,14 +71,16 @@ class BrowsePlansScreen extends StatelessWidget {
             const Padding(
                 padding: EdgeInsets.only(bottom: 12),
                 child: Text(
-                    'Renew your current plan to keep all remaining time. Direct paid-tier changes are unavailable while your membership is active.')),
+                    'Renew your current plan to keep all remaining time. Basic members can upgrade to Premium for the remaining time.')),
           if (plans.isEmpty)
             const Text(
                 'No membership plans are configured. Contact your gym administrator.'),
           ...plans.map((p) {
             final tier = p['planId'] as String;
             final current = active && e.paidPlanId == tier;
-            final switching = active && !current;
+            final upgrade =
+                active && e.paidPlanId == 'basic' && tier == 'premium';
+            final switching = active && !current && !upgrade;
             final plan = MembershipPlan(
                 tier,
                 p['name'] as String,
@@ -93,9 +95,11 @@ class BrowsePlansScreen extends StatelessWidget {
                     isCurrent: current,
                     actionLabel: current || e.paidPlanId == tier
                         ? 'Renew ${plan.name}'
-                        : switching
-                            ? 'Available after current plan expires'
-                            : 'Choose ${plan.name}',
+                        : upgrade
+                            ? 'Upgrade to Premium'
+                            : switching
+                                ? 'Available after current plan expires'
+                                : 'Choose ${plan.name}',
                     note: tier == 'premium'
                         ? 'Premium-exclusive rewards depend on the configured catalogue. Extra check-in points and coach discounts are not included until their policies are enabled.'
                         : 'All Free digital fitness features are included.',
@@ -108,7 +112,9 @@ class BrowsePlansScreen extends StatelessWidget {
                                     builder: (_) => PurchasePlanScreen(
                                         plan: plan,
                                         repository: repo,
-                                        renewalPreview: MembershipRenewalPreview.fromOverview(e, tier),
+                                        renewalPreview: MembershipRenewalPreview
+                                            .fromOverview(e, tier),
+                                        upgrade: upgrade,
                                         renewal: e.paidPlanId == tier)));
                             if (context.mounted) refresh();
                           }));

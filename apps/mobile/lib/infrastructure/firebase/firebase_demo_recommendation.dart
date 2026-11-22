@@ -16,7 +16,7 @@ import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/domain/workout_contracts.dart'
     show WorkoutSessionSummary;
 import 'firebase_module9_repository.dart'
-    show parseMemberNotice, FirebaseModule9Repository;
+    show parseMemberNoticePage, FirebaseModule9Repository;
 
 Module13DemoTransport createFirebaseDemoMemberTransport(
     {required AuthSession session,
@@ -299,11 +299,7 @@ class FirebaseDemoInboxRepository implements Module9Repository {
         raw['nextAfterId'] != null && raw['nextAfterId'] is! String) {
       throw const FormatException('Invalid owned inbox.');
     }
-    return NoticePage(
-        (raw['records'] as List)
-            .map((r) => parseMemberNotice(r, transport.scope.organizationId))
-            .toList(),
-        raw['nextAfterId'] as String?);
+    return parseMemberNoticePage(raw, transport.scope.organizationId);
   }
 
   @override

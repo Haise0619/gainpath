@@ -3,7 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../../app/routing/branch_directions.dart';
+import 'package:gainpath_mobile/infrastructure/platform/branch_directions.dart';
 
 class BookingLocation extends StatefulWidget {
   const BookingLocation({

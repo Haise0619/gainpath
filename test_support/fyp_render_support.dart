@@ -16,12 +16,20 @@ Future<void Function()> installFypOfflineFonts() async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final previousManifest = google_fonts_test.assetManifest;
   final previousFetching = GoogleFonts.config.allowRuntimeFetching;
-  const directory =
-      'C:/Users/Ngzhe/StudioProjects/gainpath/apps/mobile/assets/fonts';
+  var root = Directory.current;
+  var fonts = Directory.fromUri(root.uri.resolve('apps/mobile/assets/fonts/'));
+  while (!fonts.existsSync() && root.path != root.parent.path) {
+    root = root.parent;
+    fonts = Directory.fromUri(root.uri.resolve('apps/mobile/assets/fonts/'));
+  }
+  if (!fonts.existsSync()) {
+    throw StateError('Run the render test from the GainPath workspace.');
+  }
   final bytes = <String, ByteData>{};
   for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
     bytes[weight] = ByteData.sublistView(
-        File('$directory/Barlow-$weight.ttf').readAsBytesSync());
+        File.fromUri(fonts.uri.resolve('Barlow-$weight.ttf'))
+            .readAsBytesSync());
   }
   await (FontLoader('FypChart')..addFont(Future.value(bytes['Regular']!)))
       .load();

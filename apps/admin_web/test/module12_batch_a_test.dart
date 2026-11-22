@@ -102,21 +102,37 @@ void main() {
     await tester.tap(find.text('Process a voucher'));
     expect(vouchers, 1);
   });
-  testWidgets('section CSV contains selected booking or receipt data only', (tester) async {
+  testWidgets('section CSV contains selected booking or receipt data only',
+      (tester) async {
     tester.view.physicalSize = const Size(1600, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final gateway = fixture.OriginalLayoutGateway();
-    await tester.pumpWidget(fixture.originalLayoutApp(const ReportsScreen(live:true), gateway));
-    await tester.pumpAndSettle();
-    final sections = tester.widgetList<ReportSection>(find.byType(ReportSection));
-    final bookings = sections.firstWhere((s)=>s.exportFilename=='booking_activity.csv').exportRows!();
-    final receipts = sections.firstWhere((s)=>s.exportFilename=='membership_revenue.csv').exportRows!();
-    expect(bookings.expand((r)=>r),contains(gateway.query!.range.start.toUtc().toIso8601String()));
-    expect(bookings.expand((r)=>r),isNot(contains(8900)));
-    expect(receipts.expand((r)=>r),contains(8900));
-    expect(receipts.expand((r)=>r),isNot(contains('Current active Members')));
-    expect(find.text('Export overview CSV'),findsOneWidget);
-  });
 
+    Future<ReportSection> openExport(
+        ReportsCategory category, String filename) async {
+      await tester.pumpWidget(fixture.originalLayoutApp(
+          ReportsScreen(live: true, category: category), gateway));
+      await tester.pumpAndSettle();
+      expect(find.text('Export CSV'), findsOneWidget);
+      final sections = tester.widgetList<ReportSection>(find.byType(ReportSection));
+      return sections.singleWhere((section) => section.exportFilename == filename);
+    }
+
+    final bookingSection = await openExport(
+        ReportsCategory.coaching, 'coach_booking_activity.csv');
+    expect(bookingSection.exportEnabled, isTrue);
+    final bookings = bookingSection.exportRows!();
+    expect(bookings.expand((row) => row),
+        contains(gateway.query!.range.start.toUtc().toIso8601String()));
+    expect(bookings.expand((row) => row), isNot(contains(8900)));
+
+    final receiptSection = await openExport(
+        ReportsCategory.financial, 'membership_revenue.csv');
+    expect(receiptSection.exportEnabled, isTrue);
+    final receipts = receiptSection.exportRows!();
+    expect(receipts.expand((row) => row), contains(8900));
+    expect(receipts.expand((row) => row),
+        isNot(contains('Current active Members')));
+  });
 }

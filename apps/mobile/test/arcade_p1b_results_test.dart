@@ -14,6 +14,8 @@ import 'reach_tap_controller_test.dart' show TapCamera, TapHistory;
 
 class FinishedEngine extends Fake implements ReachTapEngine {
   @override
+  void Function(String)? onScoreEvent;
+  @override
   ReachTapPhase phase = ReachTapPhase.finished;
   @override
   int score = 30;

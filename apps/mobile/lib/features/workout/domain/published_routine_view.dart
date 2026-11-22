@@ -69,6 +69,7 @@ class PublishedRoutine {
     required this.estimatedMinutes,
     required this.exercises,
     this.difficulty,
+    this.coverImageUrl,
     this.schemaVersion = 1,
     this.betweenExerciseRestSeconds,
   });
@@ -78,7 +79,7 @@ class PublishedRoutine {
   final String title;
   final int estimatedMinutes;
   final List<PublishedRoutineExercise> exercises;
-  final String? difficulty;
+  final String? difficulty, coverImageUrl;
   final int schemaVersion;
 
   /// Explicit between-exercise prescription, independent of per-set rest.
@@ -195,6 +196,8 @@ class PublishedRoutine {
       estimatedMinutes: data['estimatedMinutes'] as int,
       exercises: exercises,
       difficulty: data['difficulty'] as String?,
+      coverImageUrl: exerciseImageUri(data['coverImageUrl'])?.toString() ??
+          exerciseImageUri(data['imageUrl'])?.toString(),
       schemaVersion: version as int,
       betweenExerciseRestSeconds: betweenRest as int?,
     );

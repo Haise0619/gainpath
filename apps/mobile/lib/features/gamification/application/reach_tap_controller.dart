@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../../../infrastructure/audio/sound_effects.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/reach_tap.dart';
 import '../domain/reach_tap_camera.dart';
@@ -20,6 +21,7 @@ class ReachTapController extends ChangeNotifier {
       this.competition,
       this.roundTiming,
       this.earningAvailable,
+      this.playEffect,
       ReachTapEngine? engine,
       bool autoTick = true,
       String Function()? newId,
@@ -30,15 +32,26 @@ class ReachTapController extends ChangeNotifier {
     camera.addListener(_cameraChanged);
     competition?.addListener(_notify);
     roundTiming?.addListener(_notify);
-    if (competition != null) {
-      this.engine.onScoreEvent =
-          (type) => competition?.event(type, this.engine.activeMillis);
+    final previousScoreEvent = this.engine.onScoreEvent;
+    if (playEffect != null || competition != null) {
+      this.engine.onScoreEvent = (type) {
+        if (current && type == 'hit') {
+          playEffect?.call(_soundFeedback.hit(this.engine.activeMillis));
+        }
+        if (competition != null) {
+          competition!.event(type, this.engine.activeMillis);
+        } else {
+          previousScoreEvent?.call(type);
+        }
+      };
     }
     if (autoTick) {
       _timer = Timer.periodic(const Duration(milliseconds: 33), (_) => tick());
     }
   }
   final SessionScope scope;
+  final void Function(SoundEffect)? playEffect;
+  final _soundFeedback = ArcadeSoundFeedback();
   final SessionScope? Function() activeScope;
   final ReachTapCamera camera;
   final ReachTapHistoryStore history;
@@ -255,6 +268,7 @@ class ReachTapController extends ChangeNotifier {
       return;
     }
     _acceptFrames = false;
+    playEffect?.call(SoundEffect.roundEnd);
     competition?.finish();
     if (roundTimingConsent && _earningRoundStarted) roundTiming?.finish();
     _previousBest = bestScore;
@@ -380,6 +394,7 @@ class ReachTapController extends ChangeNotifier {
     if (!identical(roundTiming, competition?.timing)) roundTiming?.reset();
     _earningRoundStarted = false;
     competition?.timing.reset();
+    _soundFeedback.reset();
     engine.restart(clockMicros());
     _round = null;
     _previousBest = null;

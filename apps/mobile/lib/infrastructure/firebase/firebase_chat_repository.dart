@@ -179,8 +179,17 @@ class FirebaseChatRepository extends ChatRepository {
       }
     }
     final recent = history.where((m) => m.text.trim().isNotEmpty).toList();
+    final lastAttachment = recent.reversed
+        .map((message) => message.attachment)
+        .whereType<BranchChatAttachment>()
+        .firstOrNull;
+    final lastBranch = lastAttachment?.branch['displayName'];
     final data = await _call('reply', {
       'text': text,
+      if (lastBranch is String &&
+          lastBranch.isNotEmpty &&
+          lastBranch.length <= 120)
+        'branchContext': lastBranch,
       if (_privateContext)
         'history': recent
             .skip(recent.length > 12 ? recent.length - 12 : 0)
@@ -247,7 +256,8 @@ class FirebaseChatRepository extends ChatRepository {
     final branchCard = branch is Map &&
             branch['branchId'] is String &&
             branch['displayName'] is String
-        ? BranchChatAttachment(scope.organizationId, Map<String, dynamic>.from(branch))
+        ? BranchChatAttachment(
+            scope.organizationId, Map<String, dynamic>.from(branch))
         : null;
     if (contextVersion == _contextVersion && coachDirectory != null) {
       _suggestedCoachIds.addAll(coachDirectory.coaches.map((c) => c.coachId));
@@ -255,7 +265,12 @@ class FirebaseChatRepository extends ChatRepository {
     return ChatMessage(answer, false,
         id: id,
         attachment: data['bookingSuggestion'] == null
-            ? availability ?? coachDirectory ?? branchCard
+            ? availability ??
+                coachDirectory ??
+                branchCard ??
+                (data['nearbyGym'] == true
+                    ? NearbyGymsAttachment(scope.organizationId)
+                    : null)
             : BookingSuggestionAttachment.fromJson(
                 Map<String, dynamic>.from(data['bookingSuggestion'] as Map)),
         sources: data['sources'] is List

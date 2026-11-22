@@ -1,3 +1,4 @@
+import {forEachReportBatch} from './report-read-batches';
 import {observedActivity,type ObservationEvent,type ObservationReader} from './admin-observed-activity';
 import {engagementExtensions, type EngagementPage} from './admin-engagement-extensions';
 import {warn} from 'firebase-functions/logger';
@@ -80,7 +81,7 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
   if (eligible.length > CHECK_IN_REPORT_LIMITS.eligibleMembers) throw cap();
   result.coverage.activeMembers = eligible.length;
   const daily = new Map<string, Set<string>>(), weekly = new Map<string, {claims: number; members: Set<string>}>(), claimants = new Set<string>();
-  for (const uid of eligible) {
+  await forEachReportBatch(eligible, async uid => {
     const profilePath = `orgs/${org}/appCheckInProfiles/${uid}`;
     const rawProfile = await store.transact(async tx => {await authorizeAdminReport(tx, auth!, org); return tx.get(profilePath);});
     let cursor: string | undefined, running = 0, longest = 0, last: number | null = null, lastClaimAt: number | null = null;
@@ -117,7 +118,7 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
     for(const [badgeId,at] of Object.entries(profile.badges)){if(at>now)throw fail();badgeUnlocks.push({badgeId,at});}
     const current = last !== null && today - last <= 1 ? running : 0;
     result.streaks.current[bucketKey(current)]++; result.streaks.longest[bucketKey(longest)]++;
-  }
+  });
   result.totals.claimingMembers = claimants.size; result.totals.pointsAwarded = result.totals.claims * APP_CHECK_IN_POLICY.points;
   result.daily = [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, members]) => ({date, claims: members.size, claimingMembers: members.size, pointsAwarded: members.size * APP_CHECK_IN_POLICY.points}));
   result.weekly = [...weekly].sort(([a], [b]) => a.localeCompare(b)).map(([date, week]) => ({date, claims: week.claims, claimingMembers: week.members.size, pointsAwarded: week.claims * APP_CHECK_IN_POLICY.points}));

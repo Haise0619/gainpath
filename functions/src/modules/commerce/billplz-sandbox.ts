@@ -6,10 +6,12 @@ export interface SandboxBill {
   id: string; collection_id: string; amount: number; paid: boolean; paid_amount: number;
   state: 'due' | 'paid' | 'deleted'; url: string; reference_1?: string; reference_2?: string;
 }
-type CreateBill = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string; gatewayCode?:string; paymentReference?:string };
+export type BookingCheckoutInput = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string; gatewayCode?:string; paymentReference?:string; selectedPaymentMethodCode?: string };
 export interface BillplzGateway {
+  readonly provider?: 'xendit';
+  acceptsSelection?(code: string): boolean;
   paymentMethods?():Promise<SandboxPaymentMethod[]>;
-  create(input: CreateBill): Promise<SandboxBill>;
+  create(input: BookingCheckoutInput): Promise<SandboxBill>;
   get(id: string): Promise<SandboxBill>;
 }
 type Config = { apiKey: string; collectionId: string; callbackUrl: string; redirectUrl?: string };
@@ -33,7 +35,7 @@ export class BillplzSandboxGateway implements BillplzGateway {
     }
     this.config = { ...config };
   }
-  async create(input: CreateBill): Promise<SandboxBill> {
+  async create(input: BookingCheckoutInput): Promise<SandboxBill> {
     if (!input || !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0
       || [input.name, input.email, input.reference, input.organizationId, input.description].some(v => typeof v !== 'string' || !v.trim() || v.length > 2048)) {
       throw new DomainError('invalid-argument', 'Invalid sandbox bill request.');

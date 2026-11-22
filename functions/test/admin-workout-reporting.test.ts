@@ -182,3 +182,13 @@ it('reports schema-five lunges as provisional unscored activity without writes',
   expect(result.forms).toEqual([]);expect(result.classification).toBe('provisional_member_backup');
   expect(JSON.stringify([...store.documents])).toBe(before);
 });
+
+it('records score distribution within each compatible group and excludes unassessed sessions', async () => {
+  backups = [20, 60, 79, 80, 100, null].map((score, index) => {
+    const p = structuredClone(payload); p.sessionId = 'score-' + index;
+    return record('session', {...p, poseMetrics: {...p.poseMetrics, formScorePercent: score}});
+  });
+  const report = await run();
+  expect(report.totals.sessions).toBe(6);
+  expect(report.forms[0]).toMatchObject({scoredSessions: 5, scoreBands: {below60: 1, from60To79: 2, from80To100: 2}});
+});

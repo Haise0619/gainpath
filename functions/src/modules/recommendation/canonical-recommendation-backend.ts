@@ -1,3 +1,4 @@
+import {readPublishedRoutineCovers} from './published-routine-covers';
 import {canonicalRecommendationPage} from './canonical-recommendation-page';
 import {DomainError} from '../../platform/errors';
 import {requiredIdentifier} from '../../platform/validation';
@@ -19,7 +20,7 @@ export const CANONICAL_RECOMMENDATION_RELEASE = Object.freeze({
 });
 
 const OPERATIONS = ['session.access', 'member.consent.get', 'member.consent.set', 'member.consent.notice',
-  'member.recommendation.list', 'member.recommendation.command', 'member.history.replay'] as const;
+  'member.recommendation.list', 'member.recommendation.command', 'member.history.replay', 'member.routine.covers', 'member.profile.recommend'] as const;
 
 /** Default-database Member boundary. Deliberately never instantiates a demo/FYP
  * capability and never queries synthetic lead or recipient collections. */
@@ -36,6 +37,20 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
       await deps.store.transact(async tx => {if(!deps.runtime?.scopedDataset && await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical account required.');
         await requireRecommendationMember(tx, auth, org);});
       const operation = envelope.operation;
+      if (operation === 'member.profile.recommend') {
+        keys(data, ['schemaVersion', 'organizationId']);
+        if (data.schemaVersion !== 1 || !deps.runtime) throw new DomainError('failed-precondition', 'Profile recommendations unavailable.');
+        const ids = await createCanonicalRecommendationLifecycle({...deps, runtime: deps.runtime})
+          .backup(org, auth.uid, 'fitness-profile');
+        return {delivered: ids.length};
+      }
+      if (operation === 'member.routine.covers') {
+        keys(data, ['schemaVersion','organizationId','routineIds']);
+        return await deps.store.transact(async tx => {
+          await requireRecommendationMember(tx, auth, org);
+          return readPublishedRoutineCovers(tx, org, data);
+        });
+      }
       if (operation === 'member.history.replay') {
         keys(data, ['schemaVersion','organizationId','afterId']);
         if (data.schemaVersion !== 1 || !deps.replayHistory) throw new DomainError('failed-precondition','History replay unavailable.');
@@ -83,7 +98,7 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
         const notice = deps.runtime.notices[0];
         return {schemaVersion: 1, organizationId: org, demoData: false, policyId: notice.policyId,
           noticeVersion: notice.noticeVersion, contentVersion: notice.contentVersion,
-          historyDescription: deps.runtime.backupSuggestions ? 'Uses recent synced workout summaries for exercise guidance. No camera footage is shared.' : notice.history.mode === 'from_grant' ? 'Only qualifying accepted workouts captured after this permission was granted.' :
+          historyDescription: deps.runtime.backupSuggestions ? 'Uses Fitness Profile goals to match available coaches and recent synced workout summaries for exercise guidance. No camera footage is shared.' : notice.history.mode === 'from_grant' ? 'Only qualifying accepted workouts captured after this permission was granted.' :
             `Qualifying accepted workouts from ${new Date(notice.history.earliestAtMillis).toISOString()}.`};
       }
       if (deps.runtime && operation === 'member.recommendation.command') {

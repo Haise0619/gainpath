@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import '../../../recommendation/application/admin_ai_drafts.dart';
 import 'confirm_content_removal.dart';
 import 'routine_cover_field.dart';
@@ -8,10 +9,115 @@ import 'equipment_catalog_screen.dart' show EditableStringList;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
 
-Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
+/// Refined Fitness Placeholder for Routine Templates with no cover image.
+class _FitnessPlaceholder extends StatelessWidget {
+  final String level;
+
+  const _FitnessPlaceholder({this.level = 'Beginner'});
+
+  Color get _accentColor {
+    switch (level.toLowerCase()) {
+      case 'beginner':
+        return AppColors.success;
+      case 'advanced':
+        return AppColors.danger;
+      default:
+        return AppColors.warning;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmall = constraints.maxHeight < 80;
+        final iconSize = isSmall ? 20.0 : 32.0;
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.surfaceAlt,
+                AppColors.primaryTint.withValues(alpha: 0.65),
+              ],
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (!isSmall)
+                Positioned(
+                  right: -20,
+                  bottom: -20,
+                  child: Icon(
+                    Icons.fitness_center_rounded,
+                    size: 110,
+                    color: AppColors.primary.withValues(alpha: 0.05),
+                  ),
+                ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: iconSize * 1.5,
+                    height: iconSize * 1.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _accentColor.withValues(alpha: 0.3),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.fitness_center_rounded,
+                      size: iconSize,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  if (!isSmall) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'ROUTINE BLUEPRINT',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: AppColors.inkSoft.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+Widget _networkHero(String url,
+    {BoxFit fit = BoxFit.cover, String level = 'Beginner'}) {
   if (url.trim().isEmpty) {
-    return const DecoratedBox(
-        decoration: BoxDecoration(gradient: AppColors.heroGradient));
+    return _FitnessPlaceholder(level: level);
   }
   return Image.network(
     url,
@@ -19,19 +125,81 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
     webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
-    errorBuilder: (context, error, stack) => const DecoratedBox(
-        decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+    errorBuilder: (context, error, stack) => _FitnessPlaceholder(level: level),
   );
 }
 
-/// AD-M11.4 — Manage Routine Templates. Previously a stub — the Content
-/// hub's card linked here only to show a toast ("Routine template
-/// editor.") with no real screen or data behind it at all. Backed now by
-/// `routineTemplates`; each card expands in place to show its
-/// full day-by-day breakdown. Create/Edit is a full page rather than a
-/// dialog — a day/exercise builder plus goal/tags/equipment metadata is
-/// genuinely a lot of content, the kind of "Create" flow that gets its
-/// own page in a real web console rather than a cramped popup.
+Widget _buildDifficultyChip(String level) {
+  final (Color bg, Color text) = switch (level.toLowerCase()) {
+    'beginner' => (AppColors.successTint, AppColors.success),
+    'advanced' => (AppColors.dangerTint, AppColors.danger),
+    _ => (const Color(0xFFFEF3C7), AppColors.warning),
+  };
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      level,
+      style: TextStyle(
+        fontSize: 11.5,
+        fontWeight: FontWeight.w700,
+        color: text,
+      ),
+    ),
+  );
+}
+
+Widget _buildTrackingModeBadge(ExerciseExecutionMode? mode) {
+  final (Color bg, Color text, IconData icon, String label) = switch (mode) {
+    ExerciseExecutionMode.aiTracked => (
+      AppColors.primaryTint,
+      AppColors.primary,
+      Icons.auto_awesome_rounded,
+      'AI Tracked'
+    ),
+    ExerciseExecutionMode.videoGuidedTimed => (
+      AppColors.infoTint,
+      AppColors.info,
+      Icons.smart_display_rounded,
+      'Video Timed'
+    ),
+    _ => (
+      AppColors.surfaceAlt,
+      AppColors.inkSoft,
+      Icons.assignment_outlined,
+      'Self-reported'
+    ),
+  };
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: text),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: text,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// AD-M11.4 — Manage Routine Templates.
+/// Professional, responsive Routine Template Library Dashboard inspired by
+/// Notion Gallery, TeamBuildr Training Library, and Shopify Polaris.
 class RoutineTemplatesScreen extends StatefulWidget {
   const RoutineTemplatesScreen(
       {super.key, this.allowRemoval = true, this.initialAiDraft});
@@ -50,6 +218,14 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
   String? _publishingId;
   late Future<List<RoutineBlueprint>> _templatesFuture;
 
+  // Search, Filter, Sort, View, Drawer state
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedDifficulty = 'All';
+  String _selectedSort = 'Name (A–Z)';
+  bool _isGridView = true;
+  RoutineBlueprint? _drawerTemplate;
+
   @override
   void initState() {
     super.initState();
@@ -57,8 +233,22 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
     _templatesFuture = context.read<RoutineTemplateRepository>().load();
   }
 
-  void _openCreate() => setState(() => _creating = true);
-  void _openEdit(RoutineBlueprint t) => setState(() => _editing = t);
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _openCreate() => setState(() {
+        _drawerTemplate = null;
+        _creating = true;
+      });
+
+  void _openEdit(RoutineBlueprint t) => setState(() {
+        _drawerTemplate = null;
+        _editing = t;
+      });
+
   void _closeForm() => setState(() {
         _creating = false;
         _editing = null;
@@ -80,7 +270,10 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
       }
       await (repository as RoutineArchivingRepository).archive(item);
       if (!mounted) return;
-      setState(() => _templatesFuture = repository.load());
+      setState(() {
+        if (_drawerTemplate?.id == item.id) _drawerTemplate = null;
+        _templatesFuture = repository.load();
+      });
       showToast(context, 'Template removed.');
     } catch (_) {
       if (mounted) {
@@ -115,6 +308,45 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
     }
   }
 
+  List<RoutineBlueprint> _getFilteredAndSorted(List<RoutineBlueprint> source) {
+    var list = source.where((t) {
+      if (_selectedDifficulty != 'All' &&
+          t.level.toLowerCase() != _selectedDifficulty.toLowerCase()) {
+        return false;
+      }
+      if (_searchQuery.trim().isNotEmpty) {
+        final q = _searchQuery.trim().toLowerCase();
+        final matchName = t.name.toLowerCase().contains(q);
+        final matchGoal = t.goal.toLowerCase().contains(q);
+        final matchTags = t.tags.any((tag) => tag.toLowerCase().contains(q));
+        final matchEq =
+            t.equipmentNeeded.any((eq) => eq.toLowerCase().contains(q));
+        if (!matchName && !matchGoal && !matchTags && !matchEq) return false;
+      }
+      return true;
+    }).toList();
+
+    switch (_selectedSort) {
+      case 'Name (A–Z)':
+        list.sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      case 'Name (Z–A)':
+        list.sort(
+            (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+      case 'Days (Most–Least)':
+        list.sort((a, b) => b.days.length.compareTo(a.days.length));
+      case 'Days (Least–Most)':
+        list.sort((a, b) => a.days.length.compareTo(b.days.length));
+      case 'Duration (Longest)':
+        list.sort(
+            (a, b) => b.sessionDurationMin.compareTo(a.sessionDurationMin));
+      case 'Duration (Shortest)':
+        list.sort(
+            (a, b) => a.sessionDurationMin.compareTo(b.sessionDurationMin));
+    }
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_creating || _editing != null) {
@@ -131,6 +363,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
           return Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('Could not load routine templates.'),
+            const SizedBox(height: 12),
             TextButton(
                 onPressed: () => setState(() => _templatesFuture =
                     context.read<RoutineTemplateRepository>().load()),
@@ -141,104 +374,1104 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final templates = snapshot.data!;
-        final firebaseCatalog =
-            context.read<TutorialRepository>().requiresCatalogSelection;
+        final filtered = _getFilteredAndSorted(templates);
         final totalAssigned =
             templates.fold<int>(0, (sum, t) => sum + t.assignedMembers);
+
+        final totalCount = templates.length;
+        final beginnerCount = templates
+            .where((t) => t.level.toLowerCase() == 'beginner')
+            .length;
+        final intermediateCount = templates
+            .where((t) => t.level.toLowerCase() == 'intermediate')
+            .length;
+        final advancedCount = templates
+            .where((t) => t.level.toLowerCase() == 'advanced')
+            .length;
+
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        firebaseCatalog
-                            ? '${templates.length} organization routine blueprints'
-                            : '${templates.length} templates · $totalAssigned members currently following one',
-                        style: Theme.of(context).textTheme.bodyLarge,
+          body: Stack(
+            children: [
+              // Main content scroll view
+              Positioned.fill(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 48),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1680),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Page Header with Title, Description, and Actions
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Routine Templates',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.ink,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      'Author, organize, and assign workout blueprints across training splits and fitness levels.',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.inkSoft,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              IconButton(
+                                tooltip: 'Reload templates',
+                                icon: const Icon(Icons.refresh),
+                                onPressed: _removing
+                                    ? null
+                                    : () => setState(() => _templatesFuture =
+                                        context
+                                            .read<RoutineTemplateRepository>()
+                                            .load()),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton.icon(
+                                onPressed: _removing ? null : _openCreate,
+                                icon: const Icon(Icons.add_rounded, size: 18),
+                                label: const Text('New template'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // 2. Metrics Summary Pill Bar
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 10,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.hairline),
+                                ),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      '$totalCount templates',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                    _metricDivider(),
+                                    _metricDot(AppColors.success),
+                                    Text(
+                                      '$beginnerCount Beginner',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                    _metricDivider(),
+                                    _metricDot(AppColors.warning),
+                                    Text(
+                                      '$intermediateCount Intermediate',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                    _metricDivider(),
+                                    _metricDot(AppColors.danger),
+                                    Text(
+                                      '$advancedCount Advanced',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                    if (totalAssigned > 0) ...[
+                                      _metricDivider(),
+                                      const Icon(Icons.people_outline_rounded,
+                                          size: 15, color: AppColors.inkSoft),
+                                      Text(
+                                        '$totalAssigned following',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.inkSoft,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // 3. Search, Filter, Sort, and View Switcher Toolbar
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            alignment: WrapAlignment.spaceBetween,
+                            children: [
+                              // Search and Filter Pills
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  // Search Field
+                                  SizedBox(
+                                    width: 280,
+                                    height: 38,
+                                    child: TextField(
+                                      controller: _searchController,
+                                      onChanged: (val) =>
+                                          setState(() => _searchQuery = val),
+                                      style: const TextStyle(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: 'Search templates by name…',
+                                        hintStyle: const TextStyle(
+                                            color: AppColors.inkSoft,
+                                            fontSize: 13),
+                                        prefixIcon: const Icon(
+                                            Icons.search_rounded,
+                                            size: 18,
+                                            color: AppColors.inkSoft),
+                                        suffixIcon: _searchQuery.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                    Icons.close_rounded,
+                                                    size: 16),
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(
+                                                      () => _searchQuery = '');
+                                                },
+                                              )
+                                            : null,
+                                        contentPadding: EdgeInsets.zero,
+                                        filled: true,
+                                        fillColor: AppColors.surface,
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          borderSide: const BorderSide(
+                                              color: AppColors.hairline),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          borderSide: const BorderSide(
+                                              color: AppColors.primary,
+                                              width: 1.5),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Difficulty Filter Chips
+                                  ...[
+                                    ('All', totalCount),
+                                    ('Beginner', beginnerCount),
+                                    ('Intermediate', intermediateCount),
+                                    ('Advanced', advancedCount),
+                                  ].map((filter) {
+                                    final isSelected =
+                                        _selectedDifficulty == filter.$1;
+                                    return InkWell(
+                                      onTap: () => setState(() =>
+                                          _selectedDifficulty = filter.$1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 150),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.surface,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? AppColors.primary
+                                                : AppColors.hairline,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${filter.$1} (${filter.$2})',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : AppColors.ink,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+
+                              // Sort & View Toggle
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  // Sort Dropdown
+                                  Container(
+                                    height: 38,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border:
+                                          Border.all(color: AppColors.hairline),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _selectedSort,
+                                        icon: const Icon(Icons.arrow_drop_down,
+                                            color: AppColors.inkSoft),
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.ink,
+                                        ),
+                                        items: [
+                                          'Name (A–Z)',
+                                          'Name (Z–A)',
+                                          'Days (Most–Least)',
+                                          'Days (Least–Most)',
+                                          'Duration (Longest)',
+                                          'Duration (Shortest)',
+                                        ]
+                                            .map((s) => DropdownMenuItem(
+                                                value: s, child: Text(s)))
+                                            .toList(),
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(
+                                                () => _selectedSort = val);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Grid / List View Toggle
+                                  Container(
+                                    height: 38,
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border:
+                                          Border.all(color: AppColors.hairline),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        InkWell(
+                                          onTap: () => setState(
+                                              () => _isGridView = true),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: _isGridView
+                                                  ? AppColors.primaryTint
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Icon(
+                                              Icons.grid_view_rounded,
+                                              size: 18,
+                                              color: _isGridView
+                                                  ? AppColors.primary
+                                                  : AppColors.inkSoft,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        InkWell(
+                                          onTap: () => setState(
+                                              () => _isGridView = false),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: !_isGridView
+                                                  ? AppColors.primaryTint
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Icon(
+                                              Icons.view_list_rounded,
+                                              size: 18,
+                                              color: !_isGridView
+                                                  ? AppColors.primary
+                                                  : AppColors.inkSoft,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // 4. Content Area: Grid View or List View or Empty State
+                          if (filtered.isEmpty)
+                            _buildEmptyState()
+                          else if (_isGridView)
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final width = constraints.maxWidth;
+                                final int columns;
+                                if (width >= 1480) {
+                                  columns = 4;
+                                } else if (width >= 1100) {
+                                  columns = 3;
+                                } else if (width >= 680) {
+                                  columns = 2;
+                                } else {
+                                  columns = 1;
+                                }
+                                const double spacing = 18;
+                                final double cardWidth = (width -
+                                        (columns - 1) * spacing) /
+                                    columns;
+
+                                return Wrap(
+                                  spacing: spacing,
+                                  runSpacing: 20,
+                                  children: filtered.map((t) {
+                                    return SizedBox(
+                                      width: cardWidth,
+                                      child: _RoutineGridCard(
+                                        template: t,
+                                        showRemoval: widget.allowRemoval,
+                                        expanded: _expandedId == t.id,
+                                        onToggle: () => setState(() =>
+                                            _expandedId = _expandedId == t.id
+                                                ? null
+                                                : t.id),
+                                        onPreview: () => setState(
+                                            () => _drawerTemplate = t),
+                                        onEdit: () => _openEdit(t),
+                                        onRemove: widget.allowRemoval &&
+                                                context.read<
+                                                        RoutineTemplateRepository>()
+                                                    is RoutineArchivingRepository &&
+                                                !_removing &&
+                                                _publishingId == null
+                                            ? () => _remove(t)
+                                            : null,
+                                        onPublish: () => _publish(t),
+                                        publishing: _publishingId == t.id,
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            )
+                          else
+                            Column(
+                              children: filtered.map((t) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _TemplateCard(
+                                    showRemoval: widget.allowRemoval,
+                                    template: t,
+                                    expanded: _expandedId == t.id,
+                                    onToggle: () => setState(() =>
+                                        _expandedId =
+                                            _expandedId == t.id ? null : t.id),
+                                    onPreview: () =>
+                                        setState(() => _drawerTemplate = t),
+                                    onRemove: widget.allowRemoval &&
+                                            context.read<
+                                                    RoutineTemplateRepository>()
+                                                is RoutineArchivingRepository &&
+                                            !_removing &&
+                                            _publishingId == null
+                                        ? () => _remove(t)
+                                        : null,
+                                    onEdit: () => _openEdit(t),
+                                    onPublish: () => _publish(t),
+                                    publishing: _publishingId == t.id,
+                                    firebaseCatalog: context
+                                        .read<TutorialRepository>()
+                                        .requiresCatalogSelection,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                        ],
                       ),
                     ),
-                    IconButton(
-                        tooltip: 'Reload templates',
-                        icon: const Icon(Icons.refresh),
-                        onPressed: _removing
-                            ? null
-                            : () => setState(() => _templatesFuture = context
-                                .read<RoutineTemplateRepository>()
-                                .load())),
-                    FilledButton.icon(
-                      onPressed: _removing ? null : _openCreate,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('New template'),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 20),
-                ...templates.map((t) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _TemplateCard(
-                        showRemoval: widget.allowRemoval,
-                        template: t,
-                        expanded: _expandedId == t.id,
-                        onToggle: () => setState(() =>
-                            _expandedId = _expandedId == t.id ? null : t.id),
-                        onRemove: widget.allowRemoval &&
-                                context.read<RoutineTemplateRepository>()
-                                    is RoutineArchivingRepository &&
-                                !_removing &&
-                                _publishingId == null
-                            ? () => _remove(t)
-                            : null,
-                        onEdit: () => _openEdit(t),
-                        onPublish: () => _publish(t),
-                        publishing: _publishingId == t.id,
-                        firebaseCatalog: firebaseCatalog,
-                      ),
-                    )),
+              ),
+
+              // 5. Sliding Detail Drawer & Scrim Backdrop
+              if (_drawerTemplate != null) ...[
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _drawerTemplate = null),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.32),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width:
+                      math.min(520, MediaQuery.of(context).size.width * 0.92),
+                  child: Material(
+                    elevation: 16,
+                    color: AppColors.surface,
+                    child: _RoutineDetailDrawerContent(
+                      template: _drawerTemplate!,
+                      showRemoval: widget.allowRemoval,
+                      onClose: () => setState(() => _drawerTemplate = null),
+                      onEdit: () {
+                        final t = _drawerTemplate!;
+                        setState(() => _drawerTemplate = null);
+                        _openEdit(t);
+                      },
+                      onPublish: () => _publish(_drawerTemplate!),
+                      onRemove: widget.allowRemoval &&
+                              context.read<RoutineTemplateRepository>()
+                                  is RoutineArchivingRepository &&
+                              !_removing &&
+                              _publishingId == null
+                          ? () {
+                              final t = _drawerTemplate!;
+                              setState(() => _drawerTemplate = null);
+                              _remove(t);
+                            }
+                          : null,
+                      publishing: _publishingId == _drawerTemplate!.id,
+                    ),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
         );
       },
     );
   }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceAlt,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.search_off_rounded,
+                size: 32, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No routine templates found',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Try adjusting your search query or difficulty filter.',
+            style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed: () {
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+                _selectedDifficulty = 'All';
+              });
+            },
+            child: const Text('Clear filters'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _metricDot(Color color) {
+    return Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
+  static Widget _metricDivider() {
+    return Container(
+      width: 1,
+      height: 12,
+      color: AppColors.hairline,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
 }
 
+/// Responsive, modern 16:9 Routine Card inspired by Notion Gallery & TeamBuildr.
+class _RoutineGridCard extends StatefulWidget {
+  final RoutineBlueprint template;
+  final bool showRemoval;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onPreview;
+  final VoidCallback onEdit;
+  final VoidCallback? onRemove;
+  final VoidCallback onPublish;
+  final bool publishing;
+
+  const _RoutineGridCard({
+    required this.template,
+    required this.showRemoval,
+    required this.expanded,
+    required this.onToggle,
+    required this.onPreview,
+    required this.onEdit,
+    this.onRemove,
+    required this.onPublish,
+    required this.publishing,
+  });
+
+  @override
+  State<_RoutineGridCard> createState() => _RoutineGridCardState();
+}
+
+class _RoutineGridCardState extends State<_RoutineGridCard> {
+  bool _isHovered = false;
+
+  int get _totalExercises => widget.template.days
+      .fold<int>(0, (sum, day) => sum + day.exercises.length);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.template;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onToggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _isHovered
+                  ? AppColors.primary.withValues(alpha: 0.45)
+                  : AppColors.hairline,
+              width: _isHovered ? 1.5 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _isHovered
+                    ? AppColors.primary.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.03),
+                blurRadius: _isHovered ? 14 : 8,
+                offset: _isHovered ? const Offset(0, 4) : const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top: 16:9 Routine Cover Image
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _networkHero(t.imageUrl, level: t.level),
+                      // Top Left: Difficulty Chip
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: _buildDifficultyChip(t.level),
+                      ),
+                      // Top Right: Split Tag & Delete
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${t.days.length}-day split',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            if (widget.showRemoval) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  tooltip: 'Remove template',
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 15, color: Colors.white),
+                                  onPressed:
+                                      t.readOnly ? null : widget.onRemove,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Body Content
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Routine Title
+                      Text(
+                        t.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Goal / Description
+                      Text(
+                        t.goal.isNotEmpty
+                            ? t.goal
+                            : 'GainPath progressive athletic training blueprint.',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkSoft,
+                          height: 1.35,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Specs Row (Exercises, Duration, Following)
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.fitness_center_outlined,
+                                  size: 14, color: AppColors.inkSoft),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$_totalExercises exercises',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.schedule_rounded,
+                                  size: 14, color: AppColors.inkSoft),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${t.sessionDurationMin} min',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (t.assignedMembers > 0)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.people_outline_rounded,
+                                    size: 14, color: AppColors.inkSoft),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${t.assignedMembers} following',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.inkSoft,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+
+                      // Tags preview
+                      if (t.tags.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            ...t.tags.take(2).map((tag) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceAlt,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    tag,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.inkSoft,
+                                    ),
+                                  ),
+                                )),
+                            if (t.tags.length > 2)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceAlt,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '+${t.tags.length - 2}',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.inkSoft,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 14),
+                      const Divider(height: 1, color: AppColors.hairline),
+                      const SizedBox(height: 10),
+
+                      // Footer Actions: Preview, Edit, More Menu
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: widget.onPreview,
+                              icon: const Icon(Icons.visibility_outlined,
+                                  size: 15),
+                              label: const Text('Preview'),
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                side:
+                                    const BorderSide(color: AppColors.hairline),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            tooltip: 'Edit template',
+                            onPressed: t.readOnly ? null : widget.onEdit,
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'More actions',
+                            icon: const Icon(Icons.more_vert_rounded, size: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'publish',
+                                enabled: !widget.publishing && !t.readOnly,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.publish_rounded,
+                                        size: 16, color: AppColors.ink),
+                                    const SizedBox(width: 8),
+                                    Text(widget.publishing
+                                        ? 'Publishing…'
+                                        : 'Publish to members'),
+                                  ],
+                                ),
+                              ),
+                              if (widget.showRemoval)
+                                PopupMenuItem(
+                                  value: 'remove',
+                                  enabled: !t.readOnly,
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.delete_outline,
+                                          size: 16, color: AppColors.danger),
+                                      SizedBox(width: 8),
+                                      Text('Remove template',
+                                          style: TextStyle(
+                                              color: AppColors.danger)),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                            onSelected: (action) {
+                              if (action == 'publish') {
+                                widget.onPublish();
+                              } else if (action == 'remove' &&
+                                  widget.onRemove != null) {
+                                widget.onRemove!();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+
+                      // Inline Day Breakdown & Publish
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        child: widget.expanded
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const Divider(
+                                        height: 1, color: AppColors.hairline),
+                                    const SizedBox(height: 10),
+                                    ...t.days.map((d) => Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 8),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text('Day ${d.dayNumber}',
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          AppColors.primary)),
+                                              const SizedBox(height: 4),
+                                              ...d.exercises.map((e) => Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 2,
+                                                            left: 4),
+                                                    child: Row(
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.circle,
+                                                            size: 4,
+                                                            color: AppColors
+                                                                .inkSoft),
+                                                        const SizedBox(
+                                                            width: 6),
+                                                        Expanded(
+                                                          child: Text(
+                                                            '${e.exerciseName} · ${e.sets} × ${e.prescription is TimedPrescription ? '${(e.prescription as TimedPrescription).durationSeconds}s' : '${e.reps ?? 10} reps'}',
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        12),
+                                                          ),
+                                                        ),
+                                                        _buildTrackingModeBadge(
+                                                            e.executionMode),
+                                                      ],
+                                                    ),
+                                                  )),
+                                            ],
+                                          ),
+                                        )),
+                                    const SizedBox(height: 10),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: OutlinedButton.icon(
+                                        onPressed:
+                                            widget.publishing || t.readOnly
+                                                ? null
+                                                : widget.onPublish,
+                                        icon: widget.publishing
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
+                                            : const Icon(
+                                                Icons.publish_rounded,
+                                                size: 16),
+                                        label: Text(widget.publishing
+                                            ? 'Publishing…'
+                                            : 'Publish'),
+                                        style: OutlinedButton.styleFrom(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 12, vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox(width: double.infinity),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact List View Row & expandable breakdown.
 class _TemplateCard extends StatelessWidget {
   final bool showRemoval;
   final RoutineBlueprint template;
   final bool expanded;
   final VoidCallback onToggle;
+  final VoidCallback onPreview;
   final VoidCallback onEdit;
   final VoidCallback? onRemove;
   final VoidCallback onPublish;
   final bool publishing;
   final bool firebaseCatalog;
-  const _TemplateCard(
-      {required this.template,
-      required this.expanded,
-      required this.onToggle,
-      required this.onEdit,
-      this.showRemoval = true,
-      this.onRemove,
-      required this.onPublish,
-      required this.publishing,
-      required this.firebaseCatalog});
 
-  Color get _levelColor {
-    switch (template.level) {
-      case 'Beginner':
-        return AppColors.success;
-      case 'Advanced':
-        return AppColors.danger;
-      default:
-        return AppColors.warning;
-    }
-  }
+  const _TemplateCard({
+    required this.template,
+    required this.expanded,
+    required this.onToggle,
+    required this.onPreview,
+    required this.onEdit,
+    this.showRemoval = true,
+    this.onRemove,
+    required this.onPublish,
+    required this.publishing,
+    required this.firebaseCatalog,
+  });
+
+  int get _totalExercises =>
+      template.days.fold<int>(0, (sum, day) => sum + day.exercises.length);
 
   @override
   Widget build(BuildContext context) {
@@ -253,57 +1486,94 @@ class _TemplateCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               child: Row(
                 children: [
+                  // 16:9 Compact Thumbnail
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: template.imageUrl.isEmpty
-                          ? Container(
-                              color: _levelColor.withValues(alpha: 0.14),
-                              child: Icon(Icons.list_alt_rounded,
-                                  size: 19, color: _levelColor),
-                            )
-                          : _networkHero(template.imageUrl),
+                      width: 90,
+                      height: 52,
+                      child: _networkHero(template.imageUrl,
+                          level: template.level),
                     ),
                   ),
                   const SizedBox(width: 14),
+
+                  // Routine Specs & Badges
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(template.name,
-                            style: Theme.of(context).textTheme.titleMedium),
+                        Row(
+                          children: [
+                            Text(
+                              template.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.ink,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildDifficultyChip(template.level),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
                         Text(
                           firebaseCatalog
-                              ? '${template.level}  ·  ${template.days.length}-day split  ·  organization blueprint'
-                              : '${template.level}  ·  ${template.days.length}-day split  ·  ${template.assignedMembers} following',
+                              ? '${template.days.length}-day split  ·  $_totalExercises exercises  ·  ${template.sessionDurationMin} min'
+                              : '${template.days.length}-day split  ·  $_totalExercises exercises  ·  ${template.sessionDurationMin} min  ·  ${template.assignedMembers} following',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
-                              ?.copyWith(fontSize: 12.5),
+                              ?.copyWith(
+                                fontSize: 12.5,
+                                color: AppColors.inkSoft,
+                              ),
                         ),
                       ],
                     ),
                   ),
+
+                  // Actions
+                  OutlinedButton.icon(
+                    onPressed: onPreview,
+                    icon: const Icon(Icons.visibility_outlined, size: 15),
+                    label: const Text('Preview'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      side: const BorderSide(color: AppColors.hairline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   if (showRemoval)
                     IconButton(
-                        tooltip: 'Remove template',
-                        onPressed: template.readOnly ? null : onRemove,
-                        icon: const Icon(Icons.delete_outline, size: 18)),
+                      tooltip: 'Remove template',
+                      onPressed: template.readOnly ? null : onRemove,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.edit_outlined, size: 18),
+                    tooltip: 'Edit template',
                     onPressed: template.readOnly ? null : onEdit,
                   ),
                   Icon(
-                      expanded
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      color: AppColors.inkSoft),
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: AppColors.inkSoft,
+                  ),
                 ],
               ),
             ),
           ),
+
+          // Inline breakdown section
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
@@ -363,10 +1633,12 @@ class _TemplateCard extends StatelessWidget {
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
-                                                  '${e.exerciseName}  ·  ${e.sets} × ${e.prescription is TimedPrescription ? '${(e.prescription as TimedPrescription).durationSeconds}s' : '${e.reps} reps'}',
+                                                  '${e.exerciseName}  ·  ${e.sets} × ${e.prescription is TimedPrescription ? '${(e.prescription as TimedPrescription).durationSeconds}s' : '${e.reps ?? 10} reps'}',
                                                   style: const TextStyle(
                                                       fontSize: 13)),
                                             ),
+                                            _buildTrackingModeBadge(
+                                                e.executionMode),
                                           ],
                                         ),
                                       )),
@@ -393,6 +1665,487 @@ class _TemplateCard extends StatelessWidget {
                     ),
                   )
                 : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Slide-in Detail Drawer Content on the right side.
+class _RoutineDetailDrawerContent extends StatelessWidget {
+  final RoutineBlueprint template;
+  final bool showRemoval;
+  final VoidCallback onClose;
+  final VoidCallback onEdit;
+  final VoidCallback onPublish;
+  final VoidCallback? onRemove;
+  final bool publishing;
+
+  const _RoutineDetailDrawerContent({
+    required this.template,
+    required this.showRemoval,
+    required this.onClose,
+    required this.onEdit,
+    required this.onPublish,
+    this.onRemove,
+    required this.publishing,
+  });
+
+  int get _totalExercises =>
+      template.days.fold<int>(0, (sum, day) => sum + day.exercises.length);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Drawer Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.hairline)),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: onClose,
+                tooltip: 'Close details',
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Routine Overview',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 19),
+                tooltip: 'Edit template',
+                onPressed: template.readOnly ? null : onEdit,
+              ),
+              if (showRemoval)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      size: 19, color: AppColors.danger),
+                  tooltip: 'Remove template',
+                  onPressed: template.readOnly ? null : onRemove,
+                ),
+            ],
+          ),
+        ),
+
+        // Scrollable Drawer Body
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 16:9 Hero Image
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: _networkHero(template.imageUrl,
+                        level: template.level),
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Name & Badges
+                Text(
+                  template.name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _buildDifficultyChip(template.level),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${template.days.length}-Day Split',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${template.sessionDurationMin} Min / Session',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Goal description
+                if (template.goal.isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.flag_outlined,
+                            size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            template.goal,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.ink,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // 4-Card Metrics Grid
+                Row(
+                  children: [
+                    Expanded(
+                      child: _metricCard(
+                        'Training Split',
+                        '${template.days.length} Days',
+                        Icons.calendar_view_week_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _metricCard(
+                        'Session Length',
+                        '${template.sessionDurationMin} min',
+                        Icons.timer_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _metricCard(
+                        'Exercises',
+                        '$_totalExercises movements',
+                        Icons.fitness_center_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _metricCard(
+                        'Members',
+                        '${template.assignedMembers} active',
+                        Icons.groups_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Tags & Equipment
+                if (template.tags.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Tags',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: template.tags.map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+
+                if (template.equipmentNeeded.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Equipment Needed',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: template.equipmentNeeded.map((eq) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceAlt,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          eq,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+
+                const SizedBox(height: 22),
+                const Divider(height: 1, color: AppColors.hairline),
+                const SizedBox(height: 18),
+
+                // Daily Structure
+                const Text(
+                  'Daily Workout Structure',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                ...template.days.map((day) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.hairline),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Day ${day.dayNumber}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${day.exercises.length} exercises',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ...day.exercises.map((e) {
+                          final String prescriptionText;
+                          if (e.prescription is TimedPrescription) {
+                            final tp = e.prescription as TimedPrescription;
+                            prescriptionText =
+                                '${e.sets} sets × ${tp.durationSeconds}s · ${tp.restSeconds}s rest';
+                          } else {
+                            prescriptionText =
+                                '${e.sets} sets × ${e.reps ?? 10} reps · ${e.prescription?.restSeconds ?? 60}s rest';
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.radio_button_checked_rounded,
+                                    size: 14, color: AppColors.primary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        e.exerciseName,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.ink,
+                                        ),
+                                      ),
+                                      Text(
+                                        prescriptionText,
+                                        style: const TextStyle(
+                                          fontSize: 11.5,
+                                          color: AppColors.inkSoft,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _buildTrackingModeBadge(e.executionMode),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // Sticky Footer
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.hairline)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: template.readOnly ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit blueprint'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed:
+                    publishing || template.readOnly ? null : onPublish,
+                icon: publishing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.publish_rounded, size: 16),
+                label: Text(publishing ? 'Publishing…' : 'Publish'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _metricCard(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: AppColors.inkSoft),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.inkSoft,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
           ),
         ],
       ),

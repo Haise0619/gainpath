@@ -20,7 +20,7 @@ async function owner(tx:TransactionPort,org:string,uid:string,id:string) {
   return {actor,booking};
 }
 function payment(data:DocumentData|undefined,b:StoredBooking) {
-  if(!data||data.schemaVersion!==1||data.organizationId!==b.organizationId||data.bookingId!==b.bookingId||data.memberId!==b.memberId||data.coachId!==b.coachId||data.branchId!==b.branchId||data.durationMinutes!==b.durationMinutes||data.environment!=='sandbox'||data.provider!=='billplz'||data.type!=='CoachingBooking'||data.paymentStatus!=='cleared'||data.fulfilmentStatus!=='confirmed'||data.currency!=='MYR'||!Number.isSafeInteger(data.amountMinor)||Number(data.amountMinor)<1||data.refundStatus!==undefined)throw new DomainError('failed-precondition','The confirmed payment needs Admin review before this booking can change.');
+  if(!data||data.schemaVersion!==1||data.organizationId!==b.organizationId||data.bookingId!==b.bookingId||data.memberId!==b.memberId||data.coachId!==b.coachId||data.branchId!==b.branchId||data.durationMinutes!==b.durationMinutes||data.environment!=='sandbox'||!['billplz','xendit'].includes(String(data.provider))||data.type!=='CoachingBooking'||data.paymentStatus!=='cleared'||data.fulfilmentStatus!=='confirmed'||data.currency!=='MYR'||!Number.isSafeInteger(data.amountMinor)||Number(data.amountMinor)<1||data.refundStatus!==undefined)throw new DomainError('failed-precondition','The confirmed payment needs Admin review before this booking can change.');
   return data;
 }
 

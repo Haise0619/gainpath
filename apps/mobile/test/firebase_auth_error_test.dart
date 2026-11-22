@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AuthSignInCancelled;
 import 'package:gainpath_mobile/main.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -41,8 +42,58 @@ class _FailingGateway
   Future<void> dispose() => _users.close();
 }
 
+class _GoogleGateway extends _FailingGateway
+    implements FirebaseGoogleAuthGateway {
+  final attempts = <bool>[];
+
+  @override
+  bool get supportsGoogleSignIn => true;
+
+  @override
+  Future<FirebaseAuthUser> signInWithGoogle({required bool registering}) async {
+    attempts.add(registering);
+    throw const AuthSignInCancelled();
+  }
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+
+  testWidgets('Google works without password and asks for terms on sign-up',
+      (tester) async {
+    tester.view.physicalSize = const Size(480, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final gateway = _GoogleGateway();
+    await tester.pumpWidget(GainPathMobileApp.injected(
+      authRepository: FirebaseAuthRepository(gateway),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+    expect(gateway.attempts, [false]);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Sign-in cancelled.'), findsNothing);
+
+    await tester.tap(find.text('New here? Create an account'));
+    await tester.pumpAndSettle();
+    final googleSignup = find.text('Sign up with Google');
+    await tester.ensureVisible(googleSignup);
+    await tester.tap(googleSignup);
+    await tester.pumpAndSettle();
+    expect(find.text('Agree to the Terms and Privacy Policy to continue.'),
+        findsOneWidget);
+    expect(gateway.attempts, [false]);
+
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.ensureVisible(googleSignup);
+    await tester.tap(googleSignup);
+    await tester.pumpAndSettle();
+    expect(gateway.attempts, [false, true]);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('Firebase sign-in failure stays visible after provider sign-out',
       (tester) async {

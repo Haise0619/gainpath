@@ -42,6 +42,11 @@ abstract interface class FirebaseAuthSessionGateway {
   Future<FirebaseAuthUser?> restoreUser();
 }
 
+abstract interface class FirebaseGoogleAuthGateway {
+  bool get supportsGoogleSignIn;
+  Future<FirebaseAuthUser> signInWithGoogle({required bool registering});
+}
+
 /// A reload failed before authoritative identity/membership could be checked.
 /// An existing gated session can retry without creating another account.
 class FirebaseAuthRefreshUnavailable extends AuthException {
@@ -50,7 +55,11 @@ class FirebaseAuthRefreshUnavailable extends AuthException {
 
 /// Serializes provider mutations and invalidates results immediately on logout.
 class FirebaseAuthRepository
-    implements AuthRepository, AuthSessionLifecycle, AuthVerificationActions {
+    implements
+        AuthRepository,
+        AuthSessionLifecycle,
+        AuthVerificationActions,
+        GoogleAuthActions {
   FirebaseAuthRepository(this._gateway) {
     final gateway = _gateway;
     if (gateway is FirebaseAuthSessionGateway) {
@@ -132,6 +141,8 @@ class FirebaseAuthRepository
         }
         _changes.add(session);
         return session;
+      } on AuthSignInCancelled {
+        rethrow;
       } catch (error) {
         if (revision == _revision && !_disposed) {
           _signedOut = true;
@@ -155,6 +166,25 @@ class FirebaseAuthRepository
           {AppRole? role, required String email, required String password}) =>
       _authenticate(
           role, () => _gateway.signIn(email: email, password: password));
+
+  @override
+  bool get supportsGoogleSignIn {
+    final gateway = _gateway;
+    return gateway is FirebaseGoogleAuthGateway &&
+        (gateway as FirebaseGoogleAuthGateway).supportsGoogleSignIn;
+  }
+
+  @override
+  Future<AuthSession> signInWithGoogle({required bool registering}) {
+    if (!supportsGoogleSignIn) {
+      return Future.error(
+          const AuthException('Google sign-in is unavailable on this device.'));
+    }
+    return _authenticate(
+        AppRole.member,
+        () => (_gateway as FirebaseGoogleAuthGateway)
+            .signInWithGoogle(registering: registering));
+  }
 
   @override
   Future<AuthSession> register(

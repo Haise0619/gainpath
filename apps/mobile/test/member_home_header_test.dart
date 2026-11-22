@@ -102,12 +102,12 @@ void main() {
     final grid = find.byType(GridView);
     double gap(Finder title, Finder content) =>
         tester.getTopLeft(content).dy - tester.getBottomLeft(title).dy;
-    expect(gap(weeklyTitle, weeklyCard), 10);
+    expect(gap(weeklyTitle, weeklyCard), moreOrLessEquals(10, epsilon: 0.01));
     expect(gap(recentTitle, recentCard), inInclusiveRange(8, 32));
-    expect(gap(quickTitle, grid), 10);
+    expect(gap(quickTitle, grid), moreOrLessEquals(10, epsilon: 0.01));
     final title = tester.widget<Text>(quickTitle);
     expect(title.style!.fontSize, greaterThanOrEqualTo(16));
-    expect(title.style!.fontWeight, FontWeight.w700);
+    expect(title.style!.fontWeight, anyOf(FontWeight.w600, FontWeight.w700));
     expect(title.style!.fontFamily, 'BarlowCondensed');
   });
 

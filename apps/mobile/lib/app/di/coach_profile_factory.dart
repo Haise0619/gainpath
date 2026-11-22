@@ -109,6 +109,27 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               FirebaseCoachDirectoryRepository(
                   scope: session.scope, isCurrent: isCurrent);
           return BrowseCoachesScreen(
+              loadBranches: factory == null ? () async {
+                final names = <String, String>{};
+                final seen = <String>{};
+                String? cursor;
+                do {
+                  if (!isCurrent()) return <String, String>{};
+                  final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                      .httpsCallable('branchManagementCommand')
+                      .call({'action': 'list', 'organizationId': session.scope.organizationId,
+                        if (cursor != null) 'afterId': cursor});
+                  final data = result.data as Map;
+                  for (final row in data['records'] as List) {
+                    if (row['status'] == 'active') {
+                      names[row['branchId'] as String] = row['displayName'] as String;
+                    }
+                  }
+                  cursor = data['nextAfterId'] as String?;
+                  if (cursor != null && !seen.add(cursor)) throw StateError('Branch page did not advance');
+                } while (cursor != null);
+                return names;
+              } : null,
               loadSelectedBranch: factory == null ? () async {
                 if (!isCurrent()) return null;
                 final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')

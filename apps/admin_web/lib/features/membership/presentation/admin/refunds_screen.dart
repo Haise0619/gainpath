@@ -248,22 +248,6 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                     children: [
                       Text(title,
                           style: Theme.of(context).textTheme.headlineMedium),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          widget.live ? 'Sandbox Live' : 'Sandbox (Demo)',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -363,8 +347,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: (badgeColor ?? AppColors.primary)
-                      .withValues(alpha: 0.15),
+                  color:
+                      (badgeColor ?? AppColors.primary).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -399,7 +383,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                           style: const TextStyle(color: AppColors.danger))))),
       ];
 
-  List<PaymentReviewRecord> _filteredRecords(List<PaymentReviewRecord> records) {
+  List<PaymentReviewRecord> _filteredRecords(
+      List<PaymentReviewRecord> records) {
     return records.where((r) {
       if (_mode == PaymentsMode.refunds && !r.isRefundCase) return false;
       if (_mode == PaymentsMode.reconciliation && !r.isReconciliationCase) {
@@ -487,8 +472,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     ];
   }
 
-  Widget _buildMetricsStrip(
-      BuildContext context, List<PaymentReviewRecord> records, bool isUnconnected) {
+  Widget _buildMetricsStrip(BuildContext context,
+      List<PaymentReviewRecord> records, bool isUnconnected) {
     final clearedAmount = records
         .where((r) => r.text('paymentStatus') == 'cleared')
         .fold<int>(0, (sum, r) => sum + r.amountMinor);
@@ -533,28 +518,23 @@ class PaymentsScreenState extends State<PaymentsScreen> {
         return Wrap(spacing: 10, runSpacing: 10, children: [
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$pendingRefundsCount',
+              child: StatTile(isUnconnected ? '—' : '$pendingRefundsCount',
                   'Pending refund review · loaded queue',
                   valueColor: pendingRefundsCount > 0 ? AppColors.danger : null,
                   compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$approvedRefundsCount',
+              child: StatTile(isUnconnected ? '—' : '$approvedRefundsCount',
                   'Approved · pending execution',
-                  valueColor: AppColors.primary,
-                  compact: true)),
+                  valueColor: AppColors.primary, compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$completedRefundsCount',
+              child: StatTile(isUnconnected ? '—' : '$completedRefundsCount',
                   'Completed refunds · loaded queue',
                   compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$rejectedRefundsCount',
+              child: StatTile(isUnconnected ? '—' : '$rejectedRefundsCount',
                   'Declined requests · loaded queue',
                   compact: true)),
         ]);
@@ -564,31 +544,26 @@ class PaymentsScreenState extends State<PaymentsScreen> {
         return Wrap(spacing: 10, runSpacing: 10, children: [
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$reconciliationCount',
+              child: StatTile(isUnconnected ? '—' : '$reconciliationCount',
                   'Total exceptions · loaded queue',
                   valueColor:
                       reconciliationCount > 0 ? const Color(0xFFE65100) : null,
                   compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$activationReviewCount',
+              child: StatTile(isUnconnected ? '—' : '$activationReviewCount',
                   'Fulfillment review · loaded queue',
                   compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$uncertainBillsCount',
+              child: StatTile(isUnconnected ? '—' : '$uncertainBillsCount',
                   'Uncertain provider bills',
                   compact: true)),
           SizedBox(
               width: tileWidth,
-              child: StatTile(
-                  isUnconnected ? '—' : '$resolvedCount',
+              child: StatTile(isUnconnected ? '—' : '$resolvedCount',
                   'Verified / Settled · loaded queue',
-                  valueColor: const Color(0xFF2E7D32),
-                  compact: true)),
+                  valueColor: const Color(0xFF2E7D32), compact: true)),
         ]);
       }
 
@@ -613,14 +588,12 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                 compact: true)),
         SizedBox(
             width: tileWidth,
-            child: StatTile(
-                isUnconnected ? '—' : '$pendingCheckoutCount',
+            child: StatTile(isUnconnected ? '—' : '$pendingCheckoutCount',
                 'Pending checkout · loaded queue',
                 compact: true)),
         SizedBox(
             width: tileWidth,
-            child: StatTile(
-                isUnconnected ? '—' : '$reconciliationCount',
+            child: StatTile(isUnconnected ? '—' : '$reconciliationCount',
                 'Operational exceptions · loaded queue',
                 valueColor:
                     reconciliationCount > 0 ? const Color(0xFFE65100) : null,
@@ -696,7 +669,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
               children: [
                 Expanded(
                   flex: 4,
-                  child: Text('Transaction / Title',
+                  child: Text('Transaction',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: AppColors.inkSoft)),
@@ -731,7 +704,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                 ),
                 Expanded(
                   flex: 3,
-                  child: Text('Date / Time',
+                  child: Text('Created · MYT',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: AppColors.inkSoft)),
@@ -804,27 +777,6 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                r.id,
-                                style: const TextStyle(
-                                    fontSize: 11, color: AppColors.inkSoft),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap: () => Clipboard.setData(
-                                  ClipboardData(text: r.id)),
-                              child: const Icon(Icons.copy_rounded,
-                                  size: 12, color: AppColors.inkSoft),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),
@@ -834,19 +786,11 @@ class PaymentsScreenState extends State<PaymentsScreen> {
             // Member
             Expanded(
               flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(r.memberDisplay,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w500)),
-                  Text(
-                    r.isMembership ? r.text('kind') : r.text('coachName'),
-                    style:
-                        const TextStyle(fontSize: 11, color: AppColors.inkSoft),
-                  ),
-                ],
-              ),
+              child: Text(r.memberDisplay,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500)),
             ),
             // Amount
             Expanded(
@@ -876,10 +820,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                 runSpacing: 4,
                 children: [
                   if (_mode == PaymentsMode.refunds)
-                    _badge(
-                        r.refundLifecycleLabel ?? 'Pending Review',
-                        AppColors.danger,
-                        AppColors.dangerTint)
+                    _badge(r.refundLifecycleLabel ?? 'Pending Review',
+                        AppColors.danger, AppColors.dangerTint)
                   else if (_mode == PaymentsMode.reconciliation)
                     _badge(r.reconciliationCategory, const Color(0xFFE65100),
                         const Color(0xFFFFF3E0))
@@ -902,19 +844,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
             // Date / Schedule
             Expanded(
               flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    r.isMembership ? r.formattedDate : r.sessionSchedule,
-                    style: const TextStyle(fontSize: 12, color: AppColors.ink),
-                  ),
-                  if (!r.isMembership)
-                    Text('Recorded: ${r.formattedDate}',
-                        style: const TextStyle(
-                            fontSize: 10.5, color: AppColors.inkSoft)),
-                ],
-              ),
+              child: Text(r.formattedDate,
+                  style: const TextStyle(fontSize: 12, color: AppColors.ink)),
             ),
             // Action
             SizedBox(
@@ -931,7 +862,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                       ? 'Review'
                       : _mode == PaymentsMode.reconciliation
                           ? 'Investigate'
-                          : 'Details',
+                          : 'View',
                   style: const TextStyle(fontSize: 11.5),
                 ),
               ),
@@ -1009,30 +940,11 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                               ],
                             ),
                             const SizedBox(height: 2),
-                            Wrap(
-                              spacing: 6,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  record.id,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: AppColors.inkSoft),
-                                ),
-                                const Text('·',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.inkSoft)),
-                                Text(
-                                  record.memberDisplay,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: AppColors.inkSoft),
-                                ),
-                              ],
-                            ),
+                            Text(record.memberDisplay,
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppColors.inkSoft)),
                             Text(
-                              record.isMembership
-                                  ? '${record.text('planName')} · Organization-wide'
-                                  : record.sessionSchedule,
+                              'Created · ${record.formattedDate} MYT',
                               style: const TextStyle(
                                   fontSize: 12, color: AppColors.ink),
                             ),
@@ -1118,8 +1030,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  Widget _masterDetailLayout(
-      BuildContext context, BoxConstraints constraints) {
+  Widget _masterDetailLayout(BuildContext context, BoxConstraints constraints) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1210,91 +1121,86 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       const SizedBox(height: 12),
       // Summary Card
       Panel(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(r.businessTitle,
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 2),
+                  Wrap(
+                    spacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(r.businessTitle,
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 2),
-                      Wrap(
-                        spacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text('ID: ${r.id}',
-                              style: const TextStyle(
-                                  color: AppColors.inkSoft, fontSize: 12)),
-                          InkWell(
-                            onTap: () => Clipboard.setData(
-                                ClipboardData(text: r.id)),
-                            child: const Icon(Icons.copy_rounded,
-                                size: 13, color: AppColors.inkSoft),
-                          ),
-                        ],
+                      Text('ID: ${r.id}',
+                          style: const TextStyle(
+                              color: AppColors.inkSoft, fontSize: 12)),
+                      IconButton(
+                        tooltip: 'Copy transaction ID',
+                        onPressed: () =>
+                            Clipboard.setData(ClipboardData(text: r.id)),
+                        icon: const Icon(Icons.copy_rounded, size: 16),
                       ),
                     ],
                   ),
-                ),
-                Text(r.amount,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 20)),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            Wrap(spacing: 6, runSpacing: 4, children: [
-              _badge(
-                  r.paymentLifecycleLabel,
-                  r.text('paymentStatus') == 'cleared'
-                      ? const Color(0xFF2E7D32)
-                      : const Color(0xFF1565C0),
-                  r.text('paymentStatus') == 'cleared'
-                      ? const Color(0xFFE8F5E9)
-                      : const Color(0xFFE3F2FD)),
-              _badge(
-                  r.fulfillmentLifecycleLabel,
-                  r.text('fulfilmentStatus') == 'confirmed'
-                      ? AppColors.ink
-                      : const Color(0xFFE65100),
-                  r.text('fulfilmentStatus') == 'confirmed'
-                      ? AppColors.surfaceAlt
-                      : const Color(0xFFFFF3E0)),
-              if (r.refundLifecycleLabel != null)
-                _badge(r.refundLifecycleLabel!, AppColors.danger,
-                    AppColors.dangerTint),
-            ]),
-            const SizedBox(height: 10),
-            Text(r.refundExplanation,
+            Text(r.amount,
                 style:
-                    const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
-          ])),
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 20)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          _badge(
+              r.paymentLifecycleLabel,
+              r.text('paymentStatus') == 'cleared'
+                  ? const Color(0xFF2E7D32)
+                  : const Color(0xFF1565C0),
+              r.text('paymentStatus') == 'cleared'
+                  ? const Color(0xFFE8F5E9)
+                  : const Color(0xFFE3F2FD)),
+          _badge(
+              r.fulfillmentLifecycleLabel,
+              r.text('fulfilmentStatus') == 'confirmed'
+                  ? AppColors.ink
+                  : const Color(0xFFE65100),
+              r.text('fulfilmentStatus') == 'confirmed'
+                  ? AppColors.surfaceAlt
+                  : const Color(0xFFFFF3E0)),
+          if (r.refundLifecycleLabel != null)
+            _badge(r.refundLifecycleLabel!, AppColors.danger,
+                AppColors.dangerTint),
+        ]),
+        const SizedBox(height: 10),
+        Text(r.refundExplanation,
+            style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
+      ])),
       const SizedBox(height: 16),
-      const Eyebrow('Payment & Financial Breakdown'),
+      const Eyebrow('Payment details'),
       Panel(
           child: Column(children: [
         DetailRow('Member ID', r.text('memberId')),
         if (r.text('memberDisplayName').isNotEmpty)
           DetailRow('Member', r.text('memberDisplayName')),
         const Divider(height: 20),
-        DetailRow(r.isMembership ? 'Membership plan' : 'Booked session',
-            r.isMembership ? r.text('planName') : r.sessionSchedule),
-        if (r.text('bookingStatus').isNotEmpty)
-          DetailRow('Booking status', _label(r.text('bookingStatus'))),
-        if (r.text('cancellationReason').isNotEmpty)
-          DetailRow('Cancellation reason', r.text('cancellationReason')),
-        if (r.data['cancelledAtMillis'] != null)
-          DetailRow('Cancelled', _time(r.data['cancelledAtMillis'])),
-        const Divider(height: 20),
         DetailRow('Payment type',
             r.isMembership ? r.text('kind') : 'CoachingBooking'),
+        const Divider(height: 24),
+        DetailRow(
+            'Payment provider',
+            switch (r.text('provider')) {
+              'xendit' => 'Xendit',
+              'billplz' => 'Billplz',
+              _ => 'Not recorded',
+            }),
         if (!r.isMembership) ...[
-          const Divider(height: 24),
-          const DetailRow('Processing gateway', 'Billplz Sandbox'),
           const SizedBox(height: 8),
           const Align(
               alignment: Alignment.centerLeft,
@@ -1310,9 +1216,6 @@ class PaymentsScreenState extends State<PaymentsScreen> {
             const SizedBox(height: 8),
             DetailRow(
                 'Selected at', _time(r.selectedPaymentMethod!.selectedAt)),
-            const Text(
-                'Billplz does not report which bank, wallet or card processed this payment here.',
-                style: TextStyle(fontSize: 12, color: AppColors.inkSoft))
           ],
         ],
         if (r.hasPremiumVoucher) ...[
@@ -1331,37 +1234,45 @@ class PaymentsScreenState extends State<PaymentsScreen> {
               style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
         ],
         const Divider(height: 20),
-        DetailRow('Created date', r.formattedDate),
-        DetailRow('Last updated', _time(r.data['updatedAtMillis'])),
+        Eyebrow(r.isMembership ? 'Membership' : 'Booking'),
+        DetailRow(r.isMembership ? 'Membership plan' : 'Booked session',
+            r.isMembership ? r.text('planName') : r.sessionSchedule),
+        if (r.text('bookingStatus').isNotEmpty)
+          DetailRow('Booking status', _label(r.text('bookingStatus'))),
+        if (r.text('cancellationReason').isNotEmpty)
+          DetailRow('Cancellation reason', r.text('cancellationReason')),
+        if (r.data['cancelledAtMillis'] != null)
+          DetailRow('Cancelled · MYT', _time(r.data['cancelledAtMillis'])),
+        if (!r.isMembership)
+          DetailRow('Coach / branch',
+              '${r.text('coachName')} / ${r.text('branchName')}'),
+        const Divider(height: 20),
+        const Eyebrow('Timeline & references'),
+        DetailRow('Transaction created · MYT', r.formattedDate),
+        if (r.data['paymentConfirmedAtMillis'] != null)
+          DetailRow('Payment confirmed · MYT',
+              _time(r.data['paymentConfirmedAtMillis'])),
+        DetailRow('Last updated · MYT', _time(r.data['updatedAtMillis'])),
         if (r.data['reviewedAtMillis'] != null)
           DetailRow('Admin decision', _time(r.data['reviewedAtMillis'])),
         if (r.data['refundReservedAtMillis'] != null)
-          DetailRow('Refund attempted', _time(r.data['refundReservedAtMillis'])),
+          DetailRow(
+              'Refund attempted', _time(r.data['refundReservedAtMillis'])),
         if (r.text('refundReference').isNotEmpty)
           DetailRow('Refund reference', r.text('refundReference')),
         if (r.text('refundProviderStatus').isNotEmpty)
           DetailRow('Provider status', r.text('refundProviderStatus')),
         const Divider(height: 20),
-        if (!r.isMembership)
-          DetailRow('Coach / branch',
-              '${r.text('coachName')} / ${r.text('branchName')}'),
         if (r.isMembership) DetailRow('Scope', 'Organization-wide'),
         if (r.text('refundReason').isNotEmpty)
           DetailRow('Member reason', r.text('refundReason')),
         if (r.text('refundNotes').isNotEmpty)
           DetailRow('Member notes', r.text('refundNotes')),
         const Divider(height: 20),
-        DetailRow(
-            'Provider bill ID',
-            r.text('billId').isEmpty
-                ? 'Unknown — recovery required'
-                : r.text('billId')),
-        const Divider(height: 20),
-        DetailRow(
-            'Payment Order ID',
-            r.text('refundOrderId').isEmpty
-                ? 'None recorded'
-                : r.text('refundOrderId')),
+        DetailRow('Provider reference',
+            r.text('billId').isEmpty ? 'Not recorded' : r.text('billId')),
+        if (r.text('refundOrderId').isNotEmpty)
+          DetailRow('Payment Order ID', r.text('refundOrderId')),
         const Divider(height: 20),
         DetailRow(
             'Resolution reason',
@@ -1376,12 +1287,14 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       const SizedBox(height: 16),
       // Safe Action Buttons
       Wrap(spacing: 10, runSpacing: 10, children: [
-        if (r.text('billId').isNotEmpty)
+        if (r.text('provider') != 'xendit' && r.text('billId').isNotEmpty)
           _button(
               'Verify payment',
               () => _action('verify', 'Verify payment',
                   'Read provider status and reconcile this payment. This does not create another bill.')),
-        if (r.text('billId').isEmpty && r.text('paymentStatus') == 'pending')
+        if (r.text('provider') != 'xendit' &&
+            r.text('billId').isEmpty &&
+            r.text('paymentStatus') == 'pending')
           _button(
               'Recover bill',
               () => _action('recover_bill', 'Recover bill',
@@ -1435,8 +1348,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
           const Eyebrow('Payment audit history'),
           if (events.length > 5)
             TextButton(
-              onPressed: () =>
-                  setState(() => _showAllEvents = !_showAllEvents),
+              onPressed: () => setState(() => _showAllEvents = !_showAllEvents),
               child: Text(_showAllEvents
                   ? 'Show recent 5'
                   : 'View all (${events.length})'),
@@ -1444,15 +1356,14 @@ class PaymentsScreenState extends State<PaymentsScreen> {
         ],
       ),
       Panel(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            if (events.isEmpty)
-              const Text('No payment events recorded.')
-            else
-              for (var i = 0; i < visibleEvents.length; i++)
-                _timelineEvent(visibleEvents[i], i == visibleEvents.length - 1),
-          ])),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (events.isEmpty)
+          const Text('No payment events recorded.')
+        else
+          for (var i = 0; i < visibleEvents.length; i++)
+            _timelineEvent(visibleEvents[i], i == visibleEvents.length - 1),
+      ])),
     ];
   }
 
@@ -1557,8 +1468,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                     color: AppColors.primary, size: 18),
                 Text(
                   'Original authoritative payment ledger record',
-                  style:
-                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -1664,9 +1574,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
       child: Text(label));
 
-  String _time(dynamic millis) => millis is num && millis > 0
-      ? DateTime.fromMillisecondsSinceEpoch(millis.toInt()).toLocal().toString()
-      : 'Time unavailable';
+  String _time(dynamic millis) =>
+      PaymentReviewRecord.formatMalaysiaTimestamp(millis);
 }
 
 class _PaymentActionDialog extends StatefulWidget {

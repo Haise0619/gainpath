@@ -50,6 +50,8 @@
               "reconciliation_required"
             ]
           },
+          "provider": { "enum": ["billplz", "xendit"] },
+          "paymentConfirmedAtMillis": { "type": "integer", "minimum": 1 },
           "createdAtMillis": {
             "type": "integer"
           },

@@ -18,6 +18,7 @@ class CommercialPayments extends ConsumerPayments
   String? choiceCode, reviewToken;
   bool existing = false;
   bool recoverLegacy = false;
+  String checkoutUrl = 'https://www.billplz-sandbox.com/bills/original';
   Completer<BookingPaymentMethods>? pending;
   int loads = 0;
   @override
@@ -38,7 +39,7 @@ class CommercialPayments extends ConsumerPayments
       localDate: '2027-01-15',
       holdExpiresAtMillis: expiry,
       serverNowMillis: 1800000000000,
-      checkoutUrl: 'https://www.billplz-sandbox.com/bills/original',
+      checkoutUrl: checkoutUrl,
       selectedPaymentMethod: choiceCode == null || recoverLegacy
           ? null
           : SelectedBookingPaymentMethod(
@@ -263,13 +264,19 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
   testWidgets(
-      'hosted return stays pending until server confirms then shows recorded choice',
+      'Xendit return stays pending until server confirms then shows recorded choice',
       (t) async {
-    final r = CommercialPayments();
-    await show(t, r);
+    final r = CommercialPayments()
+      ..checkoutUrl = 'https://checkout-staging.xendit.co/latest/test-checkout';
+    Uri? opened;
+    await show(t, r, open: (url) async {
+      opened = url;
+      return true;
+    });
     await tap(t, 'Maybank2u');
     await t.tap(find.text('Continue to Payment'));
     await t.pump();
+    expect(opened, Uri.parse(r.checkoutUrl));
     expect(find.text('Payment successful'), findsNothing);
     expect(r.creates, 1);
     r.status = 'confirmed';

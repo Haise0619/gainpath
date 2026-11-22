@@ -10,7 +10,7 @@ const suites = {
   backup: {project: 'demo-gainpath-backup', port: 18086, tests: ['workout-backup']},
   checkin: {project: 'demo-gainpath-checkin', port: 18087, tests: ['app-check-in']},
   reporting: {project: 'demo-gainpath-reporting', port: 18088, storage: 19200,
-    tests: ['admin-reporting', 'admin-workout-reporting', 'admin-check-in-reporting',
+    tests: ['admin-reporting', 'admin-workout-reporting', 'admin-check-in-reporting', 'branch-report',
       'reward-journey', 'reward-cover-upload', 'mini-game-rewards', 'workout-rewards']},
   rounds: {project: 'demo-gainpath-mini-game-rounds', port: 18092, tests: ['mini-game-rounds']},
   participation: {project: 'demo-gainpath-participation', port: 18096, tests: ['mini-game-participation']},

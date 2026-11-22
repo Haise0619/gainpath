@@ -146,11 +146,13 @@ void main() {
     expect(find.text('View details'), findsOneWidget);
     await capture('all-branches');
     await tester.ensureVisible(find.text('View details'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('View details'));
     await tester.pumpAndSettle();
     expect(requests.last, containsPair('branchId', 'old'));
     expect(find.text('Export branch CSV'), findsOneWidget);
     await tester.ensureVisible(find.text('7 days'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('7 days'));
     await tester.pumpAndSettle();
     expect(requests.last, containsPair('branchId', 'old'));

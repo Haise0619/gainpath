@@ -34,7 +34,7 @@ export interface CanonicalSuggestion {
  * must abstain on missing schema/mode/quality; no network inference in a tx. */
 export interface ReviewedCanonicalRuntime {
   scopedDataset?: true;
-  backupSuggestions?(tx: TransactionPort, org: string, member: string, key: string, now: number, historyStart: number): Promise<readonly CanonicalSuggestion[]>;
+  backupSuggestions?(tx: TransactionPort, org: string, member: string, key: string, now: number, historyStart: number, outreach?: boolean): Promise<readonly CanonicalSuggestion[]>;
   personalize?(suggestions:readonly CanonicalSuggestion[],allowAi:boolean):Promise<readonly CanonicalSuggestion[]>;
   reviewId: string; enabledTuples: readonly WorkoutModelTuple[]; notices: readonly ReviewedConsentNoticePolicy[];
   maximumAgeMillis: number; expiresAfterMillis: number; cooldownMillis: number;
@@ -209,7 +209,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
           const id=digestOf({org,member,previewId,kind:suggestion.target.kind,source:'admin_outreach'});
           const old=await tx.get(path(org,id));
           if(old){const r=record(old,org,id,now);if(r.status!=='delivered'||r.suggestion.summary!==suggestion.summary)throw new DomainError('aborted','This recommendation was already sent with another message.');ids.push(id);continue;}
-          const fresh=await runtime.backupSuggestions?.(tx,org,member,suggestion.source.recordKey,now,Math.max(consent.historyStart,now-suggestion.outreach.analysisDays*86400000))??[];
+          const fresh=await runtime.backupSuggestions?.(tx,org,member,suggestion.source.recordKey,now,Math.max(consent.historyStart,now-suggestion.outreach.analysisDays*86400000),true)??[];
           if(!fresh.some(c=>digestOf(c)===suggestion.outreach!.baselineFingerprint))throw new DomainError('failed-precondition','Member context or available content changed. Generate a fresh preview.');
           const target=await runtime.resolveTarget(tx,org,suggestion,now,member);if(!target||digestOf(target.target)!==digestOf(suggestion.target))throw unavailable();
           const r:CanonicalRecord={schemaVersion:1,mode:'workout_backup',organizationId:org,memberId:member,id,revision:1,status:'delivered',suggestion,consentFingerprint,createdAtMillis:now,expiresAtMillis:now+runtime.expiresAfterMillis,deliveredAtMillis:now,readAtMillis:null,acknowledgedAtMillis:null,dismissedAtMillis:null};

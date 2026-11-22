@@ -106,6 +106,19 @@ class LoggedOut extends AuthEvent {
   const LoggedOut();
 }
 
+class GoogleLoginSubmitted extends AuthEvent {
+  const GoogleLoginSubmitted({
+    required this.registering,
+    required this.agreedTerms,
+  });
+
+  final bool registering;
+  final bool agreedTerms;
+
+  @override
+  List<Object?> get props => [registering, agreedTerms];
+}
+
 class AuthRestoreRequested extends AuthEvent {
   const AuthRestoreRequested();
 }
@@ -139,6 +152,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       ));
     });
     on<LoginSubmitted>(_onLoginSubmitted);
+    on<GoogleLoginSubmitted>(_onGoogleLoginSubmitted);
     on<LoggedOut>(_onLoggedOut);
     on<AuthRestoreRequested>(_onRestore);
     on<_SessionChanged>((event, emit) {
@@ -177,6 +191,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   StreamSubscription<AuthSession?>? _subscription;
   int _revision = 0;
   bool _allowSessionEvents = true;
+
+  bool get supportsGoogleSignIn {
+    final repository = _repository;
+    return repository is GoogleAuthActions &&
+        (repository as GoogleAuthActions).supportsGoogleSignIn;
+  }
 
   void _emitSession(AuthSession? session, Emitter<AuthState> emit) {
     if (session == null) {
@@ -253,24 +273,59 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
     final role = state.role;
+    await _submitAuthentication(
+      revision,
+      emit,
+      () => event.registering
+          ? _repository.register(
+              role: role ?? AppRole.member,
+              email: event.email,
+              password: event.password,
+              name: event.name,
+            )
+          : _repository.signIn(
+              role: role,
+              email: event.email,
+              password: event.password,
+            ),
+    );
+  }
+
+  Future<void> _onGoogleLoginSubmitted(
+    GoogleLoginSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state.status != AuthStatus.signedOut ||
+        (state.role != null && state.role != AppRole.member) ||
+        !supportsGoogleSignIn) {
+      return;
+    }
+    if (event.registering && !event.agreedTerms) {
+      emit(state.copyWith(clearErrors: true, message: termsError));
+      return;
+    }
+    final revision = ++_revision;
+    _allowSessionEvents = true;
+    await _submitAuthentication(
+      revision,
+      emit,
+      () => (_repository as GoogleAuthActions)
+          .signInWithGoogle(registering: event.registering),
+    );
+  }
+
+  Future<void> _submitAuthentication(
+    int revision,
+    Emitter<AuthState> emit,
+    Future<AuthSession> Function() authenticate,
+  ) async {
     emit(state.copyWith(
       status: AuthStatus.submitting,
       fieldErrors: CredentialErrors.none,
       clearMessage: true,
     ));
     try {
-      final session = event.registering
-          ? await _repository.register(
-              role: role ?? AppRole.member,
-              email: event.email,
-              password: event.password,
-              name: event.name,
-            )
-          : await _repository.signIn(
-              role: role,
-              email: event.email,
-              password: event.password,
-            );
+      final session = await authenticate();
       if (roundTrip > Duration.zero) await Future<void>.delayed(roundTrip);
       if (revision != _revision || emit.isDone) return;
       session.scope;
@@ -284,6 +339,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         email: session.email,
         session: session,
       ));
+    } on AuthSignInCancelled {
+      if (revision != _revision || emit.isDone) return;
+      emit(state.copyWith(status: AuthStatus.signedOut, clearSession: true));
     } on AuthException catch (error) {
       if (revision != _revision || emit.isDone) return;
       emit(state.copyWith(

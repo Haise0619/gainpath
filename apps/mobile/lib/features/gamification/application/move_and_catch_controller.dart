@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../../../infrastructure/audio/sound_effects.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/move_and_catch.dart';
 import '../domain/move_catch_ports.dart';
@@ -15,6 +16,7 @@ class MoveAndCatchController extends ChangeNotifier {
       this.roundTiming,
       this.competition,
       this.earningAvailable,
+      this.playEffect,
       this.autoStart = false,
       MoveCatchEngine? engine,
       int Function()? clockMicros,
@@ -25,15 +27,35 @@ class MoveAndCatchController extends ChangeNotifier {
     camera.addListener(_cameraChanged);
     roundTiming?.addListener(_notify);
     competition?.addListener(_notify);
-    if (competition != null) {
-      this.engine.onScoreEvent =
-          (type) => competition?.event(type, this.engine.activeMillis);
+    if (playEffect != null || competition != null) {
+      final previousScoreEvent = this.engine.onScoreEvent;
+      this.engine.onScoreEvent = (type) {
+        if (current) {
+          if (type == 'catch') {
+            if (this.engine.missed != _missedAtLastCatch) {
+              _soundFeedback.reset();
+            }
+            _missedAtLastCatch = this.engine.missed;
+            playEffect?.call(_soundFeedback.hit(this.engine.activeMillis));
+          } else {
+            _soundFeedback.reset();
+          }
+        }
+        if (competition != null) {
+          competition!.event(type, this.engine.activeMillis);
+        } else {
+          previousScoreEvent?.call(type);
+        }
+      };
     }
     if (autoTick) {
       _timer = Timer.periodic(const Duration(milliseconds: 33), (_) => tick());
     }
   }
   final SessionScope scope;
+  final void Function(SoundEffect)? playEffect;
+  final _soundFeedback = ArcadeSoundFeedback();
+  int _missedAtLastCatch = 0;
   final SessionScope? Function() activeScope;
   final MoveCatchCamera camera;
   final MoveCatchBestScoreStore bestScores;
@@ -206,6 +228,7 @@ class MoveAndCatchController extends ChangeNotifier {
         !_saving) {
       competition?.finish();
       _roundRecorded = true;
+      if (current) playEffect?.call(SoundEffect.roundEnd);
       _previousBest = bestScoreAvailable ? bestScore : null;
       if (roundTimingConsent) roundTiming?.finish();
       _finishFuture = _finish();
@@ -287,6 +310,8 @@ class MoveAndCatchController extends ChangeNotifier {
         }
         if (!current || _background) return;
       }
+      _soundFeedback.reset();
+      _missedAtLastCatch = 0;
       engine.restart(_clock());
       competition?.reset();
       if (competition != null) unawaited(competition!.loadPreference());

@@ -64,16 +64,16 @@ void main() {
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: MemberRecommendationsView(
-                      repository: repo,
-                      isCurrent: () => true,
-                      compact: true,
-                      loadPage: (
-                              {required bool history, String? afterId}) async =>
-                          MemberRecommendationPage(
-                              records: stage == 'empty' ? [] : [detail]),
-                      onOpenTarget: (_, __) async {},
-                      onViewAll: () {},
-                      onSettings: () {}));
+                    repository: repo,
+                    isCurrent: () => true,
+                    compact: true,
+                    loadPage: (
+                            {required bool history, String? afterId}) async =>
+                        MemberRecommendationPage(
+                            records: stage == 'empty' ? [] : [detail]),
+                    onOpenTarget: (_, __) async {},
+                    onViewAll: () {},
+                  ));
           await t.pumpWidget(RepaintBoundary(
               key: key,
               child: MaterialApp(

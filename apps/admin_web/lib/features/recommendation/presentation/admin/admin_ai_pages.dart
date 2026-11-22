@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:convert';
+import '../../../../infrastructure/firebase/firebase_function_transport.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/admin_ai_repository.dart';
@@ -169,68 +170,208 @@ class _AiContentPlannerPageState extends State<AiContentPlannerPage> {
       if (!_busy && _result == null && _error == null)
         const _Notice(
             'Choose a content type to discover opportunities in your current catalog. You review and edit every draft before saving.'),
-      for (final (index, draft) in suggestions.indexed)
-        if (!_dismissed.contains(index))
-          _Panel(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  Chip(label: Text('${draft['type']}'.toUpperCase())),
-                  Chip(label: Text('${draft['difficulty']}')),
-                  Chip(label: Text('${draft['durationMinutes']} min'))
-                ]),
-                const SizedBox(height: 8),
-                Text('${draft['name']}',
-                    style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text('${draft['description']}'),
-                const SizedBox(height: 12),
-                Text(
-                    '${(draft['muscleGroups'] as List? ?? []).join(' · ')}  •  ${draft['equipment']}'),
-                const SizedBox(height: 12),
-                Text('Why this suggestion',
-                    style: Theme.of(context).textTheme.titleMedium),
-                if (draft['whyRecommended'] != null)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text('${draft['whyRecommended']}')),
-                for (final fact in draft['evidence'] as List? ?? [])
-                  Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Text('$fact')),
-                ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text('Preview details'),
-                    children: [
-                      for (final step in draft['instructions'] as List? ?? [])
-                        ListTile(dense: true, title: Text('$step')),
-                      for (final e in draft['exercises'] as List? ?? [])
-                        ListTile(
-                            dense: true,
-                            title: Text('${e['name']}'),
-                            subtitle: Text(
-                                '${e['sets']} sets · ${e['reps']} ${e['executionMode'] == 'videoGuidedTimed' ? 'seconds' : 'reps'} · ${e['restSeconds']}s rest')),
-                      for (final id in draft['routineIds'] as List? ?? [])
-                        ListTile(
-                            dense: true, title: Text('Published routine: $id')),
-                    ]),
-                Wrap(spacing: 12, runSpacing: 8, children: [
-                  FilledButton.icon(
-                      onPressed: () => _apply(draft),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Apply suggestion')),
-                  TextButton(
-                      onPressed: () => setState(() => _dismissed.add(index)),
-                      child: const Text('Dismiss'))
-                ]),
-              ])),
+      LayoutBuilder(builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1000 &&
+                MediaQuery.textScalerOf(context).scale(1) <= 1.3
+            ? 2
+            : 1;
+        final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
+        return Wrap(spacing: 16, runSpacing: 16, children: [
+          for (final (index, draft) in suggestions.indexed)
+            if (!_dismissed.contains(index))
+              SizedBox(
+                  width: width,
+                  child: _PlannerCard(
+                      draft: draft,
+                      onApply: () => _apply(draft),
+                      onDismiss: () => setState(() => _dismissed.add(index)))),
+        ]);
+      }),
       if (_result != null && _dismissed.length == suggestions.length)
         const _Notice(
             'All suggestions dismissed. Generate again for fresh ideas.'),
     ]);
   }
 }
+
+class _PlannerCard extends StatelessWidget {
+  const _PlannerCard(
+      {required this.draft, required this.onApply, required this.onDismiss});
+  final Map<String, dynamic> draft;
+  final VoidCallback onApply, onDismiss;
+  @override
+  Widget build(BuildContext context) {
+    final type = draft['type'];
+    return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border:
+                Border.all(color: AppColors.primary.withValues(alpha: .12))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            _PlannerTag(type == 'exercise'
+                ? 'NEW MOVEMENT'
+                : type == 'routine'
+                    ? 'WORKOUT ROUTINE'
+                    : 'TRAINING PROGRAM'),
+            _PlannerTag('${draft['difficulty']}'),
+            if (type == 'routine')
+              _PlannerTag('${draft['durationMinutes']} min'),
+            if (type == 'program') _PlannerTag('${draft['weeks']} weeks'),
+          ]),
+          const SizedBox(height: 12),
+          Text('${draft['name']}',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text('${draft['description']}'),
+          const SizedBox(height: 14),
+          Text('Content gap', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Text('${draft['contentGap'] ?? ''}'),
+          const SizedBox(height: 12),
+          Text('AI recommendation reason',
+              style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Text('${draft['whyRecommended'] ?? ''}'),
+          const SizedBox(height: 12),
+          Text('Supporting evidence',
+              style: Theme.of(context).textTheme.labelLarge),
+          for (final fact in (draft['evidence'] as List? ?? []).toSet())
+            Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('• $fact',
+                    style: Theme.of(context).textTheme.bodySmall)),
+          const SizedBox(height: 8),
+          switch (type) {
+            'exercise' => _ExercisePlannerDetails(draft),
+            'routine' => _RoutinePlannerDetails(draft),
+            _ => _ProgramPlannerDetails(draft),
+          },
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, runSpacing: 8, children: [
+            FilledButton.icon(
+                onPressed: onApply,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Apply suggestion')),
+            TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
+          ]),
+        ]));
+  }
+}
+
+class _PlannerTag extends StatelessWidget {
+  const _PlannerTag(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: .07),
+          borderRadius: BorderRadius.circular(8)),
+      child: Text(text,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppColors.primary)));
+}
+
+class _ExercisePlannerDetails extends StatelessWidget {
+  const _ExercisePlannerDetails(this.draft);
+  final Map<String, dynamic> draft;
+  @override
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 8),
+        Text('${draft['primaryMuscleGroup']} · ${draft['category']}'),
+        Text('Equipment: ${draft['equipment']}'),
+        if ('${draft['variantDifference'] ?? ''}'.isNotEmpty)
+          Text('Distinct variant: ${draft['variantDifference']}'),
+        ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Preview details'),
+            children: [
+              for (final (i, step)
+                  in (draft['instructions'] as List? ?? []).indexed)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('${i + 1}. $step'))),
+            ]),
+      ]);
+}
+
+class _RoutinePlannerDetails extends StatelessWidget {
+  const _RoutinePlannerDetails(this.draft);
+  final Map<String, dynamic> draft;
+  @override
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 8),
+        Text(
+            '${(draft['exercises'] as List? ?? []).length} exercises · ${draft['equipment']}'),
+        ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Preview details'),
+            children: [
+              for (final e in draft['exercises'] as List? ?? [])
+                ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text('${e['name']}'),
+                    subtitle: Text(
+                        '${e['sets']} sets · ${e['reps']} ${e['executionMode'] == 'videoGuidedTimed' ? 'seconds' : 'reps'} · ${e['restSeconds']}s rest')),
+            ]),
+      ]);
+}
+
+class _ProgramPlannerDetails extends StatelessWidget {
+  const _ProgramPlannerDetails(this.draft);
+  final Map<String, dynamic> draft;
+  @override
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 8),
+        Text(
+            '${(draft['trainingDays'] as List? ?? []).length} training days per week · remaining days rest'),
+        ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Preview details'),
+            children: [
+              for (final day in draft['trainingDays'] as List? ?? [])
+                ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text('${const [
+                      'Mon',
+                      'Tue',
+                      'Wed',
+                      'Thu',
+                      'Fri',
+                      'Sat',
+                      'Sun'
+                    ][(day['weekday'] as int) - 1]} · ${day['routineName']}')),
+            ]),
+      ]);
+}
+
+String _experienceLabel(dynamic value) => switch (value) {
+      'beginner' => 'Beginner',
+      'intermediate' => 'Intermediate',
+      'advanced' => 'Advanced',
+      _ => 'Not recorded'
+    };
+String _goalLabel(dynamic goal) => switch (goal) {
+      'increaseFlexibility' => 'Improve Flexibility',
+      'generalFitness' => 'General Fitness',
+      'buildMuscle' => 'Build Muscle',
+      'loseWeight' => 'Lose Weight',
+      'improveEndurance' => 'Improve Endurance',
+      'reduceStress' => 'Reduce Stress',
+      _ => '$goal',
+    };
 
 class AiMemberOutreachPage extends StatefulWidget {
   const AiMemberOutreachPage({super.key, this.repository});
@@ -241,6 +382,11 @@ class AiMemberOutreachPage extends StatefulWidget {
 
 class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
   int _days = 30, _epoch = 0;
+  String? _homeBranchId;
+  List<Map<String, dynamic>> _homeBranches = [];
+  final _searchQuery = TextEditingController();
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _searched = false, _nearGenerate = false;
   bool _busy = false;
   String? _error, _success;
   List<Map<String, dynamic>> _members = [];
@@ -265,14 +411,17 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
   @override
   void dispose() {
     _clearPreview();
+    _searchQuery.dispose();
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function(int) operation) async {
+  Future<void> _run(Future<void> Function(int) operation,
+      {bool generation = false}) async {
     if (_busy || widget.repository == null) return;
     final epoch = ++_epoch;
     setState(() {
       _busy = true;
+      _nearGenerate = generation;
       _error = null;
       _success = null;
     });
@@ -281,7 +430,7 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
     } catch (error) {
       if (mounted && epoch == _epoch) {
         setState(() => _error = _failure(error,
-            'This action could not be completed. Confirm permissions, content availability and cooldown, then retry.'));
+            'This action could not be completed. Check permissions and content availability. Your loaded analysis is retained.'));
       }
     } finally {
       if (mounted && epoch == _epoch) setState(() => _busy = false);
@@ -289,13 +438,31 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
   }
 
   Future<void> _load() => _run((epoch) async {
-        final r =
-            await widget.repository!.call('admin.ai.members', {'days': _days});
+        final r = await widget.repository!.call('admin.ai.members', {
+          'days': _days,
+          if (_homeBranchId != null) 'branchId': _homeBranchId,
+        });
         if (mounted && epoch == _epoch) {
           setState(() {
             _members = (r['members'] as List).map(aiMap).toList();
+            _homeBranches = (r['branches'] as List? ?? []).map(aiMap).toList();
             _analysis = null;
             _clearPreview();
+          });
+        }
+      });
+  Future<void> _search() => _run((epoch) async {
+        if (_searchQuery.text.trim().length < 2) {
+          throw StateError('Enter at least two characters.');
+        }
+        final r = await widget.repository!.call('admin.ai.member.search', {
+          'query': _searchQuery.text.trim(),
+          if (_homeBranchId != null) 'branchId': _homeBranchId,
+        });
+        if (mounted && epoch == _epoch) {
+          setState(() {
+            _searched = true;
+            _searchResults = (r['members'] as List? ?? []).map(aiMap).toList();
           });
         }
       });
@@ -323,7 +490,7 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
             }
           });
         }
-      });
+      }, generation: true);
   Future<void> _send() => _run((epoch) async {
         await widget.repository!.call('admin.ai.outreach.send', {
           'previewId': _preview!['previewId'],
@@ -339,7 +506,7 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
             _clearPreview();
           });
         }
-      });
+      }, generation: true);
   String _date(dynamic value) => value is num
       ? DateTime.fromMillisecondsSinceEpoch(value.toInt())
           .toLocal()
@@ -347,12 +514,7 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
           .substring(0, 16)
       : 'No recent workout';
   @override
-  Widget build(BuildContext context) => _AiScaffold(children: [
-        const _AiHeading(
-            icon: Icons.people_alt_outlined,
-            title: 'AI Member Outreach',
-            subtitle:
-                'Identify active members and generate personalized fitness recommendations.'),
+  Widget build(BuildContext context) => _OutreachWorkspace(left: [
         Row(children: [
           Expanded(
               child: _Period(
@@ -368,16 +530,86 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
               tooltip: 'Reload members',
               icon: const Icon(Icons.refresh))
         ]),
+        if (_homeBranches.isNotEmpty)
+          DropdownButtonFormField<String>(
+            initialValue: _homeBranches.any((branch) => branch['id'] == _homeBranchId)
+                ? _homeBranchId
+                : '',
+            decoration: const InputDecoration(labelText: 'Home branch'),
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('All Branches')),
+              for (final branch in _homeBranches)
+                DropdownMenuItem(
+                  value: branch['id'] as String,
+                  child: Text(branch['name'] as String, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: _busy ? null : (value) {
+              setState(() {
+                _homeBranchId = value == '' ? null : value;
+                _searched = false;
+                _searchResults = [];
+                _members = [];
+                _analysis = null;
+                _clearPreview();
+              });
+              _load();
+            },
+          ),
+        _Panel(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Search members',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text('Search by name, email or member ID.'),
+          const SizedBox(height: 12),
+          TextField(
+              controller: _searchQuery,
+              enabled: !_busy,
+              maxLength: 80,
+              onSubmitted: (_) => _search(),
+              decoration: const InputDecoration(
+                  labelText: 'Member name, email or ID',
+                  prefixIcon: Icon(Icons.search))),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+              onPressed: _busy ? null : _search,
+              icon: const Icon(Icons.search),
+              label: const Text('Search members')),
+          if (_searched && _searchResults.isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text(
+                    'No active members matched. Try another name, email or member ID.')),
+          for (final m in _searchResults)
+            ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${m['name']}'),
+                subtitle: Text(m['isTest'] == true
+                    ? 'TEST account · excluded from activity ranking'
+                    : m['canAnalyze'] == false
+                        ? '${m['reason']}'
+                        : 'Available for analysis'),
+                trailing: IconButton(
+                    tooltip: 'Analyze search result',
+                    onPressed: _busy || m['canAnalyze'] == false
+                        ? null
+                        : () => _analyze('${m['memberId']}'),
+                    icon: const Icon(Icons.arrow_forward))),
+        ])),
         if (_busy)
           const _Loading(
               'Loading confirmed data. AI runs only when you select Generate.'),
-        if (_error != null) _Notice(_error!, error: true),
+        if (_error != null && (!_nearGenerate || _analysis == null))
+          _Notice(_error!, error: true),
         if (_success != null) _Notice(_success!),
         _Panel(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Top 10 most active members',
-              style: Theme.of(context).textTheme.titleLarge),
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(
               'Completed workout summaries · last $_days days · test and synthetic activity excluded'),
@@ -385,92 +617,66 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
           if (_members.isEmpty && !_busy)
             const Text(
                 'No eligible workout activity in this period. Only authorized, consenting members with real completed summaries appear.'),
-          LayoutBuilder(
-              builder: (context, constraints) => constraints.maxWidth >= 850
-                  ? SizedBox(
-                      width: double.infinity,
-                      child: DataTable(
-                          headingTextStyle:
-                              Theme.of(context).textTheme.titleMedium,
-                          dataTextStyle: Theme.of(context).textTheme.bodyMedium,
-                          headingRowHeight: 44,
-                          dataRowMinHeight: 60,
-                          dataRowMaxHeight: 70,
-                          columnSpacing: 22,
-                          horizontalMargin: 0,
-                          columns: const [
-                            DataColumn(label: Text('#')),
-                            DataColumn(label: Text('Member / Goal')),
-                            DataColumn(label: Text('Workouts')),
-                            DataColumn(label: Text('Routine days')),
-                            DataColumn(label: Text('Last workout')),
-                            DataColumn(label: Text(''))
-                          ],
-                          rows: [
-                            for (final (index, m) in _members.indexed)
-                              DataRow(cells: [
-                                DataCell(Text('${index + 1}')),
-                                DataCell(Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text('${m['name']}'),
-                                      Text(
-                                          (m['goals'] as List? ?? [])
-                                              .join(', '),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall)
-                                    ])),
-                                DataCell(Text('${m['workouts']}')),
-                                DataCell(Text('${m['completedRoutines']}')),
-                                DataCell(Text(_date(m['lastWorkout']))),
-                                DataCell(IconButton(
-                                    tooltip: 'Analyze member',
-                                    onPressed: _busy
-                                        ? null
-                                        : () => _analyze('${m['memberId']}'),
-                                    icon: const Icon(Icons.arrow_forward)))
-                              ])
-                          ]))
-                  : Column(children: [
-                      for (final (index, m) in _members.indexed)
-                        Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: CircleAvatar(
-                                    backgroundColor: AppColors.surfaceAlt,
-                                    child: Text('${index + 1}')),
-                                title: Text('${m['name']}'),
-                                subtitle: Text(
-                                    '${(m['goals'] as List? ?? []).join(', ')}\n${m['workouts']} workouts · ${m['completedRoutines']} completed routine days\nLast workout ${_date(m['lastWorkout'])}'),
-                                isThreeLine: true,
-                                trailing: IconButton(
-                                    tooltip: 'Analyze member',
-                                    onPressed: _busy
-                                        ? null
-                                        : () => _analyze('${m['memberId']}'),
-                                    icon: const Icon(Icons.arrow_forward)),
-                                onTap: _busy
-                                    ? null
-                                    : () => _analyze('${m['memberId']}'))),
-                    ])),
+          Column(children: [
+            for (final (index, m) in _members.indexed)
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                          backgroundColor: AppColors.surfaceAlt,
+                          child: Text('${index + 1}')),
+                      title: Text('${m['name']}'),
+                      subtitle: Text(
+                          '${(m['goals'] as List? ?? []).map(_goalLabel).join(', ')}\n${m['workouts']} workouts · ${m['completedRoutines']} completed routine days\nLast workout ${_date(m['lastWorkout'])}'),
+                      isThreeLine: true,
+                      trailing: IconButton(
+                          tooltip: 'Analyze member',
+                          onPressed:
+                              _busy ? null : () => _analyze('${m['memberId']}'),
+                          icon: const Icon(Icons.arrow_forward)),
+                      onTap:
+                          _busy ? null : () => _analyze('${m['memberId']}'))),
+          ]),
         ])),
         if (_analysis != null)
           _Panel(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                Text('Selected member',
+                    style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 8),
                 Text('${_analysis!['name']}',
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Home branch: ${_analysis!['homeBranchName'] ?? 'Unassigned'}'),
+                Text(
+                    'Goal: ${(_analysis!['goals'] as List? ?? []).map(_goalLabel).join(', ')}'),
+                Text(
+                    'Experience: ${_experienceLabel(_analysis!['experience'])}'),
+              ])),
+      ], right: [
+        if (_analysis == null)
+          const _Notice(
+              'Select a member to review workout activity and generate recommendations.'),
+        if (_analysis != null)
+          _Panel(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('${_analysis!['name']}',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Text(
-                    '${(_analysis!['goals'] as List? ?? []).join(' · ')}  •  ${_analysis!['experience'] ?? 'Experience not recorded'}'),
+                    '${(_analysis!['goals'] as List? ?? []).map(_goalLabel).join(' · ')}  •  ${_experienceLabel(_analysis!['experience'])}'),
                 const SizedBox(height: 8),
                 Text(
                     '${_analysis!['workouts']} workouts / $_days days · ${_analysis!['completedRoutines']} completed routine days'),
+                if (_analysis!['activityNote'] is String)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text('${_analysis!['activityNote']}',
+                          style: Theme.of(context).textTheme.bodySmall)),
                 for (final e in _analysis!['exercises'] as List? ?? [])
                   ListTile(
                       dense: true,
@@ -496,11 +702,20 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
                 const SizedBox(height: 12),
                 FilledButton.icon(
                     onPressed: _busy ? null : _generate,
+                    style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16)),
                     icon: const Icon(Icons.auto_awesome, size: 18),
                     label: const Text('Generate AI recommendations')),
+                if (_error != null && _nearGenerate)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _Notice(_error!, error: true)),
               ])),
         if (_preview != null) ...[
-          _AiMetrics(value: _preview!['ai']),
+          if ((_preview!['availabilityNotes'] as List? ?? []).isNotEmpty)
+            Text((_preview!['availabilityNotes'] as List).join(' '),
+                style: Theme.of(context).textTheme.bodySmall),
           if (_messages.isEmpty)
             _Notice(
                 '${_preview!['message'] ?? 'No eligible recommendations are available.'}'),
@@ -521,13 +736,15 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
                                     : _selected.remove(index);
                               }),
                       title: Text('${r['title']}',
-                          style: Theme.of(context).textTheme.titleLarge),
+                          style: Theme.of(context).textTheme.titleMedium),
                       subtitle: Text(
                           '${r['kind'] == 'content' ? 'Tutorial' : r['kind'] == 'trainer' ? 'Coach' : 'Routine'} · Gemini')),
                   _OutreachImage(
                       key: ValueKey(
                           '${_preview!['previewId']}:$index:${r['target']?['photoPath']}'),
-                      target: aiMap(r['target'])),
+                      target: aiMap(r['target']),
+                      organizationId: widget.repository!.organizationId,
+                      isCurrent: () => widget.repository?.current == true),
                   TextField(
                       controller: _messages[index],
                       enabled: !_busy,
@@ -563,6 +780,9 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
                       label: const Text('Preview details')),
                 ])),
           if (_messages.isNotEmpty)
+            Text('${_selected.length} selected',
+                style: Theme.of(context).textTheme.labelLarge),
+          if (_messages.isNotEmpty)
             Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
@@ -570,8 +790,45 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
                     icon: const Icon(Icons.send_outlined, size: 18),
                     label: Text(
                         'Send ${_selected.length} recommendation${_selected.length == 1 ? '' : 's'}'))),
+          _AiMetrics(value: _preview!['ai']),
         ],
       ]);
+}
+
+class _OutreachWorkspace extends StatelessWidget {
+  const _OutreachWorkspace({required this.left, required this.right});
+  final List<Widget> left, right;
+  Widget _column(List<Widget> children) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final child in children)
+          Padding(padding: const EdgeInsets.only(bottom: 14), child: child)
+      ]);
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, size) {
+        final wide = size.maxWidth >= 1000 &&
+            MediaQuery.textScalerOf(context).scale(1) <= 1.3;
+        return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('AI Member Outreach',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 4),
+                  const Text(
+                      'Review member activity, personalize recommendations and send selected guidance.'),
+                  const SizedBox(height: 18),
+                  if (wide)
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 340, child: _column(left)),
+                          const SizedBox(width: 20),
+                          Expanded(child: _column(right)),
+                        ])
+                  else ...[_column(left), _column(right)],
+                ]));
+      });
 }
 
 class _AiScaffold extends StatelessWidget {
@@ -688,8 +945,14 @@ class _AiMetrics extends StatelessWidget {
 }
 
 class _OutreachImage extends StatefulWidget {
-  const _OutreachImage({super.key, required this.target});
+  const _OutreachImage(
+      {super.key,
+      required this.target,
+      required this.organizationId,
+      required this.isCurrent});
   final Map<String, dynamic> target;
+  final String organizationId;
+  final bool Function() isCurrent;
   @override
   State<_OutreachImage> createState() => _OutreachImageState();
 }
@@ -699,9 +962,29 @@ class _OutreachImageState extends State<_OutreachImage> {
       widget.target['photoPath'] is String ? _load() : null;
   Future<Uint8List?> _load() async {
     try {
-      return await FirebaseStorage.instance
-          .ref(widget.target['photoPath'] as String)
-          .getData(5 * 1024 * 1024);
+      if (!widget.isCurrent()) return null;
+      final coachId =
+          widget.target['target']?['coachId'] ?? widget.target['coachId'];
+      if (coachId is! String || coachId.isEmpty) return null;
+      final result =
+          await firebaseCallable('getCoachPublishedPhotoCommand').call({
+        'schemaVersion': 1,
+        'organizationId': widget.organizationId,
+        'coachId': coachId,
+      });
+      if (!widget.isCurrent()) return null;
+      final data = aiMap(result.data);
+      final encoded = data['bytesBase64'];
+      if (data['schemaVersion'] != 1 ||
+          data['photoPath'] != widget.target['photoPath'] ||
+          encoded is! String ||
+          encoded.length > 7 * 1024 * 1024 ||
+          !['image/jpeg', 'image/png', 'image/webp']
+              .contains(data['contentType'])) {
+        return null;
+      }
+      final bytes = base64Decode(encoded);
+      return bytes.length <= 5 * 1024 * 1024 ? bytes : null;
     } catch (_) {
       return null;
     }
@@ -724,7 +1007,10 @@ class _OutreachImageState extends State<_OutreachImage> {
                   alignment: Alignment.centerLeft,
                   child: ClipOval(
                       child: Image.memory(snapshot.data!,
-                          width: 64, height: 64, fit: BoxFit.cover))));
+                          width: 88,
+                          height: 88,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _placeholder))));
     }
     final url = widget.target['imageUrl'];
     if (url is! String || url.isEmpty) return _placeholder;

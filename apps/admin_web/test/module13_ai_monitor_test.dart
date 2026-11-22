@@ -133,14 +133,25 @@ void main() {
   testWidgets(
       'details show saved context, goals and actual method with technical foldout',
       (t) async {
-    final h = CanonicalAdminHarness()..record = aiMonitorRecord();
+    final record = aiMonitorRecord();
+    final suggestion = record['suggestion']! as Map<String, Object?>;
+    (suggestion['ai']! as Map<String, Object?>).addAll({
+      'candidateCount': 2,
+      'ruleFirstLabel': 'Baseline Routine',
+      'geminiFirstLabel': 'Selected Routine',
+      'changedTopChoice': true,
+    });
+    final h = CanonicalAdminHarness()..record = record;
     await show(t, h);
-    await t.tap(find.text('View'));
+    await t.tap(find.text('View Details'));
     await t.pumpAndSettle();
     expect(find.text('3 completed workouts this week with 30 squat reps.'),
         findsOneWidget);
     expect(find.text('Build strength'), findsOneWidget);
     expect(find.text('Beginner experience'), findsOneWidget);
+    expect(find.text('Baseline Routine'), findsOneWidget);
+    expect(find.text('Selected Routine'), findsOneWidget);
+    expect(find.text('Yes'), findsOneWidget);
     expect(find.text('gemini-2.5-flash').hitTestable(), findsNothing);
     await t.ensureVisible(find.text('Technical Details'));
     await t.tap(find.text('Technical Details'));
@@ -198,8 +209,8 @@ void main() {
       final h = CanonicalAdminHarness()..record = aiMonitorRecord();
       await show(t, h, width: layout.$1, scale: layout.$2);
       expect(t.takeException(), isNull);
-      await t.ensureVisible(find.text('View'));
-      await t.tap(find.text('View'));
+      await t.ensureVisible(find.text('View Details'));
+      await t.tap(find.text('View Details'));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await t.ensureVisible(find.text('Close'));

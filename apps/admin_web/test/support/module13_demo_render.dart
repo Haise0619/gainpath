@@ -22,9 +22,9 @@ Future<void> captureDemo(WidgetTester tester, Key key, String name) async {
   await tester.runAsync(() async {
     final image = await boundary.toImage(pixelRatio: 1),
         bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    await File(
-            'C:/Users/Ngzhe/StudioProjects/gainpath/build/module13-firebase-demo/$name.png')
-        .writeAsBytes(bytes!.buffer.asUint8List());
+    final file = File('../../build/module13-firebase-demo/$name.png');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
 }

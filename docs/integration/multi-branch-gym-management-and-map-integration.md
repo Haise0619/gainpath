@@ -1,5 +1,16 @@
 # Multi-branch gym management and map integration
 
+## Phase 7 — Assistant branch routing (19 November 2026)
+
+The exported Singapore fitnessAssistantCommand had an anchored branch fast path and a Gemini registry without branch tools. The production archive reproduced that mismatch. The fast path now handles clear current/home/nearby questions, while unmatched natural language can invoke lookup_gym with validated structured arguments. The server resolves directory, details, opening hours, facilities, equipment and verified coaching options using the signed-in organization. In public mode, the app can send the last branch card name as a reference, while prior conversation text stays out of the provider request. Nearby uses the existing permission-gated on-device finder.
+
+Production source-only release: fitnessassistantcommand-00007-hiv, SHA-256 f693cae42cebc7407574a055556d7939f39b2201c61c9f6ebe9d77c7e50fb5af. Runtime and IAM verified, anonymous calls return 401. Rollback: build/multi-branch-release/phase7-asia-southeast1-FRLSwD/rollback.zip.
+
+Verification: 57 backend tests, TypeScript test typecheck, Functions build, Flutter DTO and widget suites, scoped Dart analysis and Android Debug build passed. Read-only production Assistant bootstrap returned 200 with existing ordinary and FYP test identities. Missing Auth and missing App Check returned 401, and foreign organization returned 403. Production reply was not invoked because reply updates the existing rate-limit state. Real Gemini was not called by verification. APK: apps/mobile/build/app/outputs/flutter-apk/app-debug.apk.
+
+Manual acceptance: ask “which gym i currently using” after changing Selected Branch; ask “whats my home branch”; ask “which gym iz nearest to me” and open the finder with location allowed and denied; ask “where is gainpath 2” followed by “what time does it close”, “does it have a treadmill”, and “how do I get there”; ask for Jackson’s available times in each branch and compare against the existing booking view; ask a normal fitness question. Real Gemini phrasing and physical location/navigation remain pending. Rendered fixture screenshots: build/chatbot-message-refinement/screenshots/branch-card.png and nearby-gyms.png.
+
+
 ## Phase 6 — Reports simplification (19 November 2026)
 
 **Superseded — Replaced by Dedicated Branch Analytics:** Global Branch Filter across all Reports Categories.
@@ -84,6 +95,16 @@
 - Booking, coach publication and availability already use branch assignments and active branch records. Current booking admission uses organization-wide paid entitlement and actual Coach assignment. Existing payment records retain their original branch references.
 - Provisioning assigns Main Branch through `primaryBranchId` and `branchIds`. The new preference uses `users/{uid}.homeBranchId`; older accounts fall back to their existing primary branch. Preference is separate from access authorization.
 - The equipment catalog is already organization-scoped. Branch inventory, visit records, nearby sort and branch-scoped AI or reporting remain follow-up items. Existing app Daily Check-in continues to track its own gamification activity.
+
+## Admin Branch Management Hub
+
+The Admin console owns the Branches breadcrumb and browser routes. The directory opens in Grid view and retains search, status, view and marker selection when the administrator opens another branch page. Summary cards count authorized records currently available to the directory and label paginated results as loaded branches.
+
+- `BranchDirectoryPage` holds the existing directory request and cursor state. `branch_admin_directory.dart` renders the grid, split map and branch overview. Branch-specific Equipment and Check-in & visits use `BranchActivityPage`. Members, Bookings, Coaches and Reports reuse their established branch-scoped views.
+- The editor opens at `/console/branches/add` or `/console/branches/<id>/edit`. The permanent ID stays immutable on rename. Covers use the existing JPG/PNG upload and the branch keeps the saved URL only after a successful form save. Location picking stages a coordinate pair independently of the street address until confirmation.
+- Opening hours use the existing Monday-first, seven-day Malaysia time schedule. The supported day states are Closed, 24 hours and a single interval that can cross midnight. An unset schedule remains unavailable. Facilities remain free-text values.
+- New forms preselect Active, consistent with the prior editor. Inactive branches remain available to administrators for supported operations and visit history. Only active branches can generate new visit QR codes.
+- The directory map uses saved coordinates and OpenStreetMap. Administrators can still manage branches without valid coordinates. Tile status distinguishes loading, partial coverage and failure. Manual retry uses the current viewport. The existing branch callable remains authoritative for authorization and mutations.
 
 ## Local implementation
 

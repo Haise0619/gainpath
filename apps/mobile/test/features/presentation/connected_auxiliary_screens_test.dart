@@ -118,10 +118,11 @@ void main() {
         home: MembershipDashboardScreen(
             connected: true, repository: MembershipFake())));
     await tester.pumpAndSettle();
-    expect(find.text('Free'), findsOneWidget);
-    expect(find.text('Upgrade'), findsOneWidget);
+    expect(find.text('Free Membership'), findsOneWidget);
+    expect(find.text('Explore Membership Plans'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Billing history'), 180);
     expect(find.text('No membership payments yet.'), findsOneWidget);
-    expect(find.text('View all billing history'), findsOneWidget);
+    expect(find.text('Billing history'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

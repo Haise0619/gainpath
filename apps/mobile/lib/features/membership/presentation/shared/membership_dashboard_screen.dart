@@ -43,7 +43,9 @@ class MembershipDashboardScreen extends StatelessWidget {
             ? 'Verification required'
             : e.historicalOnly
                 ? 'Last verified tier · $tier'
-                : expired ? 'Membership Expired' : '$tier Membership';
+                : expired
+                    ? 'Membership Expired'
+                    : '$tier Membership';
         final action = !verified
             ? 'Verify Membership'
             : expired
@@ -109,7 +111,8 @@ class MembershipDashboardScreen extends StatelessWidget {
                     if (paid && !e.historicalOnly)
                       const Padding(
                           padding: EdgeInsets.only(top: 10),
-                          child: Text('Renew anytime. Your remaining membership time will be preserved.')),
+                          child: Text(
+                              'Renew anytime. Your remaining membership time will be preserved.')),
                     const SizedBox(height: 18),
                     SizedBox(
                         width: double.infinity,
@@ -120,6 +123,15 @@ class MembershipDashboardScreen extends StatelessWidget {
                                     ? RenewScreen(repository: repo)
                                     : BrowsePlansScreen(repository: repo)),
                             child: Text(action))),
+                    if (verified && paid && e.paidPlanId == 'basic')
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              open(BrowsePlansScreen(repository: repo)),
+                          child: const Text('Upgrade to Premium'),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     const Text('No automatic renewal or recurring charge.',
                         style:

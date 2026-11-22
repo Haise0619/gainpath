@@ -35,14 +35,28 @@ void main() {
     expect(engine.calibrationProgress, 0);
     expect(engine.trackingReady, isFalse);
   });
-  test('one fresh movement reaches near the edge without several frames of lag',
+  test('small torso sway stays centered and a deliberate lean moves smoothly',
       () {
     final d = Driver()..play();
+    d.step(center: .52);
+    expect(d.engine.playerX, closeTo(.5, .001));
     d.step(center: 0);
-    expect(d.engine.playerX, lessThan(.15));
+    expect(d.engine.playerX, inInclusiveRange(.12, .18));
+    d.run(250000, center: 0);
+    expect(d.engine.playerX, closeTo(.08, .01));
     final left = d.engine.playerX;
     d.run(1000000, frame: false);
     expect(d.engine.playerX, left);
+  });
+  test('a short delivery gap holds position without showing a warning', () {
+    final d = Driver()..play();
+    d.run(350000, frame: false);
+    expect(d.engine.trackingReady, isFalse);
+    expect(d.engine.inTrackingGrace, isFalse);
+    d.run(200000, frame: false);
+    expect(d.engine.inTrackingGrace, isTrue);
+    d.step();
+    expect(d.engine.inTrackingGrace, isFalse);
   });
   test(
       'brief tracking loss warns but continues at held position and recovers automatically',

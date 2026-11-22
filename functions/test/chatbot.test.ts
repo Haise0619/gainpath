@@ -51,7 +51,7 @@ describe('fitness assistant boundaries', () => {
     await runGemini('key', 'Explain a warm-up', [{ role: 'assistant', text: 'PRIVATE: you completed 456 sessions' }], async () => ({ privateDeviceFact: 999 }), fetcher);
     const payload = fetcher.mock.calls[0][1].body;
     expect(payload).not.toContain('PRIVATE'); expect(payload).not.toContain('456'); expect(payload).not.toContain('privateDeviceFact');
-    expect(JSON.parse(payload).tools[0].functionDeclarations.map((t: any) => t.name)).toEqual(['list_coaches', 'get_coaching_options', 'propose_booking']);
+    expect(JSON.parse(payload).tools[0].functionDeclarations.map((t: any) => t.name)).toEqual(['lookup_gym', 'list_coaches', 'get_coaching_options', 'propose_booking']);
     vi.unstubAllEnvs();
   });
   it('rejects personal tools before execution or a second provider turn in public mode', async () => {

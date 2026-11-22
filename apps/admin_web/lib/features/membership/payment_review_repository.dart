@@ -248,16 +248,16 @@ class PaymentReviewRecord {
   bool get isReconciliationCase => needsReview;
 
   /// Formatted date string for table rows (e.g. "20 Oct 2026, 10:00 AM")
-  String get formattedDate =>
-      _formatTimestamp(data['createdAtMillis'] ?? data['updatedAtMillis']);
+  String get formattedDate => formatMalaysiaTimestamp(data['createdAtMillis']);
 
   /// Formatted update date string
-  String get formattedUpdatedDate =>
-      _formatTimestamp(data['updatedAtMillis'] ?? data['createdAtMillis']);
+  String get formattedUpdatedDate => formatMalaysiaTimestamp(
+      data['updatedAtMillis'] ?? data['createdAtMillis']);
 
-  static String _formatTimestamp(dynamic millis) {
+  static String formatMalaysiaTimestamp(dynamic millis) {
     if (millis is! num || millis <= 0) return 'Date unavailable';
-    final dt = DateTime.fromMillisecondsSinceEpoch(millis.toInt()).toLocal();
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis.toInt(), isUtc: true)
+        .add(const Duration(hours: 8));
     const months = [
       'Jan',
       'Feb',

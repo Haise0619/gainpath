@@ -229,7 +229,14 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
               children: [
                 SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: DataTable(columns: const [
+                    child: DataTable(
+                        border: const TableBorder(
+                          horizontalInside:
+                              BorderSide(color: AppColors.hairline, width: 0.8),
+                        ),
+                        headingRowColor:
+                            WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
                       DataColumn(label: Text('Date')),
                       DataColumn(label: Text('Claims'), numeric: true),
                       DataColumn(label: Text('Members'), numeric: true),

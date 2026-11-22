@@ -8,11 +8,17 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gainpath_admin_web/app/di/admin_presentation_dependencies.dart';
+import 'package:gainpath_admin_web/app/di/app_repositories.dart';
+import 'package:gainpath_admin_web/app/routing/admin_console_navigation.dart';
+import 'package:gainpath_admin_web/app/shells/admin_shell.dart';
 import 'package:gainpath_admin_web/features/identity/presentation/admin/members_screen.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 import '../../../test_support/fyp_render_support.dart';
+import 'support/empty_coach_directory.dart';
 
 class _Directory implements AdminMemberDirectoryRepository {
   bool created = false;
@@ -54,6 +60,15 @@ class _Directory implements AdminMemberDirectoryRepository {
       );
 }
 
+const _testSession = AuthSession(
+  userId: 'fixture-admin',
+  organizationId: 'fixture-org',
+  branchIds: ['east'],
+  displayName: 'Fixture Admin',
+  email: 'admin@example.test',
+  role: AppRole.admin,
+);
+
 void main() {
   setUpAll(() async {
     final sdk = Platform.environment['FLUTTER_ROOT'] ?? 'C:/flutter';
@@ -66,7 +81,102 @@ void main() {
   });
 
   testWidgets(
-      'Admin creates a member through the directory modal and refreshes',
+      'Add Member preserves the directory and protects an unsaved draft',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    addTearDown(await installFypOfflineFonts());
+    await tester.pumpWidget(AppRepositories.injected(
+      coachRepositoryFactory: (scope, _) =>
+          EmptyCoachDirectoryRepository(scope),
+      accountContactFactory: (scope, _) =>
+          NeutralAdminAccountContactRepository(scope: scope),
+      memberDirectoryFactory: (_, __) => _Directory(),
+      session: _testSession,
+      child: AdminConsoleApp(
+        theme: AppTheme.build(),
+        title: 'GainPath Admin',
+        home: AdminShell(
+          liveSession: _testSession,
+          branchRequest: (_) async => {
+            'records': [
+              {
+                'branchId': 'east',
+                'displayName': 'Fixture East Branch',
+                'status': 'active',
+              },
+            ],
+          },
+          memberSetupRequest: (input) async {
+            expect(input['action'], 'describe');
+            return {'members': []};
+          },
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final router = AdminConsoleNavigation.maybeOf(
+        tester.element(find.byType(AdminShell)))!;
+    await router.setNewRoutePath(Uri.parse('/console/members'));
+    await tester.pumpAndSettle();
+
+    final search = find.byType(TextField);
+    await tester.enterText(search, 'fixture');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-member')));
+    await tester.pumpAndSettle();
+
+    expect(router.uri.path, '/console/members/add');
+    expect(find.text('Add New Member'), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    final crumb = find.widgetWithText(InkWell, 'Members').last;
+    expect(find.text('Add Member'), findsOneWidget);
+    expect(tester.getCenter(find.text('Add Member')).dy,
+        tester.getCenter(crumb).dy);
+    expect(tester.getTopLeft(find.text('Free Plan')).dx,
+        greaterThan(tester.getTopRight(find.byType(TextFormField).first).dx));
+
+    await tester.enterText(find.byType(TextFormField).first, 'Draft member');
+    await router.setNewRoutePath(Uri.parse('/console/members'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard member onboarding?'), findsOneWidget);
+    await tester.tap(find.descendant(
+      of: find.byType(AdminDialog),
+      matching: find.text('Cancel'),
+    ));
+    await tester.pumpAndSettle();
+    expect(router.uri.path, '/console/members/add');
+    expect(find.text('Draft member'), findsOneWidget);
+
+    await tester.tap(crumb);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(router.uri.path, '/console/members');
+    expect(tester.widget<TextField>(search).controller!.text, 'fixture');
+
+    final branchUri = Uri.parse('/console/branches/east/members');
+    await router.setNewRoutePath(branchUri);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-member')));
+    await tester.pumpAndSettle();
+    expect(router.uri, Uri.parse('/console/members/add?branch=east'));
+    final selectedBranch = find.descendant(
+      of: find.byType(DropdownButtonFormField<String>),
+      matching: find.text('Fixture East Branch'),
+    );
+    expect(selectedBranch, findsOneWidget);
+    await tester.tap(find.text('Back to Members'));
+    await tester.pumpAndSettle();
+    expect(router.uri, branchUri);
+    expect(find.byKey(const ValueKey('add-member')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Admin creates a member from the onboarding page and refreshes the directory',
       (tester) async {
     final restoreFonts = await installFypOfflineFonts();
     addTearDown(restoreFonts);
@@ -86,7 +196,7 @@ void main() {
         final image = await boundary.toImage();
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
         final file =
-            File('../../build/admin-member-provisioning/fixture-$name.png');
+            File('../../build/admin-member-onboarding/fixture-$name.png');
         await file.parent.create(recursive: true);
         await file.writeAsBytes(bytes!.buffer.asUint8List());
         image.dispose();
@@ -154,10 +264,11 @@ void main() {
     await tester.tap(find.text('Add Member'));
     await tester.pumpAndSettle();
     expect(find.text('Add New Member'), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
     expect(find.text('Free Plan'), findsOneWidget);
     expect(
-        tester.widget<TextField>(find.byType(TextField).at(1)).autofocus, true);
-    await screenshot('02-add-member-modal');
+        tester.widget<TextField>(find.byType(TextField).first).autofocus, true);
+    await screenshot('02-add-member-page');
     await tester.tap(find.text('Create Member'));
     await tester.pumpAndSettle();
     expect(find.text('Enter the full name.'), findsOneWidget);

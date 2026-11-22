@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../infrastructure/audio/sound_effects.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -60,7 +61,14 @@ class _AppCheckInHostState extends State<AppCheckInHost>
       if (repo.scope != widget.scope) {
         throw StateError('Check-in account mismatch');
       }
-      final c = AppCheckInCubit(repository: repo, activeScope: _current);
+      final c = AppCheckInCubit(
+          repository: repo,
+          activeScope: _current,
+          onAwarded: () {
+            if (mounted && _foreground) {
+              SoundEffects.play(SoundEffect.pointsClaimed);
+            }
+          });
       _listener = c.stream.listen((state) {
         _reset?.cancel();
         final delay = _schedule.next(state, foreground: _foreground);

@@ -161,6 +161,8 @@ The current task's scope takes precedence over these defaults. Documentation Pha
 
 ## Essential working rules
 
+- **Android Studio delivery (owner instruction, 20 November):** integrate requested mobile changes into the active GainPath project and verify the shared GainPath Member Android run configuration. Deploy the required verified backend changes under the standing scope before handing back a feature that depends on them.
+
 - Inspect and reuse existing implementations. Both normal app entrypoints initialize Firebase directly; there is no runtime backend selector or seeded Mock composition. Use `.injected(...)` explicitly for tests, with seeded app graphs confined to test/support. Never recover Firebase initialization failure with sample data. Preserve per-app App Check security inputs; see architecture and operations.
 - Preserve unrelated tracked/untracked work. Do not reset, clean, stash, broadly stage or overwrite it to simplify a task.
 - Preserve Auth, email verification, App Check, role/organization/ownership checks and session isolation. Sensitive totals, membership settlement, reservations and accounting stay server-controlled.
@@ -335,11 +337,21 @@ Clean application source `6573957`: 775 affected Mobile tests (30 existing gated
 
 Training Report now has a compact mixed-mode summary, one expandable workout activity list, separate compatible AI assessments and optional technical evidence. Rewards owns the live Rewards & Check-in route with explicit guarded claims, independent balance fallback and scoped refresh/retry. Progress retains a secondary link. Clean source: 839 Mobile tests passed (33 default skips), Domain192/Pose759 passed, 20-file analysis clean and arm64 Debug APK built. Actual baseline/final Flutter renders reviewed. No installation, Firebase deployment or live reward mutation; physical Android PDF/Firebase/check-in acceptance is pending. [Report and evidence](docs/ux/workout-report-rewards-checkin-consumer-redesign.md).
 
+## Workout flow visual feedback — 15 November 2026
+
+Local Member UI now has a purple remaining-rest ring/final-three-second pulse, compact saved completion, published next-exercise cover/mode/targets, and short Ready/accepted-rep animations. Existing camera, pose, counting, audio and business behavior is preserved. Fresh 96 affected Mobile tests, eight-file analysis and arm64 Debug build pass; actual Flutter portrait/landscape/200% renders were inspected. No Android device was connected; installation and physical camera performance remain pending. Details: docs/superpowers/plans/2026-11-15-workout-flow-feedback.md (from docs pages: superpowers/plans/2026-11-15-workout-flow-feedback.md).
+
+## Routine backup signature compatibility — 15 November 2026
+
+Authenticated Firebase backup HTTP400 was traced to the routine signature comparison. A reviewed fix compares parsed values and normalizes empty optional video references without rewriting records/digests or changing authorization, camera, counting or rewards.180 backup tests, production/test TypeScript compilation and24 existing account-backup compatibility checks pass. Owner retry now shows Synced;16 post-fix backup responses returned HTTP200 with no validation rejection. Details: docs/ux/workout-backup-signature-compatibility.md (from docs pages: ux/workout-backup-signature-compatibility.md).
+
+## Workout completion visual refresh — 15 November 2026
+
+Local Routine Summary now uses a lavender completion Hero with native green/gold medal illustration, responsive icon stats, published exercise covers and compact mode/status chips, plus a gold truthful rewards empty-state card. Partial completion, calculated values/visibility, expansion, navigation, save/sync and reward policy remain unchanged.43 affected tests, six-file analysis,15 actual Flutter page renders and arm64 Debug build pass; independent review is clear. APK not installed. Details: docs/superpowers/plans/2026-11-15-workout-completion-visuals.md (from docs pages: superpowers/plans/2026-11-15-workout-completion-visuals.md).
 
 ## AI coach voice V1 —15 November2026
 
 77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](docs/integration/module2-ai-coach-voice-v1-implementation.md).
-
 
 ## Exercise completion handoff —16 November2026
 

@@ -22,9 +22,18 @@ abstract interface class AuthVerificationActions {
   Future<void> resendEmailVerification();
 }
 
+abstract interface class GoogleAuthActions {
+  bool get supportsGoogleSignIn;
+  Future<AuthSession> signInWithGoogle({required bool registering});
+}
+
 class AuthException implements Exception {
   const AuthException(this.message);
   final String message;
   @override
   String toString() => message;
+}
+
+class AuthSignInCancelled extends AuthException {
+  const AuthSignInCancelled() : super('Sign-in cancelled.');
 }

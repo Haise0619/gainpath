@@ -315,6 +315,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: WorkoutResultScreen.measured(summary: restored)));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.textContaining('Left arm: 2 full'), 180);
     expect(find.textContaining('Left arm: 2 full'), findsOneWidget);
     expect(find.textContaining('Right arm: 2 full'), findsOneWidget);
     expect(tester.takeException(), isNull);

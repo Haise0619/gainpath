@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/recommendation/application/recommendation_queue_repository.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_recommendation_screens.dart';
+import 'package:gainpath_admin_web/features/recommendation/presentation/admin/recommendation_monitor.dart';
 
 import 'support/recommendation_queue_fixture.dart';
 
 class _Transport {
+  final tab = ValueNotifier(RecommendationMonitorTab.overview);
   final calls = <Map<String, Object?>>[];
   Completer<void>? lists, details;
   bool current = true, failDetail = false;
@@ -52,10 +54,13 @@ Future<void> _show(WidgetTester tester, _Transport transport,
           MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
       child: child!,
     ),
-    home: RiskLeaderboardScreen(
-      queueRepository: transport.repository,
-      queueClock: () => queueNow,
-    ),
+    home: ValueListenableBuilder(
+        valueListenable: transport.tab,
+        builder: (context, tab, _) => RiskLeaderboardScreen(
+              initialTab: tab,
+              queueRepository: transport.repository,
+              queueClock: () => queueNow,
+            )),
   ));
 }
 
@@ -73,12 +78,12 @@ void main() {
     expect(find.text('Delivered'), findsOneWidget);
     expect(find.text('Delivery unverified'), findsOneWidget);
 
-    await tester.tap(find.text('Delivery Issues'));
+    transport.tab.value = RecommendationMonitorTab.attention;
     await tester.pumpAndSettle();
     expect(find.text('Squat foundations'), findsOneWidget);
     expect(find.text('Sample Coach'), findsNothing);
 
-    await tester.tap(find.text('History'));
+    transport.tab.value = RecommendationMonitorTab.history;
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'sample coach');
     await tester.pumpAndSettle();
@@ -97,7 +102,7 @@ void main() {
     final transport = _Transport()..details = Completer<void>();
     await _show(tester, transport, width: 320, scale: 2);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('History'));
+    transport.tab.value = RecommendationMonitorTab.history;
     await tester.pumpAndSettle();
     final list = find.byType(ListView);
     final scroll = tester.state<ScrollableState>(find

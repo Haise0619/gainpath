@@ -14,9 +14,10 @@ class CoachDirectoryState {
 }
 
 class CoachDirectoryCubit extends Cubit<CoachDirectoryState> {
-  CoachDirectoryCubit({required this.repository, required this.isCurrent})
+  CoachDirectoryCubit({required this.repository, required this.isCurrent, this.loadAllPages = false})
       : super(const CoachDirectoryState());
   final CoachDirectoryRepository repository;
+  final bool loadAllPages;
   final bool Function() isCurrent;
   int _generation = 0;
   bool _invalidated = false;
@@ -57,13 +58,23 @@ class CoachDirectoryCubit extends Cubit<CoachDirectoryState> {
     final n = ++_generation;
     emit(const CoachDirectoryState());
     try {
-      final page = await repository.loadPage();
+      var page = await repository.loadPage();
+      final items = {for (final item in page.items) item.id: item};
+      final cursors = <String>{};
+      if (loadAllPages) {
+        while (_current(n) && page.nextCursor != null) {
+          final cursor = page.nextCursor!;
+          if (!cursors.add(cursor)) throw StateError('Coach page did not advance');
+          page = await repository.loadPage(afterId: cursor);
+          items.addEntries(page.items.map((item) => MapEntry(item.id, item)));
+        }
+      }
       if (!_current(n)) {
         if (!_allowed) invalidate();
         return;
       }
       emit(CoachDirectoryState(
-          items: page.items, nextCursor: page.nextCursor, loading: false));
+          items: List.unmodifiable(items.values), nextCursor: page.nextCursor, loading: false));
     } catch (e) {
       if (_current(n)) {
         if (e is CoachRepositoryException &&

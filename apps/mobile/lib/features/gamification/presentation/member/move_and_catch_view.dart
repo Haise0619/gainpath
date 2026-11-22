@@ -130,7 +130,7 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                                                 liveRegion: true,
                                                 child: Center(
                                                     child: _badge(
-                                                        'Pausing in ${engine.trackingGraceSeconds}s · move into view',
+                                                        'Tracking interrupted · pausing in ${engine.trackingGraceSeconds}s',
                                                         Icons
                                                             .person_search_outlined)))),
                                       if (phase == 'paused' ||
@@ -350,9 +350,8 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
             'Stand comfortably in the centre with your shoulders and hips visible.';
     }
     if (e.inTrackingGrace) {
-      title = 'Come back into view';
-      body =
-          'Basket held in place. Return within ${e.trackingGraceSeconds}s to keep playing.';
+      title = 'Tracking briefly interrupted';
+      body = 'Basket held in place. Keep your shoulders and hips visible.';
     }
     return Panel(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

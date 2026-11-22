@@ -4,6 +4,7 @@ import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
 import '../di/member_recommendation_factory.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
+import '../../features/content/presentation/member/member_announcements.dart';
 import '../routing/app_check_in_host.dart';
 import '../di/app_check_in_factory.dart';
 import '../di/workout_backup_network_opportunities.dart';
@@ -103,6 +104,11 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   PublishedRoutineCatalogCubit? _catalog;
   MembershipCommerceRepository? _membership;
   AnnouncementReader? _announcements;
+  final _announcementKey = GlobalKey<MemberAnnouncementsState>();
+
+  Future<void> _refreshAnnouncements() async {
+    await _announcementKey.currentState?.refresh();
+  }
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<void>? _achievementNetworkSubscription;
@@ -373,8 +379,11 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           progressWarnings: progress?.snapshot?.warnings ?? const [],
           onRefreshProgress: refresh,
           onRefreshRoutines: _catalog?.refresh,
-          announcements: null,
-          onRefreshAnnouncements: null,
+          announcements: _announcements == null
+              ? null
+              : MemberAnnouncements(
+                  key: _announcementKey, reader: _announcements!, compact: true),
+          onRefreshAnnouncements: _refreshAnnouncements,
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
           onOpenHistory: open == null ? null : () => open(MemberProgressView.history),
@@ -441,6 +450,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
             widget.programStoreFactory ?? createProgramEnrollmentStore,
         routineStoreFactory:
             widget.routineJourneyStoreFactory ?? createRoutineJourneyStore,
+        progressRepositoryFactory: widget.progressRepositoryFactory ??
+            createLocalMemberProgressRepository,
         publishedRoutine: catalog?.selected,
         routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
         routineLoadFailed: catalog?.status == CatalogStatus.error,

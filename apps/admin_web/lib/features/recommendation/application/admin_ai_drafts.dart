@@ -6,9 +6,11 @@ TutorialVideo aiExerciseSeed(Map<String, dynamic> d) => TutorialVideo(
       category: d['category'] as String,
       status: TutorialStatus.draft,
       difficulty: d['difficulty'] as String,
-      description: d['description'] as String,
+      description:
+          '${d['description']}\nPrimary muscle group: ${d['primaryMuscleGroup']}',
       equipment: d['equipment'] as String,
-      durationMin: d['durationMinutes'] as int,
+      durationMin: 0,
+      executionMode: ExerciseExecutionMode.videoGuidedTimed,
       tutorialSteps: [
         for (final (i, step) in (d['instructions'] as List).indexed)
           ExerciseTutorialStep(
@@ -57,25 +59,33 @@ WorkoutProgram aiProgramSeed(Map<String, dynamic> d, String id) =>
       'version': 0,
       'title': d['name'],
       'level': d['difficulty'],
-      'weeks': 4,
+      'weeks': d['weeks'],
       'days': [
-        for (var week = 1; week <= 4; week++)
+        for (var week = 1; week <= (d['weeks'] as int); week++)
           for (var day = 1; day <= 7; day++)
             {
               'schemaVersion': 2,
               'week': week,
               'weekday': day,
-              'kind': day == 1 || day == 3 || day == 5 ? 'workout' : 'rest',
+              'kind':
+                  (d['trainingDays'] as List).any((r) => r['weekday'] == day)
+                      ? 'workout'
+                      : 'rest',
               'category':
-                  day == 1 || day == 3 || day == 5 ? 'Full Body' : 'Rest',
-              'routineId': day == 1 || day == 3 || day == 5
-                  ? (d['routineIds'] as List)[
-                      ((day - 1) ~/ 2) % (d['routineIds'] as List).length]
-                  : null,
+                  (d['trainingDays'] as List).any((r) => r['weekday'] == day)
+                      ? (d['trainingDays'] as List)
+                          .firstWhere((r) => r['weekday'] == day)['category']
+                      : 'Rest',
+              'routineId': (d['trainingDays'] as List)
+                  .where((r) => r['weekday'] == day)
+                  .map((r) => r['routineId'])
+                  .firstOrNull,
               'routineDay': 1,
-              'muscleGroups': day == 1 || day == 3 || day == 5
-                  ? ['upperPush', 'upperPull', 'lower']
-                  : [],
+              'muscleGroups': (d['trainingDays'] as List)
+                      .where((r) => r['weekday'] == day)
+                      .map((r) => programMuscles(r['category'] as String))
+                      .firstOrNull ??
+                  [],
               'restOverrideSeconds': null,
             }
       ],

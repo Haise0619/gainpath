@@ -17,6 +17,11 @@ sealed class ChatAttachment {
   const ChatAttachment();
 }
 
+class NearbyGymsAttachment extends ChatAttachment {
+  const NearbyGymsAttachment(this.organizationId);
+  final String organizationId;
+}
+
 class BranchChatAttachment extends ChatAttachment {
   BranchChatAttachment(this.organizationId, Map<String, dynamic> branch)
       : branch = Map.unmodifiable(branch);

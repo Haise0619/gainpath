@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -30,6 +31,17 @@ void main() {
       testWidgets(
           '${routine ? 'Routine' : 'Single'} $voice waits for celebration and spoken completion',
           (tester) async {
+        final effects = <String>[];
+        final messenger = tester.binding.defaultBinaryMessenger;
+        const channel = MethodChannel('gainpath/sound_effects');
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method != 'play') return null;
+          effects.add(call.arguments as String);
+          return voice == 'speech' && call.arguments == 'workoutComplete'
+              ? 480
+              : 0;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
         final scope =
             SessionScope(userId: 'completion', organizationId: 'gainpath');
         final store = FailingStore(scope: scope)..fail = false;
@@ -38,7 +50,9 @@ void main() {
             store: store,
             uploadGateway: UnavailableWorkoutUploadGateway(),
             activeScope: () => scope);
-        final camera = Camera(), detector = ReplayPoseDetector(), port = CoachAudio();
+        final camera = Camera(),
+            detector = ReplayPoseDetector(),
+            port = CoachAudio();
         port.failPlay = voice == 'unavailable';
         var now = 0;
         final frames = await trajectory('squat');
@@ -139,12 +153,21 @@ void main() {
           expect(find.byKey(const ValueKey('workout-completion-overlay')),
               findsOneWidget);
           expect(port.closes, 0);
+          expect(effects, isNot(contains('workoutComplete')));
+          expect(effects, isNot(contains('rep')));
           if (voice == 'background') {
             tester.binding
                 .handleAppLifecycleStateChanged(AppLifecycleState.paused);
           }
           port.completions.last.complete(AudioPlaybackOutcome.completed);
           await tester.pump();
+          if (voice == 'speech') {
+            expect(effects, ['workoutComplete']);
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.byKey(const ValueKey('workout-completion-overlay')),
+                findsOneWidget);
+            await tester.pump(const Duration(milliseconds: 190));
+          }
           if (voice == 'background') {
             await tester.pump(const Duration(seconds: 1));
             expect(find.byKey(const ValueKey('workout-completion-overlay')),

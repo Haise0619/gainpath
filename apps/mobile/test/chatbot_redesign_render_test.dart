@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/chatbot.dart';
+import 'package:gainpath_ui/gainpath_ui.dart' show BranchDirectoryPage;
 import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/features/chatbot/presentation/member/chatbot_screen.dart';
 import 'module6_chat_flow_test.dart' show LiveChat;
@@ -49,6 +50,7 @@ void main() {
     ('large-text', 320.0, 2.0),
     ('workout-card', 390.0, 1.0),
     ('branch-card', 390.0, 1.0),
+    ('nearby-gyms', 390.0, 1.0),
     ('keyboard', 360.0, 1.0),
     ('general-reply', 390.0, 1.0),
     ('general-reply-keyboard', 320.0, 2.0),
@@ -128,6 +130,11 @@ void main() {
               'openingHours': List.generate(7, (_) => {'allDay': true}),
             }));
       }
+      if (scenario.$1 == 'nearby-gyms') {
+        repo.reply = const ChatMessage(
+            'Open Find a gym and tap Use my location.', false,
+            attachment: NearbyGymsAttachment('fixture-org'));
+      }
       final key = GlobalKey();
       await tester.pumpWidget(RepositoryProvider<ChatRepository>.value(
           value: repo,
@@ -143,13 +150,21 @@ void main() {
                   child: ChatbotScreen(connected: true, onOpenFact: (_) {})))));
       await tester.pumpAndSettle();
       if (scenario.$1 == 'branch-card') {
-        await tester.enterText(find.byType(TextField), 'How do I get to this gym?');
+        await tester.enterText(
+            find.byType(TextField), 'How do I get to this gym?');
         await tester.tap(find.byTooltip('Send message'));
         await tester.pumpAndSettle();
         expect(find.text('North Gym'), findsOneWidget);
         expect(find.text('Fixture address'), findsOneWidget);
         expect(find.text('View branch'), findsOneWidget);
         expect(find.text('Get directions'), findsOneWidget);
+      }
+      if (scenario.$1 == 'nearby-gyms') {
+        await tester.enterText(
+            find.byType(TextField), 'which gym iz nearest to me');
+        await tester.tap(find.byTooltip('Send message'));
+        await tester.pumpAndSettle();
+        expect(find.text('Find nearby gyms'), findsOneWidget);
       }
       if (scenario.$1 == 'workout-card') {
         await tester.ensureVisible(find.text('Training help'));
@@ -208,7 +223,12 @@ void main() {
         await tester.ensureVisible(find.text('View branch'));
         await tester.tap(find.text('View branch'));
         await tester.pumpAndSettle();
-        expect(find.widgetWithText(AlertDialog, 'North Gym'), findsOneWidget);
+        final page = find.byType(BranchDirectoryPage);
+        expect(page, findsOneWidget);
+        expect(find.descendant(of: page, matching: find.text('North Gym')),
+            findsWidgets);
+        expect(find.descendant(of: page, matching: find.text('Fixture address')),
+            findsOneWidget);
       }
     });
   }

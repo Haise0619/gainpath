@@ -29,6 +29,7 @@ class CoachCard extends StatelessWidget {
             width: 52,
             height: 52,
             child: photo ?? networkAvatar(coach.imageUrl)));
+    final locations = published?.branchIds.map((id) => branchNames[id]).whereType<String>().toList() ?? [];
     final identity = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -51,6 +52,8 @@ class CoachCard extends StatelessWidget {
                           semanticLabel: 'Verified coach')),
               ]),
           const SizedBox(height: 4),
+          if (locations.isNotEmpty)
+            Text(locations.join(" · "), style: text.bodySmall?.copyWith(color: colors.primary)),
           Text(coach.specialty,
               style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
         ]);

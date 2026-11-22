@@ -773,30 +773,30 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             saveStatus: widget.saveStatusBuilder?.call(c.checkpoint!),
             onOpenSession: widget.onOpenSavedSession),
       if (widget.onViewHistory != null)
-        TextButton.icon(
+        OutlinedButton.icon(
             onPressed: widget.onViewHistory,
             icon: const Icon(Icons.history_rounded),
             label: const Text('Workout history')),
-      ExpansionTile(title: const Text('Points and rewards'), children: [
-        RoutineWorkoutRewardPanel(
-            reference: WorkoutRewardAttemptReference(
-                scope: c.scope,
-                attemptId: c.checkpoint!.id,
-                routineId: c.routine.id,
-                day: c.day),
-            isCurrent: () => c.authorized,
-            difficulty:
-                (c.checkpoint?.attempt?.routine ?? c.routine).difficulty),
-      ]),
+      const SizedBox(height: 12),
+      RoutineWorkoutRewardPanel(
+          reference: WorkoutRewardAttemptReference(
+              scope: c.scope,
+              attemptId: c.checkpoint!.id,
+              routineId: c.routine.id,
+              day: c.day),
+          isCurrent: () => c.authorized,
+          difficulty: (c.checkpoint?.attempt?.routine ?? c.routine).difficulty),
+      const SizedBox(height: 16),
       if (!c.isScheduled)
-        OutlinedButton(
+        OutlinedButton.icon(
+            icon: const Icon(Icons.replay_rounded),
             onPressed: _working || c.busy
                 ? null
                 : () => _act(() async {
                       await c.startNewAttempt();
                       if (mounted) setState(() => _showSummary = false);
                     }),
-            child: const Text('Repeat this workout')),
+            label: const Text('Repeat this workout')),
       if (!c.allTargetsCompleted || c.nextDay != null)
         TextButton(
             onPressed: () => Navigator.pop(context),

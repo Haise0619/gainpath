@@ -84,6 +84,20 @@ class MockMembershipCommerce
       throw StateError('Choose a configured paid plan.');
     }
     final p = source.membershipPlans.firstWhere((p) => p.id == planId);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (planId == 'premium' &&
+        source.currentPlanId == 'basic' &&
+        _expiry > now) {
+      final basic = source.membershipPlans.firstWhere((p) => p.id == 'basic');
+      final remainingDays = ((_expiry - now) / 86400000).ceil();
+      return {
+        'planId': p.id,
+        'amountMinor':
+            ((p.price - basic.price) * 100 * remainingDays / 30).round(),
+        'durationDays': 30,
+        'upgradeExpiresAtMillis': _expiry,
+      };
+    }
     final discount =
         promoCode.isEmpty ? 0.0 : const PromoPolicy().discountFor(promoCode);
     if (discount == null) throw StateError('Invalid mock promo code.');
@@ -107,6 +121,8 @@ class MockMembershipCommerce
       'planId': planId,
       'planName': source.membershipPlans.firstWhere((p) => p.id == planId).name,
       'amountMinor': q['amountMinor'],
+      if (q['upgradeExpiresAtMillis'] != null)
+        'upgradeExpiresAtMillis': q['upgradeExpiresAtMillis'],
       'kind': renewal ? 'MembershipRenewal' : 'MembershipPurchase',
       'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
       'paymentStatus': 'pending',
@@ -124,7 +140,19 @@ class MockMembershipCommerce
     final p = await payment(transactionId);
     if (p['paymentStatus'] == 'cleared') return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    _expiry = (_expiry > now ? _expiry : now) + 30 * 86400000;
+    final upgradeExpiry = p['upgradeExpiresAtMillis'] as int?;
+    if (upgradeExpiry != null &&
+        (upgradeExpiry <= now ||
+            _expiry != upgradeExpiry ||
+            source.currentPlanId != 'basic')) {
+      p.addAll({
+        'paymentStatus': 'cleared',
+        'fulfilmentStatus': 'reconciliation_required'
+      });
+      return;
+    }
+    _expiry =
+        upgradeExpiry ?? ((_expiry > now ? _expiry : now) + 30 * 86400000);
     source.currentPlanId = p['planId'] as String;
     p.addAll({
       'paymentStatus': 'cleared',

@@ -9,6 +9,7 @@ import { allowed, integer, object, SLOT } from '../coaching/coach-availability-c
 import { bookingCoachScope, bookingDaySnapshot, coachEligibilityFailure, currentBookingMembership, currentBookingPolicy, requireBookingOrganization } from '../coaching/booking-validation';
 import { storedBooking } from '../coaching/booking-record';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
+import { isBookingPaymentProvider } from './xendit-booking';
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
 import {bookingBillReferences,matchesBookingBillReferences,directBookingCheckoutUrl} from './booking-bill-reference';
 import {bookingPaymentSelections,selectedPaymentMetadata,selectedPaymentProjection} from './booking-payment-selection';
@@ -19,7 +20,8 @@ const txPath = (org: string, id: string) => `orgs/${org}/transactions/${id}`;
 const review = () => new DomainError('failed-precondition', 'Payment data requires authorized review.');
 function paymentInput(auth: Auth, raw: unknown, allowVoucher = false,allowSelections=false) {
   requireVerifiedEmail(auth);
-  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId', ...(allowVoucher ? ['usePremiumVoucher', 'quoteToken', 'gatewayCode','selectedPaymentMethodCode'] : []),...(allowSelections?['includeSelectionMethods']:[])]);
+  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId', ...(allowVoucher ? ['usePremiumVoucher', 'quoteToken', 'gatewayCode','selectedPaymentMethodCode'] : []),...(allowSelections?['includeSelectionMethods']:[]), ...((allowVoucher || allowSelections) ? ['supportsXendit'] : [])]);
+  if (d.supportsXendit !== undefined && d.supportsXendit !== true) throw new InputValidationError('Invalid checkout capability.');
   if (d.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   if (d.usePremiumVoucher !== undefined && typeof d.usePremiumVoucher !== 'boolean') throw new InputValidationError('Choose whether to apply the voucher.');
   if (d.quoteToken !== undefined && (typeof d.quoteToken !== 'string' || !/^[a-f0-9]{64}$/.test(d.quoteToken))) throw new InputValidationError('Invalid reviewed quote.');
@@ -92,7 +94,7 @@ export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, r
   });
 }
 function payment(d: DocumentData | undefined, org: string, id: string): DocumentData {
-  if (!d || d.schemaVersion !== 1 || d.environment !== 'sandbox' || d.provider !== 'billplz' || d.organizationId !== org || d.bookingId !== id || d.currency !== 'MYR'
+  if (!d || d.schemaVersion !== 1 || d.environment !== 'sandbox' || !isBookingPaymentProvider(d.provider) || d.organizationId !== org || d.bookingId !== id || d.currency !== 'MYR'
     || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1 || !['creating','awaiting_payment','confirmed','reconciliation_required'].includes(String(d.fulfilmentStatus))
     || !['pending','cleared'].includes(String(d.paymentStatus))) throw review();
   return d;
@@ -123,6 +125,9 @@ async function createBookingPaymentInternal(store: DocumentStore, auth: Auth, ra
     return { b };
   });
   if (captured.existing) return captured.existing;
+  if (gateway.acceptsSelection && (!selectedPaymentMethodCode || !gateway.acceptsSelection(selectedPaymentMethodCode))) {
+    throw new BookingPaymentMethodUnavailableError();
+  }
   const selected=gatewayCode===undefined?undefined:(await gateway.paymentMethods?.())?.find(m=>m.code===gatewayCode);
   if(gatewayCode!==undefined&&!selected)throw new BookingPaymentMethodUnavailableError();
   const eligibility = await coachEligibilityFailure(readIdentity,captured.b.coachId);
@@ -141,7 +146,7 @@ async function createBookingPaymentInternal(store: DocumentStore, auth: Auth, ra
     if (quoteToken !== undefined && quoteToken !== financialToken(org,uid,b.coachId,b.branchId,b.durationMinutes,quote.amountMinor,snapshot?.amountMinor ?? quote.amountMinor,snapshot)) throw new BookingQuoteChangedError();
     if (typeof user?.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) || user.email.length > 254) throw new DomainError('failed-precondition','A valid account email is required.');
     const format = new Intl.DateTimeFormat('en-GB',{timeZone:b.timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
-    const d = { schemaVersion: 1, environment: 'sandbox', provider: 'billplz', type: 'CoachingBooking', organizationId: org, bookingId: id, memberId: uid, coachId: b.coachId, branchId: b.branchId,
+    const d = { schemaVersion: 1, environment: 'sandbox', provider: gateway.provider ?? 'billplz', type: 'CoachingBooking', organizationId: org, bookingId: id, memberId: uid, coachId: b.coachId, branchId: b.branchId,
       ...quote, ...(snapshot ? {amountMinor:snapshot.amountMinor,grossAmountMinor:quote.amountMinor,discountMinor:snapshot.discountMinor,premiumVoucher:snapshot} : {}), durationMinutes:b.durationMinutes, localDate:b.localDate, startLabel:format.format(b.startAtMillis), endLabel:format.format(b.endAtMillis), holdExpiresAtMillis:b.holdExpiresAtMillis,
       paymentStatus:'pending', fulfilmentStatus:'creating', createdAtMillis:now, updatedAtMillis:now,
       ...(selected?{providerReferenceVersion:2,gatewayCode:selected.code,paymentMethodName:selected.name}:{} ),
@@ -152,7 +157,7 @@ async function createBookingPaymentInternal(store: DocumentStore, auth: Auth, ra
   });
   if (reservation.existing) return reservation.existing;
   let bill: SandboxBill;
-  try { bill = await gateway.create({amountMinor:reservation.data!.amountMinor,name:reservation.name!,email:reservation.email!,reference:id,organizationId:org,description:`GainPath coaching session with ${reservation.data!.coachName}`,...(selected?{gatewayCode:selected.code,paymentReference:bookingBillReferences(org,id,selected.code).reference2}:{})}); }
+  try { bill = await gateway.create({amountMinor:reservation.data!.amountMinor,name:reservation.name!,email:reservation.email!,reference:id,organizationId:org,description:`GainPath coaching session with ${reservation.data!.coachName}`,...(gateway.provider === 'xendit' ? { selectedPaymentMethodCode } : {}),...(selected?{gatewayCode:selected.code,paymentReference:bookingBillReferences(org,id,selected.code).reference2}:{})}); }
   catch {
     return store.transact(async tx => {
       const d = payment(await tx.get(txPath(org,id)),org,id);
@@ -241,6 +246,12 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
     const next = {...d,paymentStatus:'cleared',fulfilmentStatus:reason ? 'reconciliation_required' : 'confirmed',paymentVerifiedAtMillis:now,updatedAtMillis:now,...(reason ? {resolutionReason:reason} : {})};
     if (!reason) {
       tx.set(`orgs/${org}/bookings/${id}`,{...b,status:'confirmed'});
+      tx.create(`orgs/${org}/notifications/${keyOf('bookingConfirmed',id)}`, {
+        schemaVersion: 1, type: 'booking_confirmation', recipientId: b.memberId,
+        title: 'Coaching session confirmed',
+        message: 'Your payment was verified. Open My Bookings to view your confirmed session.',
+        bookingId: id, createdAtMillis: now, read: false,
+      });
       for (const lock of locks) tx.set(lock.path,{...lock.data,status:'confirmed'});
       tx.set(day!.dayPath,{...originalDay,reservations:(originalDay!.reservations as DocumentData[]).map(r => r.bookingId === id ? {...r,status:'confirmed'} : r)});
       tx.set(`orgs/${org}/jobs/${keyOf('expireBookingHold',id)}`,{...job,status:'completed',outcome:'confirmed',processedAtMillis:now,attempts:Number(job!.attempts)+1});
@@ -252,7 +263,7 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
   });
 }
 
-async function readBookingPaymentInternal(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
+async function readBookingPaymentInternal(store: DocumentStore, auth: Auth, raw: unknown, gateway: Pick<BillplzGateway,'get'>, readIdentity: CoachIdentityReader, clock = Date.now, xendit?: Pick<BillplzGateway,'get'>) {
   const {org,id,uid}=paymentInput(auth,raw);
   const captured = await store.transact(async tx => {
     const b=await authorizedBooking(tx,org,id,uid);
@@ -267,7 +278,11 @@ async function readBookingPaymentInternal(store: DocumentStore, auth: Auth, raw:
     if (check) tx.set(txPath(org,id),{...d,lastProviderCheckAtMillis:now});
     return {d,check};
   });
-  if (captured.check) await settleBookingPayment(store,org,id,await gateway.get(String(captured.d.billId)),readIdentity,clock);
+  if (captured.check) {
+    const provider = captured.d.provider === 'xendit' ? xendit : gateway;
+    if (!provider) throw new DomainError('unavailable', 'Payment is temporarily unavailable.');
+    await settleBookingPayment(store,org,id,await provider.get(String(captured.d.billId)),readIdentity,clock);
+  }
   return store.transact(async tx => {
     const b=await authorizedBooking(tx,org,id,uid),d=payment(await tx.get(txPath(org,id)),org,id);
     return view(closeUnpaidCheckout(tx,org,id,d,b.status,b.holdExpiresAtMillis,clock()));
@@ -288,7 +303,7 @@ export async function getBookingPaymentMethods(store:DocumentStore,auth:Auth,raw
   });
   const first=await capture();
   if(first.existingPayment)return {schemaVersion:1,serverNowMillis:clock(),methods:[],...first};
-  if(includeSelectionMethods)return {schemaVersion:1,serverNowMillis:clock(),methods:[],selectionMethods:bookingPaymentSelections,...first};
+  if(includeSelectionMethods)return {schemaVersion:1,serverNowMillis:clock(),methods:[],selectionMethods:bookingPaymentSelections.filter(method => !gateway.acceptsSelection || gateway.acceptsSelection(method.code)),...first};
   if(!gateway.paymentMethods)throw new DomainError('unavailable','Payment methods are temporarily unavailable.');
   const methods=await gateway.paymentMethods();
   // Recheck ownership, hold and existing invoice after external IO.

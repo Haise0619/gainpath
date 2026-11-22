@@ -9,6 +9,9 @@
     "bookingId"
   ],
   "properties": {
+    "supportsXendit": {
+      "const": true
+    },
     "schemaVersion": {
       "const": 1
     },

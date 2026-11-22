@@ -2,10 +2,11 @@ import {beforeEach,expect,it} from 'vitest';
 import {MemoryStore} from './memory-store';
 import {seeds,command,now,eligibleCoach} from './booking-fixture';
 import {createBookingHoldService} from '../src/modules/coaching/booking-service';
-import {createBookingPayment,getBookingPaymentMethods,settleBookingPayment} from '../src/modules/commerce/booking-payment-service';
+import {createBookingPayment,getBookingPaymentMethods,readBookingPayment,settleBookingPayment} from '../src/modules/commerce/booking-payment-service';
 import {getBookingListService} from '../src/modules/coaching/booking-list-service';
 import {getAdminBookingPayment} from '../src/modules/commerce/booking-payment-admin';
 import type {BillplzGateway,SandboxBill} from '../src/modules/commerce/billplz-sandbox';
+import { xenditBookingReference } from '../src/modules/commerce/xendit-booking';
 let s:MemoryStore,id:string,creates:number;
 const auth={uid:'member-1',token:{email_verified:true}};
 const input=()=>({schemaVersion:1,organizationId:'org-1',bookingId:id});
@@ -17,5 +18,32 @@ it('selection catalog is independent of enabled provider rails without creating 
 it('records canonical preference once on original invoice and never equates it to verified provider method',async()=>{const p=await createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:'tng'},gateway,eligibleCoach,()=>now);expect(p).toMatchObject(choice);expect(s.documents.get(`orgs/org-1/transactions/${id}`)).toMatchObject(choice);expect(p).not.toHaveProperty('gatewayCode');expect(p).toHaveProperty('status','awaiting_payment');const reopened=await createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:'grabpay'},gateway,eligibleCoach,()=>now+1000);expect(reopened).toMatchObject(choice);expect(creates).toBe(1);expect(await settleBookingPayment(s,'org-1',id,bill(true),eligibleCoach,()=>now+1)).toMatchObject({...choice,status:'confirmed'});});
 it('rejects unknown codes, forged labels/timestamps or mixed gateway input before a transaction or provider call',async()=>{for(const extra of [{selectedPaymentMethodCode:'fake'},{selectedPaymentMethodCode:'tng',selectedPaymentMethodLabel:'Maybank'},{selectedPaymentMethodCode:'tng',selectedAt:1},{selectedPaymentMethodCode:'tng',gatewayCode:'BCBB0235'}])await expect(createBookingPayment(s,auth,{...input(),...extra},gateway,eligibleCoach,()=>now)).rejects.toThrow();expect(creates).toBe(0);expect(s.documents.has(`orgs/org-1/transactions/${id}`)).toBe(false);});
 it('opt-in booking and Admin invoice projections share the original selection; legacy read stays unchanged',async()=>{await createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:'tng'},gateway,eligibleCoach,()=>now);const reader={read:async()=>[{path:`orgs/org-1/bookings/${id}`,data:s.documents.get(`orgs/org-1/bookings/${id}`)!}]};const query={schemaVersion:1,organizationId:'org-1',includeSelectedPaymentMethod:true};expect((await getBookingListService(s,auth,query,reader,()=>now)).records[0]).toMatchObject(choice);expect((await getBookingListService(s,auth,{schemaVersion:1,organizationId:'org-1'},reader,()=>now)).records[0]).not.toHaveProperty('selectedPaymentMethodCode');s.documents.set('users/admin',{organizationId:'org-1'});s.documents.set('orgs/org-1/members/admin',{organizationId:'org-1',role:'admin',status:'active',branchIds:[]});const admin={uid:'admin',token:{email_verified:true}};const p=await getAdminBookingPayment(s,admin,input(),{bills:gateway,collectionId:'collection',readIdentity:eligibleCoach,reader:{list:async()=>[],events:async()=>[]}});expect(p.payment).toMatchObject(choice);});
+it('creates an Xendit checkout and confirms only after the stored provider reports payment', async () => {
+  const session = {
+    ...bill(), id: 'ps-661f87c614802d6c402cd82d', collection_id: 'xendit',
+    url: 'https://dev.xen.to/checkout', reference_1: xenditBookingReference('org-1', id),
+  };
+  let paid = false;
+  const xendit: BillplzGateway = {
+    provider: 'xendit',
+    acceptsSelection: code => code === 'tng',
+    create: async request => {
+      expect(request.selectedPaymentMethodCode).toBe('tng');
+      return session;
+    },
+    get: async () => paid ? { ...session, paid: true, paid_amount: 12000, state: 'paid' } : session,
+  };
+  const methods = await getBookingPaymentMethods(s, auth, { ...input(), includeSelectionMethods: true }, xendit, () => now);
+  expect(methods).toMatchObject({ selectionMethods: [{ code: 'tng' }] });
+  const created = await createBookingPayment(s, auth, { ...input(), selectedPaymentMethodCode: 'tng' }, xendit, eligibleCoach, () => now);
+  expect(created).toMatchObject({ checkoutUrl: session.url, status: 'awaiting_payment' });
+  expect(await readBookingPayment(s, auth, input(), gateway, eligibleCoach, () => now, xendit))
+    .toMatchObject({ status: 'awaiting_payment' });
+  paid = true;
+  expect(await readBookingPayment(s, auth, input(), gateway, eligibleCoach, () => now + 10001, xendit))
+    .toMatchObject({ status: 'confirmed', paymentStatus: 'cleared' });
+  expect(await settleBookingPayment(s, 'org-1', id, await xendit.get(session.id), eligibleCoach, () => now + 10002))
+    .toMatchObject({ status: 'confirmed' });
+});
 it('unknown provider creation preserves selection and cannot issue another bill on retry',async()=>{const g={...gateway,create:async()=>{creates++;throw Error('unknown');}};await createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:'tng'},g,eligibleCoach,()=>now);expect(await createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:'grabpay'},gateway,eligibleCoach,()=>now+1)).toMatchObject({...choice,status:'reconciliation_required'});expect(creates).toBe(1);});
 it('concurrent differing preferences create one bill and late paid expiry stays in review',async()=>{const result=await Promise.all(['tng','grabpay'].map(code=>createBookingPayment(s,auth,{...input(),selectedPaymentMethodCode:code},gateway,eligibleCoach,()=>now)));expect(creates).toBe(1);const saved=s.documents.get(`orgs/org-1/transactions/${id}`)!;expect(result.every(p=>p.selectedPaymentMethodCode===saved.selectedPaymentMethodCode)).toBe(true);expect(await settleBookingPayment(s,'org-1',id,bill(true),eligibleCoach,()=>now+900001)).toMatchObject({paymentStatus:'cleared',status:'reconciliation_required',selectedPaymentMethodCode:saved.selectedPaymentMethodCode});expect(s.documents.get(`orgs/org-1/bookings/${id}`)!.status).not.toBe('confirmed');});

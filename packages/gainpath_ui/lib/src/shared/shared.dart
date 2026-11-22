@@ -4,6 +4,7 @@ export 'widgets/confirm_sheet.dart';
 export 'widgets/unsaved_changes_guard.dart';
 export 'widgets/detail_row.dart';
 export 'widgets/eyebrow.dart';
+export 'widgets/member_section_header.dart';
 export 'widgets/network_avatar.dart';
 export 'widgets/number_dial.dart';
 export 'widgets/page_body.dart';

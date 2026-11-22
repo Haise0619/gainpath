@@ -327,7 +327,7 @@ class RoutineProgress {
   RoutineProgress(
       {required SessionScope scope,
       required Iterable<RoutineAttempt> attempts,
-      required DateTime asOf}) {
+      required this.asOf}) {
     final unique = <String, RoutineAttempt>{};
     final now = asOf.toUtc();
     for (final a in attempts) {
@@ -364,6 +364,7 @@ class RoutineProgress {
         .length;
   }
   late final List<RoutineAttempt> records;
+  final DateTime asOf;
   late final DateTime weekStart, weekEnd;
   late final int completed, weeklyCompleted;
 }

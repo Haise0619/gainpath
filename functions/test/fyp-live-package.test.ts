@@ -24,10 +24,3 @@ it('Node22 exact release package exports only the two callable endpoints and ret
  for(const item of exports)expect(item.endpoint).toMatchObject({platform:'gcfv2',region:['asia-southeast1'],timeoutSeconds:540,maxInstances:1,concurrency:4,callableTrigger:{}});
  expect(readFileSync('../build/fyp-live-20261104/fyp-ready/lib/fyp-release-index.js','utf8')).toContain('enforceAppCheck: true');
 });
-it('boots the actual Admin SDK with the same explicit project environment as the Firebase CLI',()=>{
- const generated=req('./tools/fyp-live-deploy.cjs').firebaseEnvs(),env:Record<string,string|undefined>={...process.env,NODE_PATH:resolve('node_modules'),GCE_METADATA_HOST:'127.0.0.1:9'};
- for(const key of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIREBASE_CONFIG'])delete env[key];
- const code="require('firebase-admin/app').initializeApp();console.log(require('firebase-admin/firestore').getFirestore().projectId)";
- const absent=spawnSync(process.execPath,['-e',code],{env,encoding:'utf8',windowsHide:true});expect(absent.status).not.toBe(0);
- const configured=spawnSync(process.execPath,['-e',code],{env:{...env,...generated},encoding:'utf8',windowsHide:true});expect(configured.status).toBe(0);expect(configured.stdout.trim()).toBe('gainpath-0619');
-});

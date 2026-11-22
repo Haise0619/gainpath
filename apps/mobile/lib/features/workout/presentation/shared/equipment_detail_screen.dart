@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import '../../../../app/routing/branch_directions.dart';
+import 'package:gainpath_mobile/infrastructure/platform/branch_directions.dart';
 import 'equipment_tutorial_video.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/exercise_tutorial_screen.dart' show ExerciseTutorialScreen;

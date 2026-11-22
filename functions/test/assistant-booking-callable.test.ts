@@ -82,3 +82,32 @@ it.each(['Your booking has been confirmed.','Booking confirmed.','Your session i
  const result:any=await fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach});
  expect(result.text).not.toBe(claim);expect(result.text).toContain('I have not booked');
 });
+
+it.each([
+ ['which gym i currently using', false],
+ ['which gym iz nearest to me', true],
+ ['Could you remind me which club I picked in the app?', false],
+ ['What time does it close?', false],
+])('routes %s through the actual authorized handler', async (text, nearby) => {
+ const f = fixture();
+ f.request.data.text = text;
+ Object.assign(f.store.documents.get('users/member-1')!, {selectedBranchId:'branch-1'});
+ f.store.documents.set('orgs/org-1/branches/branch-1',{status:'active',displayName:'Fixture Gym'});
+ f.db.runTransaction=async(fn:any)=>f.store.transact(tx=>fn({
+  getAll:async(...refs:any[])=>refs.map(ref=>({data:()=>f.store.documents.get(ref.path)})),set:(ref:any,value:any)=>tx.set(typeof ref==='string'?ref:ref.path,value),
+ }));
+ f.db.doc=(path:string)=>({path,get:async()=>({data:()=>f.store.documents.get(path)})});
+ const followUp = text === 'What time does it close?';
+ if (followUp) {
+  f.request.data.branchContext = 'Other Gym';
+  const branch = {status:'active',displayName:'Other Gym',openingHours:Array.from({length:7},()=>({open:'09:00',close:'22:00'}))};
+  f.db.collection=()=>({where:()=>({limit:()=>({get:async()=>({docs:[{id:'other',data:()=>branch,get:(key:string)=>key==='displayName'?branch.displayName:undefined}]})})})});
+ }
+ const flexible = text.startsWith('Could');
+ const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{functionCall:{name:'lookup_gym',args:{topic:'current'}}}]}}]})});
+ const result=await fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach});
+ expect(fetcher).toHaveBeenCalledTimes(flexible?1:0);
+ if(followUp) expect(result).toMatchObject({text:expect.stringContaining('22:00'),branchCard:{branchId:'other'}});
+ else if(nearby) expect(result).toMatchObject({nearbyGym:true});
+ else expect(result).toMatchObject({text:expect.stringContaining('Fixture Gym'),branchCard:{branchId:'branch-1'}});
+});

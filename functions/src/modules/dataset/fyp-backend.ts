@@ -1,4 +1,5 @@
 import { backupWorkout, listWorkoutBackups, type BackupStore } from '../workouts/workout-backup';
+import {readPublishedRoutineCovers} from '../recommendation/published-routine-covers';
 import { createWorkoutBackupRuntime, getConfiguredWorkoutRankingProvider } from '../recommendation/workout-backup-recommendation-runtime';
 import { createCanonicalRecommendationBackend } from '../recommendation/canonical-recommendation-backend';
 import { createCanonicalRecommendationAdmin } from '../recommendation/canonical-recommendation-admin';
@@ -32,7 +33,7 @@ import {createFypAssistantFirestore} from './fyp-assistant';
 import {fitnessAssistantHandler} from '../chatbot/chatbot-callable';
 import {HttpsError} from 'firebase-functions/v2/https';
 const modules=['getMembershipOverviewCommand','getCoachRatingsCommand','getMemberBookingOptionsCommand','getCoachAvailabilityCommand','getCoachRosterCommand','getBookingListCommand','module9MemberCommandCallable','adminReportingCommand','adminWorkoutReportingCommand','adminCheckInReportingCommand','workoutProgramCommand','getCoachCertificationsCommand','getCoachPublishedPhotoCommand'];
-const operations=new Set(['member.assistant','admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.discovery','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.recommendation.list','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
+const operations=new Set(['member.assistant','admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.routine.covers','member.profile.recommend','member.discovery','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.recommendation.list','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
 export function parseFypEnvelope(raw:unknown):{operation:string;data:DocumentData}{
   const q=object(raw);keys(q,['schemaVersion','operation','data']);
   if(q.schemaVersion!==1||!operations.has(String(q.operation))||Buffer.byteLength(JSON.stringify(q))>16384)throw new DomainError('invalid-argument','Unsupported bounded dataset command.');
@@ -131,6 +132,14 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           return identity.emailVerified && !identity.disabled;
         }, scope.rootPath, {provider:getConfiguredWorkoutRankingProvider(),...(options.canonicalAdminRead?{unifiedAdminPagination:true as const}:{})});
         const workoutDeps = {store, runtime: workoutRuntime, readAuthIdentity, clock};
+        if (e.operation === 'member.profile.recommend') {
+          const q = object(request.data);
+          keys(q, ['schemaVersion', 'organizationId']);
+          if (q.schemaVersion !== 1) throw deny();
+          const ids = await createCanonicalRecommendationLifecycle(workoutDeps)
+            .backup(scope.organizationId, scope.uid, 'fitness-profile');
+          return await finalize({delivered: ids.length});
+        }
         if (e.operation.startsWith('workout.')) {
           const operation = e.operation.slice('workout.'.length);
           if (operation.startsWith('admin.') && scope.role !== 'admin' ||
@@ -224,6 +233,7 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           })(request));
         }
         const memberIds=(source.members as {memberId:string}[]).map(m=>m.memberId),coachIds=source.coachIds as string[];
+        if(e.operation==='member.routine.covers')return await finalize(await store.transact(tx=>readPublishedRoutineCovers(tx,scope.organizationId,object(request.data))));
         if(e.operation==='member.discovery'){
           const q=object(request.data);keys(q,['schemaVersion','organizationId']);
           if(q.schemaVersion!==1||scope.role!=='member')throw deny();

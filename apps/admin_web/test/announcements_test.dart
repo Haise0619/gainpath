@@ -1,7 +1,10 @@
 // ignore_for_file: subtype_of_sealed_class
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/content/presentation/admin/announcements_screen.dart';
@@ -10,6 +13,24 @@ import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../test_support/announcement_render_fonts.dart';
+
+Future<void> _capture(WidgetTester tester, Finder finder, String name) async {
+  final directory = Platform.environment['GAINPATH_ANNOUNCEMENT_SCREENSHOTS'];
+  if (directory == null) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(finder);
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    try {
+      final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!
+          .buffer
+          .asUint8List();
+      await File('$directory/fixture-$name.png').writeAsBytes(bytes);
+    } finally {
+      image.dispose();
+    }
+  });
+}
 
 class _Auth extends Fake implements FirebaseAuth {
   @override
@@ -249,19 +270,97 @@ void main() {
     await tester.tap(find.text('Save draft'));
     await tester.pumpAndSettle();
     expect(db.records['orgs/o/announcements/created']!['status'], 'draft');
+    await tester.tap(find.byTooltip('Announcement actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Updated hours');
-    await tester.tap(find.text('Publish'));
+    await tester.tap(find.text('Publish announcement'));
     await tester.pumpAndSettle();
     expect(db.records['orgs/o/announcements/created']!['status'], 'published');
     expect(
         db.records['orgs/o/announcements/created']!['title'], 'Updated hours');
+    await tester.tap(find.byTooltip('Announcement actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Deactivate'));
     await tester.pumpAndSettle();
     expect(db.records['orgs/o/announcements/created']!['status'], 'inactive');
     await tester.tap(find.byTooltip('Refresh announcements'));
     await tester.pumpAndSettle();
-    expect(find.text('inactive'), findsOneWidget);
+    expect(find.text('Deactivated'), findsNWidgets(2));
+  });
+
+  testWidgets('targeted composer preview follows selected branches and filters',
+      (tester) async {
+    final theme = await announcementFixtureTheme(base: AppTheme.build());
+    tester.view.physicalSize = const Size(1320, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await repo.saveAnnouncement(draft().copyWith(
+      status: AnnouncementStatus.published,
+      title: 'Weekend recovery workshop',
+      body: 'Reserve your spot at the front desk.',
+    ));
+    db.records['orgs/o/announcements/workshop'] =
+        db.records.remove('orgs/o/announcements/created')!;
+    const surface = Key('announcement-fixture-admin');
+    await tester.pumpWidget(RepositoryProvider<ContentRepository>.value(
+      value: repo,
+      child: MaterialApp(
+        theme: theme,
+        home: RepaintBoundary(
+          key: surface,
+          child: ColoredBox(
+            color: AppColors.bg,
+            child: AnnouncementsScreen(
+                loadBranches: () async => const {
+                      'main': (name: 'Central Gym', active: true),
+                      'east': (name: 'East Gym', active: true),
+                      'old': (name: 'Old Gym', active: false),
+                    }),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await _capture(tester, find.byKey(surface), 'admin-list');
+    await tester.tap(find.text('New announcement'));
+    await tester.pumpAndSettle();
+    await _capture(tester, find.byKey(surface), 'new-composer');
+    await tester.enterText(find.byType(TextField).first, 'Equipment servicing');
+    await tester.enterText(
+        find.byType(TextField).last, 'The cable stations reopen at noon.');
+    await tester.tap(find.text('Category · general'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Category · maintenance').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Priority · normal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Priority · important').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Important'), findsOneWidget);
+    await tester.tap(find.text('Specific branches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Central Gym'));
+    await tester.tap(find.widgetWithText(FilterChip, 'East Gym'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Central Gym, East Gym'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, 'Old Gym'), findsNothing);
+    await _capture(tester, find.byKey(surface), 'branch-selection');
+    await _capture(tester, find.byKey(const Key('announcement-mobile-preview')),
+        'live-preview');
+    await tester.ensureVisible(find.text('Save draft'));
+    await tester.tap(find.text('Save draft'));
+    await tester.pumpAndSettle();
+    expect(db.records['orgs/o/announcements/created']!['targetBranchIds'],
+        ['main', 'east']);
+    await tester.tap(find.text('All audiences'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('East Gym').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Equipment servicing'), findsOneWidget);
+    expect(find.text('Weekend recovery workshop'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'cable stations');
+    expect(find.text('Equipment servicing'), findsOneWidget);
   });
 }

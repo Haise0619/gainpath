@@ -27,7 +27,11 @@ class _MemberAchievementsScreenState extends State<MemberAchievementsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('My Achievements')),
+        appBar: AppBar(
+          title: const Text('My Achievements'),
+          backgroundColor: AppColors.bg,
+          foregroundColor: AppColors.ink,
+        ),
         backgroundColor: AppColors.bg,
         body: ListenableBuilder(
           listenable: widget.controller,
@@ -89,11 +93,15 @@ class _MemberAchievementsScreenState extends State<MemberAchievementsScreen> {
                           category == 'check-in'
                               ? 'Check-in Achievements'
                               : 'Workout Achievements',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(color: AppColors.ink),
                         ),
                         if (category == 'workout' && data.complete)
                           const Text(
-                              'Progress updates after Workout Backup syncs.'),
+                              'Progress updates after Workout Backup syncs.',
+                              style: TextStyle(color: AppColors.inkSoft)),
                         const SizedBox(height: 9),
                         _AchievementGrid(
                           badges: data.badges
@@ -186,6 +194,8 @@ class _Overview extends StatelessWidget {
             semanticsLabel: 'Collection completion',
             backgroundColor: const Color(0xFF6C5692),
             color: const Color(0xFFE2CCFF),
+            stopIndicatorColor: Colors.transparent,
+            trackGap: 0,
             minHeight: 7,
             borderRadius: BorderRadius.circular(20),
           ),
@@ -211,7 +221,7 @@ class _NextAchievement extends StatelessWidget {
     final theme = Theme.of(context);
     final remaining = (badge.target - badge.progress).clamp(0, badge.target);
     return Material(
-      color: const Color(0xFFF0E8FC),
+      color: AppColors.surfaceAlt,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -222,7 +232,7 @@ class _NextAchievement extends StatelessWidget {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Next Achievement',
                 style: theme.textTheme.labelLarge
-                    ?.copyWith(color: const Color(0xFF523286))),
+                    ?.copyWith(color: AppColors.primaryDark)),
             const SizedBox(height: 8),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               AchievementArtwork(id: badge.id, unlocked: true, size: 65),
@@ -231,17 +241,22 @@ class _NextAchievement extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(badge.title, style: theme.textTheme.titleMedium),
+                      Text(badge.title,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: AppColors.ink)),
                       const SizedBox(height: 3),
-                      Text(badge.description),
+                      Text(badge.description,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.inkSoft)),
                     ]),
               ),
             ]),
             const SizedBox(height: 8),
-            LinearProgressIndicator(
-                value: badge.fraction, semanticsLabel: badge.progressLabel),
+            _AchievementProgressBar(badge: badge),
             const SizedBox(height: 6),
-            Text('${badge.progressLabel} · $remaining remaining'),
+            Text('${badge.progressLabel} · $remaining remaining',
+                style:
+                    theme.textTheme.bodyMedium?.copyWith(color: AppColors.ink)),
           ]),
         ),
       ),
@@ -258,35 +273,113 @@ class _AchievementTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final statusColor =
+        badge.unlocked ? AppColors.primaryDark : AppColors.membershipFreeInk;
+    final titleColor = badge.unlocked ? Colors.white : AppColors.ink;
     return Material(
-      color:
-          badge.unlocked ? const Color(0xFFF7F1FF) : theme.colorScheme.surface,
+      color: badge.unlocked
+          ? const Color(0xFF37205F)
+          : AppColors.membershipFreeTint,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(17),
         side: BorderSide(
             color: badge.unlocked
-                ? const Color(0xFFDCCBF3)
-                : theme.colorScheme.outlineVariant),
+                ? const Color(0xFF694594)
+                : const Color(0xFFCBD5E1)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(17),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
           child: Column(children: [
-            AchievementArtwork(
-                id: badge.id, unlocked: badge.unlocked, size: 65),
-            const SizedBox(height: 5),
+            SizedBox(
+              width: 78,
+              height: 72,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AchievementArtwork(
+                      id: badge.id, unlocked: badge.unlocked, size: 68),
+                  if (!badge.unlocked)
+                    const Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.membershipFreeInk,
+                          shape: BoxShape.circle,
+                          border: Border.fromBorderSide(BorderSide(
+                            color: AppColors.membershipFreeTint,
+                            width: 2,
+                          )),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.lock_rounded,
+                              color: Colors.white, size: 14),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(badge.title,
-                style: theme.textTheme.titleSmall, textAlign: TextAlign.center),
-            const SizedBox(height: 4),
-            Text(badge.unlocked ? 'Unlocked' : 'Locked',
-                style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
+                style: theme.textTheme.titleMedium?.copyWith(color: titleColor),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color:
+                    badge.unlocked ? AppColors.primaryTint : AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: [
+                    Icon(
+                      badge.unlocked
+                          ? Icons.check_circle_rounded
+                          : Icons.lock_outline_rounded,
+                      color: statusColor,
+                      size: 14,
+                    ),
+                    Text(badge.unlocked ? 'Unlocked' : 'Locked',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: statusColor, fontWeight: FontWeight.w600),
+                        textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+            ),
           ]),
         ),
       ),
     );
   }
+}
+
+class _AchievementProgressBar extends StatelessWidget {
+  const _AchievementProgressBar({required this.badge});
+
+  final MemberAchievement badge;
+
+  @override
+  Widget build(BuildContext context) => LinearProgressIndicator(
+        value: badge.fraction,
+        semanticsLabel: badge.progressLabel,
+        color: AppColors.primary,
+        backgroundColor: AppColors.hairline,
+        stopIndicatorColor: Colors.transparent,
+        trackGap: 0,
+        minHeight: 7,
+        borderRadius: BorderRadius.circular(20),
+      );
 }
 
 Future<void> showAchievementDetails(BuildContext context,
@@ -296,6 +389,7 @@ Future<void> showAchievementDetails(BuildContext context,
     showDragHandle: true,
     isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: AppColors.surface,
     builder: (context) => ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -323,22 +417,29 @@ Future<void> showAchievementDetails(BuildContext context,
             const SizedBox(height: 10),
             Text(badge.title,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall),
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(color: AppColors.ink)),
             const SizedBox(height: 5),
             Text(
                 date == null
                     ? 'Locked'
                     : 'Unlocked · ${MaterialLocalizations.of(context).formatMediumDate(date)}',
-                textAlign: TextAlign.center),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.inkSoft)),
             const SizedBox(height: 16),
-            Text('Unlock requirement', style: theme.textTheme.titleSmall),
-            Text(badge.description),
+            Text('Unlock requirement',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(color: AppColors.ink)),
+            Text(badge.description,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.inkSoft)),
             const SizedBox(height: 12),
             if (progressKnown || badge.unlocked) ...[
-              LinearProgressIndicator(
-                  value: badge.fraction, semanticsLabel: badge.progressLabel),
+              _AchievementProgressBar(badge: badge),
               const SizedBox(height: 5),
-              Text(badge.progressLabel),
+              Text(badge.progressLabel,
+                  style: const TextStyle(color: AppColors.ink)),
             ] else
               const Text('Workout progress unavailable until sync completes.'),
             if (badge.unlocked) ...[

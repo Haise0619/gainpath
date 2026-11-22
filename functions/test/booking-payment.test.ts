@@ -63,6 +63,8 @@ it('independent provider read confirms once, promotes own locks/day and makes ex
   const result = await readBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now + 1000);
   expect(result.status).toBe('confirmed');
   expect(store.documents.get(`orgs/org-1/bookings/${id}`)?.status).toBe('confirmed');
+  expect(store.documents.get(`orgs/org-1/notifications/${keyOf('bookingConfirmed', id)}`))
+    .toMatchObject({ type: 'booking_confirmation', recipientId: 'member-1', bookingId: id, read: false });
   for (const [p,d] of store.documents) if (p.includes('/slotLocks/')) expect(d.status).toBe('confirmed');
   expect(await expireBookingHoldService(store, `orgs/org-1/jobs/${keyOf('expireBookingHold', id)}`, () => now + 900001)).toBe('already_processed');
   const count = store.documents.size;

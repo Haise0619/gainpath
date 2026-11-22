@@ -20,6 +20,7 @@ Future<void> showMemberRecommendationDetail(BuildContext context,
         MemberRecommendationOpener? onOpenTarget,
         MemberRecommendationPhotoBuilder? scopedPhotoBuilder,
         VoidCallback? onBrowseCoaches,
+        List<MemberRecommendationDetail> relatedRecommendations = const [],
         VoidCallback? onChanged}) =>
     showModalBottomSheet<void>(
         context: context,
@@ -33,7 +34,8 @@ Future<void> showMemberRecommendationDetail(BuildContext context,
             onOpenTarget: onOpenTarget,
             scopedPhotoBuilder: scopedPhotoBuilder,
             onBrowseCoaches: onBrowseCoaches,
-            onChanged: onChanged));
+            onChanged: onChanged,
+            relatedRecommendations: relatedRecommendations));
 
 class MemberRecommendationSheet extends StatefulWidget {
   const MemberRecommendationSheet(
@@ -44,7 +46,9 @@ class MemberRecommendationSheet extends StatefulWidget {
       this.onOpenTarget,
       this.scopedPhotoBuilder,
       this.onBrowseCoaches,
-      this.onChanged});
+      this.onChanged,
+      this.relatedRecommendations = const []});
+  final List<MemberRecommendationDetail> relatedRecommendations;
   final String recommendationId;
   final MemberRecommendationRepository repository;
   final bool Function() isCurrent;
@@ -59,6 +63,7 @@ class MemberRecommendationSheet extends StatefulWidget {
 class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
   StreamSubscription<AuthState>? _authChanges;
   MemberRecommendationDetail? _detail;
+  List<MemberRecommendationDetail> _related = [];
   bool _busy = true;
   String? _error;
   ({String action, int revision})? _pendingResponse;
@@ -114,7 +119,21 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
         detail = await widget.repository.act(detail, 'read', _command('read'));
       }
       if (!_current) return;
+      final related = <MemberRecommendationDetail>[];
+      for (final previous in widget.relatedRecommendations) {
+        if (previous.recommendationId == detail.recommendationId) continue;
+        final current = await widget.repository.get(previous.recommendationId);
+        if (!_current) return;
+        if (current.available &&
+            current.expiresAt.isAfter(DateTime.now()) &&
+            memberRecommendationTargetKey(current) ==
+                memberRecommendationTargetKey(detail)) {
+          related.add(current);
+        }
+      }
+      if (!_current) return;
       setState(() {
+        _related = related;
         _detail = detail;
         _busy = false;
       });
@@ -137,8 +156,14 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
       _error = null;
     });
     try {
+      if (action == 'dismiss' && widget.relatedRecommendations.isNotEmpty) {
+        await dismissMemberRecommendationGroup(
+            widget.repository, widget.relatedRecommendations, () => _current);
+      }
       final result =
-          await widget.repository.act(detail, action, _command(action));
+          action == 'dismiss' && widget.relatedRecommendations.isNotEmpty
+              ? await widget.repository.get(detail.recommendationId)
+              : await widget.repository.act(detail, action, _command(action));
       if (!_current) return;
       setState(() {
         _detail = result;
@@ -169,6 +194,15 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
       _detail = null;
     });
     try {
+      if (pending.action == 'dismiss' &&
+          widget.relatedRecommendations.isNotEmpty) {
+        await dismissMemberRecommendationGroup(
+            widget.repository, widget.relatedRecommendations, () => _current);
+        if (!_current) return;
+        _pendingResponse = null;
+        await _load();
+        return;
+      }
       final current = await widget.repository.get(widget.recommendationId);
       if (!_current) return;
       // A lost response is retried with its original revision and command ID,
@@ -368,6 +402,11 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                         color: AppColors.primary,
                                         fontWeight: FontWeight.w700))),
                           const SizedBox(height: 12),
+                          if (detail.available) ...[
+                            Text('Why this recommendation',
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 6),
+                          ],
                           Text(
                               recommendationPresentationReason(
                                   detail.summary, detail.exerciseLabel),
@@ -378,7 +417,12 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                 child: Text(detail.exerciseLabel!,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700))),
-                          for (final reason in detail.explanations)
+                          for (final reason in detail.explanations.where(
+                              (reason) =>
+                                  recommendationPresentationReason(
+                                      reason, detail.exerciseLabel) !=
+                                  recommendationPresentationReason(
+                                      detail.summary, detail.exerciseLabel)))
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(recommendationPresentationReason(
@@ -396,6 +440,26 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                 children: [
                                   Text(detail.summary),
                                   ...detail.explanations.map(Text.new)
+                                ]),
+                          if (detail.available && _related.isNotEmpty)
+                            ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                title:
+                                    const Text('Other recommendation reasons'),
+                                children: [
+                                  for (final other in _related)
+                                    ListTile(
+                                        title: Text(
+                                            other.exerciseLabel ?? other.title),
+                                        subtitle: Text([
+                                          other.summary,
+                                          ...other.explanations
+                                        ]
+                                            .map((r) =>
+                                                recommendationPresentationReason(
+                                                    r, other.exerciseLabel))
+                                            .toSet()
+                                            .join('\n')))
                                 ]),
                           const SizedBox(height: 20),
                           if (!detail.available) ...[

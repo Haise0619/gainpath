@@ -6,8 +6,15 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 class MiniGameRewardPolicyPanel extends StatefulWidget {
-  const MiniGameRewardPolicyPanel({super.key, required this.repository});
+  const MiniGameRewardPolicyPanel({
+    super.key,
+    required this.repository,
+    this.initiallyExpanded = false,
+  });
+
   final MiniGameRewardConfigurationRepository repository;
+  final bool initiallyExpanded;
+
   @override
   State<MiniGameRewardPolicyPanel> createState() =>
       _MiniGameRewardPolicyPanelState();
@@ -29,6 +36,10 @@ class _MiniGameRewardPolicyPanelState extends State<MiniGameRewardPolicyPanel> {
   void initState() {
     super.initState();
     _scope = widget.repository.scope;
+    _expanded = widget.initiallyExpanded;
+    if (_expanded) {
+      _load();
+    }
   }
 
   @override

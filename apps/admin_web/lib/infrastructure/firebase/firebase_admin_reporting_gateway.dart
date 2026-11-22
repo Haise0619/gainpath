@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'firebase_function_transport.dart';
 import 'firebase_unified_admin.dart';
 import '../../features/analytics/application/unified_admin_summary.dart';
@@ -31,7 +33,7 @@ class FirebaseAdminReportingGateway
       AdminReportingInvoke? checkInInvoke,
       this.unified = false})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _invoke = invoke ??
+        _businessRead = invoke ??
             (unified
                 ? (input) =>
                     UnifiedAdminTransport(scope: scope, isCurrent: isCurrent)
@@ -44,7 +46,7 @@ class FirebaseAdminReportingGateway
                                     timeout: const Duration(seconds: 60)))
                             .call<Object?>(input))
                         .data),
-        _workoutInvoke = workoutInvoke ??
+        _workoutRead = workoutInvoke ??
             (unified
                 ? (input) =>
                     UnifiedAdminTransport(scope: scope, isCurrent: isCurrent)
@@ -57,7 +59,7 @@ class FirebaseAdminReportingGateway
                                     timeout: const Duration(seconds: 60)))
                             .call<Object?>(input))
                         .data),
-        _checkInInvoke = checkInInvoke ??
+        _engagementRead = checkInInvoke ??
             (scope.datasetScope == null
                 ? _callCheckIns
                 : (input) async => (await firebaseScopedCallable(
@@ -71,9 +73,40 @@ class FirebaseAdminReportingGateway
   final bool unified;
   final bool Function() isCurrent;
   final String? Function() _uid;
-  final AdminReportingInvoke _invoke;
-  final AdminReportingInvoke _workoutInvoke;
-  final AdminReportingInvoke _checkInInvoke;
+  final AdminReportingInvoke _businessRead;
+  final AdminReportingInvoke _workoutRead;
+  final AdminReportingInvoke _engagementRead;
+  Future<Object?> _measure(String report, AdminReportingInvoke read,
+      Map<String, Object?> input) async {
+    final timer = Stopwatch()..start();
+    var success = false;
+    try {
+      final result = await read(input);
+      success = true;
+      return result;
+    } finally {
+      if (kDebugMode) {
+        debugPrint(jsonEncode({
+          'event': 'gainpath_report_call',
+          'report': report,
+          'elapsedMillis': timer.elapsedMilliseconds,
+          'success': success,
+          'unified': unified,
+          'schemaVersion': input['schemaVersion'],
+          'startAtMillis': input['startAtMillis'],
+          'endAtMillis': input['endAtMillis'],
+        }));
+      }
+    }
+  }
+
+  Future<Object?> _invoke(Map<String, Object?> input) =>
+      _measure('business', _businessRead, input);
+  Future<Object?> _workoutInvoke(Map<String, Object?> input) =>
+      _measure('workouts', _workoutRead, input);
+  Future<Object?> _checkInInvoke(Map<String, Object?> input) =>
+      _measure('engagement', _engagementRead, input);
+
   static Future<Object?> _callCheckIns(Map<String, Object?> input) async {
     final functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
     if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {

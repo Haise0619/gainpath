@@ -64,8 +64,13 @@ class MembershipFake implements MembershipCommerceRepository {
         'fulfilmentStatus': 'reconciliation_required'
       };
   @override
-  Future<Map<String, dynamic>> quote(String id, String code) async =>
-      {'planId': id, 'amountMinor': 10000, 'durationDays': 30};
+  Future<Map<String, dynamic>> quote(String id, String code) async => {
+        'planId': id,
+        'amountMinor': 10000,
+        'durationDays': 30,
+        if (id == 'premium' && overview['entitlement']['paidTier'] == 'basic')
+          'upgradeExpiresAtMillis': 1800000000001,
+      };
   @override
   Future<Map<String, dynamic>> checkout(String a, String b, String c,
           {required bool renewal, String? quoteId}) =>
@@ -144,8 +149,7 @@ void main() {
     expect(find.text('Renew Premium'), findsNothing);
     expect(find.text('Verify Membership'), findsOneWidget);
   });
-  testWidgets(
-      'comparison uses configured sen prices and blocks active tier switching',
+  testWidgets('active Basic can review a storefront upgrade quote',
       (tester) async {
     tester.view.physicalSize = const Size(320, 3000);
     tester.view.devicePixelRatio = 1;
@@ -184,10 +188,15 @@ void main() {
         isNotNull);
     expect(
         tester
-            .widget<FilledButton>(find.widgetWithText(
-                FilledButton, 'Available after current plan expires'))
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Upgrade to Premium'))
             .onPressed,
-        isNull);
+        isNotNull);
+    await tester.tap(find.text('Upgrade to Premium'));
+    await tester.pumpAndSettle();
+    expect(find.text('Expiry stays the same'), findsOneWidget);
+    expect(find.text('RM 100.00'), findsOneWidget);
+    expect(find.text('Promo code (optional)'), findsNothing);
     expect(tester.takeException(), isNull);
   });
   for (final tier in ['basic', 'premium']) {
@@ -199,7 +208,10 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: MembershipDashboardScreen(repository: repo)));
       await tester.pumpAndSettle();
-      expect(find.text(tier == 'basic' ? 'Basic Membership' : 'Premium Membership'), findsOneWidget);
+      expect(
+          find.text(
+              tier == 'basic' ? 'Basic Membership' : 'Premium Membership'),
+          findsOneWidget);
       expect(find.textContaining('Paid membership active'), findsOneWidget);
       expect(find.textContaining('Gym entry, coach booking'), findsOneWidget);
       expect(find.textContaining('1.5'), findsNothing);
@@ -213,7 +225,8 @@ void main() {
         home: MembershipPaymentScreen(
             repository: repo, initial: await repo.payment('m1'))));
     await tester.pump();
-    expect(find.textContaining('Our team needs to review this payment'), findsOneWidget);
+    expect(find.textContaining('Our team needs to review this payment'),
+        findsOneWidget);
     expect(find.text('Payment confirmed · Membership activated'), findsNothing);
     expect(find.text('Open Billplz Sandbox'), findsNothing);
     await tester.pumpWidget(const SizedBox());

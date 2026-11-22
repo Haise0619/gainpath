@@ -64,14 +64,21 @@ void main() {
                 body: RiskLeaderboardScreen(canonicalRepository: repository)),
           )));
       await t.pumpAndSettle();
-      await t.tap(find.text('View'));
+      await t.tap(find.text('View Details'));
       await t.pumpAndSettle();
       expect(find.text('Gemini'), findsWidgets);
-      await t.ensureVisible(find.text('Recommendation source'));
-      expect(find.text('Admin outreach'), findsOneWidget);
+      final drawer =
+          find.byKey(const ValueKey('recommendation-details-drawer'));
+      await t.ensureVisible(
+          find.descendant(of: drawer, matching: find.text('Source')));
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('recommendation-details-drawer')),
+              matching: find.text('Admin Outreach')),
+          findsOneWidget);
       for (final part in ['details', 'ranking']) {
         if (part == 'ranking') {
-          await t.ensureVisible(find.text('AI analysis & delivery'));
+          await t.ensureVisible(find.text('Recommendation selection'));
           await t.pumpAndSettle();
         }
         expect(t.takeException(), isNull);

@@ -13,6 +13,20 @@ bool isBillplzSandboxCheckoutUrl(String value) {
       uri.path.length > 1;
 }
 
+bool isBookingCheckoutUrl(String value) {
+  if (isBillplzSandboxCheckoutUrl(value)) return true;
+  final uri = Uri.tryParse(value);
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.userInfo.isEmpty &&
+      (!uri.hasPort || uri.port == 443) &&
+      ((const {'dev.xen.to', 'xen.to', 'checkout-staging.xendit.co'}
+                  .contains(uri.host) &&
+              uri.path.length > 1) ||
+          (uri.host == 'checkout.xendit.co' &&
+              RegExp(r'^/sessions/ps-[a-f0-9]{24}/?$').hasMatch(uri.path)));
+}
+
 class PremiumCoachVoucherOffer {
   const PremiumCoachVoucherOffer({required this.status, this.discountMinor});
   final String status;
@@ -190,7 +204,7 @@ class BookingPaymentView {
         ].any((key) => json[key] is! String || (json[key] as String).isEmpty) ||
         (json['checkoutUrl'] != null &&
             (json['checkoutUrl'] is! String ||
-                !isBillplzSandboxCheckoutUrl(json['checkoutUrl'] as String))) ||
+                !isBookingCheckoutUrl(json['checkoutUrl'] as String))) ||
         (json['resolutionReason'] != null &&
             json['resolutionReason'] is! String)) {
       throw const FormatException('Invalid payment status');

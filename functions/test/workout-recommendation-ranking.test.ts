@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {
   createGeminiWorkoutRecommendationRanker, rankWorkoutRecommendations,
   WORKOUT_RANKING_FACTORS,
@@ -8,244 +8,167 @@ import {
 
 const candidate = (id: string, kind: WorkoutRankingCandidate<string>['kind'],
   factors: WorkoutRankingFactor[], detail: Partial<WorkoutRankingCandidate<string>> = {}): WorkoutRankingCandidate<string> =>
-  ({ kind, target: id, factors, ...detail });
-
+  ({kind, target: id, factors, ...detail});
 const rank = (recommendationType: string, ranking: string[], relevantWorkoutFactors: string[]) =>
-  ({ recommendationType, selectedCandidateId: ranking[0], ranking, relevantWorkoutFactors });
-
-const response = (recommendations: unknown[]) => ({
+  ({recommendationType, ranking, relevantWorkoutFactors});
+const inference = (raw: unknown) => ({
   providerSource: 'mock_or_recorded' as const, cacheHit: false,
-  model: 'gemini-3.5-flash-lite-fixture', latencyMillis: 42,
-  usage: { inputTokens: 325, outputTokens: 105, thinkingTokens: 10, totalTokens: 440 },
-  text: JSON.stringify({ recommendations }),
+  model: 'fixture-model', latencyMillis: 7,
+  usage: {inputTokens: 100, outputTokens: 20, thinkingTokens: null, totalTokens: 120},
+  text: JSON.stringify(raw),
 });
+const response = (rows: ReturnType<typeof rank>[]) =>
+  inference({rankedCandidateIds: rows.flatMap(row => row.ranking)});
+const calfContext: WorkoutRankingContext = {goal:'muscle_gain',experience:'beginner',frequency:'regular',reps:'moderate'};
+const calf = [
+  candidate('private-calf-publication-a','content',['exercise_match','experience_match','training_frequency']),
+  candidate('private-calf-publication-b','content',['exercise_match','experience_match','training_frequency']),
+];
+const httpResponse = (raw: unknown) => new Response(JSON.stringify({
+  candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(raw)}]}}],
+  modelVersion:'fixture-model',usageMetadata:{promptTokenCount:100,candidatesTokenCount:20,totalTokenCount:120},
+}));
 
-const httpResponse = (recommendations: unknown[]): Response => {
-  const inference = response(recommendations);
-  return new Response(JSON.stringify({
-    modelVersion: inference.model, candidates: [{ finishReason: 'STOP', content: { parts: [{ text: inference.text }] } }],
-    usageMetadata: { promptTokenCount: 325, candidatesTokenCount: 105, thoughtsTokenCount: 10, totalTokenCount: 440 },
-  }));
-};
+describe('minimal workout ranking contract',()=>{
+  it.each([2,3,6])('validates one kind with %i complete anonymous candidates',async count=>{
+    const rows=Array.from({length:count},(_,i)=>candidate('private-'+i,'content',['exercise_match']));
+    const provider:WorkoutRankingProvider=async request=>inference({
+      rankedCandidateIds:request.candidates.map(row=>row.label).reverse(),
+    });
+    const result=await rankWorkoutRecommendations(provider,calfContext,rows);
+    expect(result.failure).toBeUndefined();
+    expect(result.selections.content).toMatchObject({method:'gemini',candidate:rows[count-1],ruleFirst:rows[0],changedOrder:true});
+    expect(result.selections.content!.ranking).toHaveLength(count);
+  });
 
-describe('production workout ranking', () => {
-  it('uses one bounded structured request and alters all three destinations with grounded reasons', async () => {
-    const candidates = [
-      candidate('private-baseline-video', 'content', ['exercise_match']),
-      candidate('private-new-video', 'content', ['exercise_match', 'form_practice'], { difficulty: 'beginner' }),
-      candidate('private-baseline-coach', 'trainer', ['goal_match']),
-      candidate('private-new-coach', 'trainer', ['coach_specialization', 'goal_match']),
-      candidate('private-baseline-routine', 'routine', ['goal_match'], { duration: 'long' }),
-      candidate('private-new-routine', 'routine', ['goal_match', 'duration_match'], { duration: 'short' }),
-    ];
-    const context: WorkoutRankingContext = {
-      goal: 'strength', experience: 'beginner', exercise: 'lower_body', duration: 'short', form: 'developing',
-    };
-    // Emulate extra input from a server object. Only the allowlisted nested fields cross the boundary.
-    Object.assign(context, { bmi: 26, name: 'Private Member' });
-    Object.assign(candidates[1], { notes: 'Private notes' });
-    const fetcher = vi.fn(async (_resource: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body));
-      const payload = JSON.parse(body.contents[0].parts[0].text);
-      expect(payload.context).toEqual({
-        goal: 'strength', experience: 'beginner', exercise: 'lower_body', duration: 'short', form: 'developing',
+  it('reproduces the two-candidate Calf input through the actual structured provider transport',async()=>{
+    const fetcher=vi.fn(async (_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+      const body=JSON.parse(String(init?.body));
+      const request=JSON.parse(body.contents[0].parts[0].text);
+      expect(request.promptVersion).toBe('module13-workout-v2');
+      expect(request.candidates.map((row:{label:string})=>row.label)).toEqual(['T1','T2']);
+      expect(body.generationConfig.responseSchema).toEqual({
+        type:'OBJECT',required:['rankedCandidateIds'],properties:{rankedCandidateIds:{type:'ARRAY',items:{type:'STRING'}}},
       });
-      expect(JSON.stringify(payload)).not.toMatch(/private|bmi|notes/i);
-      expect(body.generationConfig).toMatchObject({ maxOutputTokens: 512, responseMimeType: 'application/json' });
-      expect(body.generationConfig.responseSchema.properties.recommendations.items.required).toContain('ranking');
-      expect(body.tools).toBeUndefined();
-      expect(Buffer.byteLength(String(init?.body))).toBeLessThan(5000);
-      return httpResponse([
-        rank('content', ['T2', 'T1'], ['form_practice', 'exercise_match']),
-        rank('trainer', ['C2', 'C1'], ['coach_specialization', 'goal_match']),
-        rank('routine', ['R2', 'R1'], ['duration_match', 'goal_match']),
-      ]);
+      expect(JSON.stringify(body)).not.toContain('private-calf');
+      expect(JSON.stringify(body)).not.toMatch(/selectedCandidateId|relevantWorkoutFactors/);
+      return httpResponse({rankedCandidateIds:['T2','T1']});
     });
-    const provider = createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture-key', fetcher });
-    const result = await rankWorkoutRecommendations(provider, context, candidates);
-
+    const provider=createGeminiWorkoutRecommendationRanker({apiKey:'fixture-key',fetcher});
+    const output=await rankWorkoutRecommendations(provider,calfContext,calf);
+    expect(output.selections.content!.method).toBe('gemini');
+    expect(output.selections.content!.candidate.target).toBe('private-calf-publication-b');
+    expect(output.selections.content!.factors).toEqual(calf[1].factors);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    for (const [kind, index] of [['content', 1], ['trainer', 3], ['routine', 5]] as const) {
-      expect(result.selections[kind]).toMatchObject({ candidate: candidates[index], method: 'gemini', changedOrder: true });
-      expect(result.selections[kind]?.ranking.map(entry => entry.target)).toEqual([
-        candidates[index].target, candidates[index - 1].target,
-      ]);
-    }
-    expect(result.selections.content?.reason).toMatch(/movement control/i);
-    expect(result.selections.trainer?.reason).toMatch(/strength/i);
-    expect(result.selections.routine?.reason).toMatch(/short/i);
-    expect(result.inference).toMatchObject({
-      providerSource: 'mock_or_recorded', model: 'gemini-3.5-flash-lite-fixture', cacheHit: false,
-      usage: { inputTokens: 325, outputTokens: 105, thinkingTokens: 10, totalTokens: 440 },
-    });
-
-    const cached = await rankWorkoutRecommendations(provider, context, candidates);
+    await rankWorkoutRecommendations(provider,calfContext,calf);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(cached.inference).toMatchObject({ cacheHit: true, usage: { totalTokens: 0 } });
   });
 
   it.each([
-    rank('content', ['T9', 'T1'], ['exercise_match']),
-    rank('content', ['T2', 'C1'], ['exercise_match']),
-    rank('content', ['T2', 'T2'], ['exercise_match']),
-    rank('content', ['T2'], ['exercise_match']),
-    rank('content', ['T2', 'T1'], ['repetition_volume']),
-    { ...rank('content', ['T2', 'T1'], ['exercise_match']), personalizedReason: 'You hurt your knee.' },
-    { ...rank('content', ['T2', 'T1'], ['exercise_match']), selectedCandidateId: 'T1' },
-  ])('uses rules for an invalid kind and honors a valid subset (%j)', async invalid => {
-    const provider: WorkoutRankingProvider = async () => response([
-      invalid, rank('routine', ['R2', 'R1'], ['experience_match']),
-    ]);
-    const output = await rankWorkoutRecommendations(provider, { experience: 'beginner' }, [
-      candidate('baseline-tutorial', 'content', ['exercise_match']),
-      candidate('alternate-tutorial', 'content', ['exercise_match']),
-      candidate('baseline-routine', 'routine', []),
-      candidate('alternate-routine', 'routine', ['experience_match']),
-    ]);
-
+    ['missing_required_field',{}],
+    ['extra_field',{rankedCandidateIds:['T2','T1'],reason:'invented'}],
+    ['invalid_structure',{rankedCandidateIds:'T2'}],
+    ['invalid_structure',null],
+    ['invalid_candidate_id',{rankedCandidateIds:['T9','T1']}],
+    ['invalid_candidate_id',{rankedCandidateIds:['private-calf-publication-a','T1']}],
+    ['invalid_candidate_id',{rankedCandidateIds:[2,'T1']}],
+    ['duplicate_candidate_id',{rankedCandidateIds:['T1','T1']}],
+    ['incomplete_ranking',{rankedCandidateIds:['T2']}],
+    ['incomplete_ranking',{rankedCandidateIds:[]}],
+  ])('rejects %s and keeps the rule result (%j)',async(code,raw)=>{
+    const output=await rankWorkoutRecommendations(async()=>inference(raw),calfContext,calf);
     expect(output.failure).toBe('invalid_provider_output');
-    expect(output.selections.content).toMatchObject({ method: 'rule_fallback', candidate: { target: 'baseline-tutorial' } });
-    expect(output.selections.routine).toMatchObject({ method: 'gemini', candidate: { target: 'alternate-routine' } });
-    expect(output.selections.trainer).toBeUndefined();
+    expect(output.validationFailure).toBe(code);
+    expect(output.selections.content).toMatchObject({method:'rule_fallback',candidate:calf[0]});
   });
 
-  it('rejects duplicate kinds without discarding valid kinds', async () => {
-    const provider: WorkoutRankingProvider = async () => response([
-      rank('content', ['T1'], ['exercise_match']),
-      rank('content', ['T1'], ['exercise_match']),
-      rank('routine', ['R1'], ['exercise_match']),
-    ]);
-
-    const result = await rankWorkoutRecommendations(provider, {}, [
-      candidate('video', 'content', ['exercise_match']),
-      candidate('routine', 'routine', ['exercise_match']),
-    ]);
-    expect(result.selections.content?.method).toBe('rule_fallback');
-    expect(result.selections.routine?.method).toBe('gemini');
-    expect(result.failure).toBe('invalid_provider_output');
+  it('identifies malformed JSON precisely',async()=>{
+    const output=await rankWorkoutRecommendations(async()=>({...inference({}),text:'incomplete {'}),calfContext,calf);
+    expect(output.validationFailure).toBe('invalid_json');
+    expect(output.selections.content!.method).toBe('rule_fallback');
   });
 
-  it('caps candidates per kind and rejects fabricated context and factors from raw calls', async () => {
-    const fetcher = vi.fn(async () => httpResponse([]));
-    const provider = createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture-key', fetcher });
-    const inspect: WorkoutRankingProvider = async request => {
-      expect(request.candidates).toHaveLength(6);
-      expect(request.context).toEqual({ completion: 'completed' });
-      expect(request.candidates[0].factors).toEqual(['completion']);
-      await expect(provider({
-        ...request, context: { ...request.context, goal: 'My private training note' },
-      } as unknown as typeof request)).rejects.toMatchObject({ reason: 'invalid_request' });
-      await expect(provider({
-        ...request, candidates: request.candidates.map(entry => ({ ...entry, factors: [' private note'] })),
-      } as unknown as typeof request)).rejects.toMatchObject({ reason: 'invalid_request' });
-      return response([]);
+  it('skips the provider when every kind has a single eligible candidate',async()=>{
+    const provider=vi.fn<WorkoutRankingProvider>();
+    const rows=[calf[0],candidate('coach','trainer',['goal_match']),candidate('routine','routine',[])];
+    const output=await rankWorkoutRecommendations(provider,calfContext,rows);
+    expect(provider).not.toHaveBeenCalled();
+    for(const selection of Object.values(output.selections)){
+      expect(selection).toMatchObject({method:'rule_fallback',fallbackReason:'single_eligible_candidate'});
+    }
+  });
+
+  it('ranks the two-candidate kind while a singleton remains a rule choice',async()=>{
+    const provider:WorkoutRankingProvider=async request=>{
+      expect(request.candidates.map(row=>row.kind)).toEqual(['content','content']);
+      return inference({rankedCandidateIds:['T2','T1']});
     };
-    const result = await rankWorkoutRecommendations(inspect,
-      { goal: 'Private note', completion: 'completed' } as unknown as WorkoutRankingContext,
-      Array.from({ length: 8 }, (_, i) => candidate(String(i), 'routine', ['completion', 'form_practice'])));
-    expect(result.selections.routine?.ranking).toHaveLength(6);
-    expect(result.selections.routine?.candidate.target).toBe('0');
-    expect(fetcher).not.toHaveBeenCalled();
+    const output=await rankWorkoutRecommendations(provider,calfContext,[...calf,candidate('coach','trainer',['goal_match'])]);
+    expect(output.selections.content!.method).toBe('gemini');
+    expect(output.selections.trainer).toMatchObject({method:'rule_fallback',fallbackReason:'single_eligible_candidate'});
   });
 
-  it('falls back promptly on timeout and keeps quota failures out of suggestion text', async () => {
-    let signal: AbortSignal | null | undefined;
-    const slow = vi.fn((_resource: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
-      signal = init?.signal;
-      return new Promise(() => {});
+  it('maps three kinds without returning a type, chosen ID or evidence from the model',async()=>{
+    const rows=[...calf,
+      candidate('coach-a','trainer',['goal_match']),candidate('coach-b','trainer',['coach_specialization']),
+      candidate('routine-a','routine',['experience_match']),candidate('routine-b','routine',['duration_match'])];
+    const output=await rankWorkoutRecommendations(async()=>inference({
+      rankedCandidateIds:['R2','T2','C2','T1','R1','C1'],
+    }),{...calfContext,duration:'short'},rows);
+    expect(output.selections.content!.candidate.target).toBe(calf[1].target);
+    expect(output.selections.trainer!.candidate.target).toBe('coach-b');
+    expect(output.selections.routine!.candidate.target).toBe('routine-b');
+    expect(Object.values(output.selections).every(row=>row.method==='gemini')).toBe(true);
+  });
+
+  it('ignores unsupported feature claims and never invents a missing preference',async()=>{
+    const output=await rankWorkoutRecommendations(async()=>inference({rankedCandidateIds:['T2','T1']}),{},
+      [calf[0],candidate('other','content',['goal_match','experience_match','form_practice','exercise_match'])]);
+    expect(output.selections.content!.factors).toEqual(['exercise_match']);
+    expect(output.selections.content!.reason).not.toMatch(/beginner|muscle|form/i);
+  });
+
+  it('retains rule fallback on actual transport timeout',async()=>{
+    const provider=createGeminiWorkoutRecommendationRanker({
+      apiKey:'fixture',timeoutMillis:10,fetcher:async()=>new Promise<Response>(()=>{}),
     });
-    const providers = [
-      createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture-key', timeoutMillis: 10, fetcher: slow }),
-      createGeminiWorkoutRecommendationRanker({
-        apiKey: 'fixture-key',
-        fetcher: async () => new Response('private provider details', { status: 429 }),
-      }),
-    ];
-    const candidates = [candidate('published', 'content', ['exercise_match'])];
-    for (const [i, provider] of providers.entries()) {
-      const result = await rankWorkoutRecommendations(provider, {}, candidates);
-      expect(result).toMatchObject({
-        failure: i === 0 ? 'timeout' : 'rate_limited',
-        selections: { content: { candidate: candidates[0], method: 'rule_fallback', changedOrder: false } },
-      });
-      expect(result.inference).toBeUndefined();
-      expect(JSON.stringify(result)).not.toContain('private provider details');
-    }
-    expect(slow).toHaveBeenCalledTimes(1);
-    expect(signal?.aborted).toBe(true);
+    const output=await rankWorkoutRecommendations(provider,calfContext,calf);
+    expect(output.failure).toBe('timeout');
+    expect(output.selections.content!.method).toBe('rule_fallback');
   });
 
-  it('keeps the production rate budget bounded and resets it after a minute', async () => {
-    let now = 0;
-    const fetcher = vi.fn(async () => httpResponse([rank('content', ['T1'], ['exercise_match'])]));
-    const provider = createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture-key', fetcher, clock: () => now, maxRequests: 1 });
-    const candidates = [candidate('pub-tutorial', 'content', ['exercise_match'])];
-    await rankWorkoutRecommendations(provider, { exercise: 'lower_body' }, candidates);
-    const capped = await rankWorkoutRecommendations(provider, { exercise: 'upper_body' }, candidates);
-    expect(capped.failure).toBe('rate_limited');
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    now = 60000;
-    await rankWorkoutRecommendations(provider, { exercise: 'upper_body' }, candidates);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it('sends the maximum real candidate mix in one compact request', async () => {
-    const recommendations = ['trainer', 'content', 'routine'].map((kind, index) =>
-      rank(kind, Array.from({ length: 6 }, (_, i) => ['C', 'T', 'R'][index] + (i + 1)),
-        ['experience_match', 'duration_match']));
-    const fetcher = vi.fn(async (_resource: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      expect(Buffer.byteLength(String(init?.body))).toBeLessThanOrEqual(5000);
-      return httpResponse(recommendations);
+  it('keeps network errors and quota failure details out of saved reasons',async()=>{
+    const provider=createGeminiWorkoutRecommendationRanker({
+      apiKey:'fixture',fetcher:async()=>new Response('private provider text',{status:429}),
     });
-    const candidates = (['trainer', 'content', 'routine'] as const).flatMap(kind =>
-      Array.from({ length: 6 }, (_, i) => candidate(kind + i, kind,
-        ['exercise_match', 'experience_match', 'duration_match', 'goal_match'],
-        { duration: 'short', difficulty: 'beginner' })));
-    const result = await rankWorkoutRecommendations(
-      createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture', fetcher }),
-      { experience: 'beginner', duration: 'short', goal: 'strength', exercise: 'lower_body' }, candidates,
-    );
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(result.failure).toBeUndefined();
-    expect(Object.values(result.selections).every(selection => selection.method === 'gemini')).toBe(true);
+    const output=await rankWorkoutRecommendations(provider,calfContext,calf);
+    expect(output.failure).toBe('rate_limited');
+    expect(JSON.stringify(output)).not.toContain('private provider text');
   });
 
-  it('falls back for malformed JSON, unsupported wrappers and rejected network calls', async () => {
-    const providers: WorkoutRankingProvider[] = [
-      async () => ({ ...response([]), text: 'incomplete {' }),
-      async () => ({ ...response([]), text: JSON.stringify({ recommendations: [], member: 'private' }) }),
-      async () => { throw Error('private network detail'); },
-    ];
-    for (const provider of providers) {
-      const output = await rankWorkoutRecommendations(provider, {}, [candidate('video', 'content', ['exercise_match'])]);
-      expect(output.selections.content).toMatchObject({ method: 'rule_fallback', candidate: { target: 'video' } });
-      expect(output.failure).toBeDefined();
-      expect(JSON.stringify(output)).not.toContain('private');
-    }
-  });
-
-  it('handles all supported bounded features on all eighteen candidates', async () => {
-    let requestBytes = 0;
-    const fetcher = vi.fn(async (_resource: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      requestBytes = Buffer.byteLength(String(init?.body));
-      return httpResponse(['trainer', 'content', 'routine'].map((kind, index) =>
-        rank(kind, Array.from({ length: 6 }, (_, i) => ['C', 'T', 'R'][index] + (i + 1)), ['goal_match'])));
+  it('handles all eighteen candidates in one bounded request',async()=>{
+    const fetcher=vi.fn(async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+      expect(Buffer.byteLength(String(init?.body))).toBeLessThanOrEqual(8000);
+      const request=JSON.parse(JSON.parse(String(init?.body)).contents[0].parts[0].text);
+      return httpResponse({rankedCandidateIds:request.candidates.map((row:{label:string})=>row.label).reverse()});
     });
-    const candidates = (['trainer', 'content', 'routine'] as const).flatMap(kind =>
-      Array.from({ length: 6 }, (_, i) => candidate(kind + i, kind, [...WORKOUT_RANKING_FACTORS],
-        { duration: 'medium', difficulty: 'intermediate' })));
-    const result = await rankWorkoutRecommendations(
-      createGeminiWorkoutRecommendationRanker({ apiKey: 'fixture', fetcher }), {
-        goal: 'strength', experience: 'intermediate', frequency: 'regular', completion: 'completed',
-        reps: 'high', form: 'consistent', duration: 'medium', exercise: 'full_body', equipment: 'dumbbells',
-      }, candidates,
-    );
+    const rows=(['trainer','content','routine'] as const).flatMap(kind=>
+      Array.from({length:6},(_,i)=>candidate(kind+i,kind,[...WORKOUT_RANKING_FACTORS])));
+    const output=await rankWorkoutRecommendations(
+      createGeminiWorkoutRecommendationRanker({apiKey:'fixture',fetcher}),
+      {goal:'strength',experience:'beginner',duration:'short',frequency:'regular'},rows);
+    expect(Object.values(output.selections).every(row=>row.method==='gemini')).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(result.failure).toBeUndefined();
-    expect(requestBytes).toBeLessThanOrEqual(8000);
-    console.info(JSON.stringify({ measurement: 'mocked_maximum_workout_ranking_input', requestBytes, candidates: 18 }));
+  });
+
+  it('does not invoke the provider with an empty or unavailable candidate set',async()=>{
+    const provider=vi.fn<WorkoutRankingProvider>();
+    expect((await rankWorkoutRecommendations(provider,{},[])).selections).toEqual({});
+    expect((await rankWorkoutRecommendations(undefined,calfContext,calf)).selections.content!.method).toBe('rule_fallback');
+    expect(provider).not.toHaveBeenCalled();
   });
 });
+
 
 describe('synthetic Top-1 comparison using hand-authored labels and mocked provider responses', () => {
   it('reports relevance and changed winners without fabricating absent candidates or context', async () => {

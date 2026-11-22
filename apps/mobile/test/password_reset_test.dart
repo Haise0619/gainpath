@@ -73,6 +73,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('Android OTP run opens code recovery from Forgot password',
+      (tester) async {
+    await open(tester, (_) async => fail('Email link sender was called.'));
+    expect(find.text('Send verification code'), findsOneWidget);
+    expect(find.text('Use an email link instead'), findsOneWidget);
+    expect(find.text('Send reset link'), findsNothing);
+  }, skip: !const bool.fromEnvironment('ENABLE_PASSWORD_RECOVERY_OTP'));
+
   testWidgets('named login recovery also uses the Firebase-mode sender',
       (tester) async {
     final emails = <String>[];

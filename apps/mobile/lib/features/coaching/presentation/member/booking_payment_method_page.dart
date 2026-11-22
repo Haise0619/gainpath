@@ -153,9 +153,7 @@ class _BookingPaymentMethodPageState extends State<BookingPaymentMethodPage> {
                     ?.copyWith(fontSize: 23, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text(
-              widget.data?.selectionMethods.isNotEmpty == true
-                  ? 'Billplz shows available options at checkout.'
-                  : 'Continue to secure checkout with Billplz.',
+              'Continue to secure checkout to complete your payment.',
               style: theme.bodyMedium?.copyWith(color: AppColors.inkSoft),
             ),
             const SizedBox(height: 12),

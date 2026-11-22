@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AuthSignInCancelled;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'firebase_function_transport.dart';
 
 String firebaseAuthFailureMessage(String code) => switch (code) {
@@ -70,7 +73,10 @@ Map<String, Object?> membershipClaims({
 }
 
 class FlutterFirebaseAuthGateway
-    implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
+    implements
+        FirebaseAuthGateway,
+        FirebaseAuthSessionGateway,
+        FirebaseGoogleAuthGateway {
   FlutterFirebaseAuthGateway({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
@@ -84,6 +90,64 @@ class FlutterFirebaseAuthGateway
   final FirebaseFunctions? _functions;
   final Set<String> _suppressedRegistrationUsers = <String>{};
   bool _authMutationInProgress = false;
+  static Future<void>? _googleInitialization;
+
+  @override
+  bool get supportsGoogleSignIn =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  @override
+  Future<FirebaseAuthUser> signInWithGoogle({required bool registering}) async {
+    _authMutationInProgress = true;
+    try {
+      final google = GoogleSignIn.instance;
+      await (_googleInitialization ??= google.initialize());
+      final account = await google.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException(
+            'Google could not verify your account. Try again.');
+      }
+      final credential = await _auth.signInWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+      final user = credential.user!;
+      _suppressedRegistrationUsers.remove(user.uid);
+      return await _resolveUser(
+        user,
+        provisionIfMissing: registering && user.emailVerified,
+        googleSignIn: true,
+      );
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        throw const AuthSignInCancelled();
+      }
+      throw AuthException(switch (error.code) {
+        GoogleSignInExceptionCode.clientConfigurationError ||
+        GoogleSignInExceptionCode.providerConfigurationError =>
+          'Google sign-in is unavailable. Use email sign-in or contact gym staff.',
+        _ => 'Unable to connect to Google. Try again.',
+      });
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(switch (error.code) {
+        'account-exists-with-different-credential' =>
+          'This email already has an account. Sign in with your existing method.',
+        'operation-not-allowed' =>
+          'Google sign-in is unavailable. Use email sign-in or contact gym staff.',
+        'invalid-credential' =>
+          'Google could not verify your account. Try again.',
+        _ => firebaseAuthFailureMessage(error.code),
+      });
+    } on FirebaseException catch (error) {
+      throw AuthException(error.code == 'permission-denied'
+          ? 'This account cannot access its gym membership. Contact gym staff.'
+          : 'Could not reach your account. Check your connection and retry.');
+    } on StateError catch (error) {
+      throw AuthException(error.message.toString());
+    } finally {
+      _authMutationInProgress = false;
+    }
+  }
 
   @override
   Stream<FirebaseAuthUser?> get userChanges =>
@@ -190,8 +254,10 @@ class FlutterFirebaseAuthGateway
       if (refreshed == null || refreshed.uid != user.uid) {
         throw const AuthException('Your session changed. Sign in again.');
       }
-      await refreshed.getIdToken(true);
-      return await _resolveUser(refreshed, provisionIfMissing: true);
+      final token = await refreshed.getIdTokenResult(true);
+      final googleSignIn = token.signInProvider == 'google.com';
+      return await _resolveUser(refreshed,
+          provisionIfMissing: !googleSignIn, googleSignIn: googleSignIn);
     } on FirebaseAuthException catch (error) {
       if (error.code == 'network-request-failed') {
         throw const FirebaseAuthRefreshUnavailable(
@@ -216,6 +282,15 @@ class FlutterFirebaseAuthGateway
   Future<void> signOut() async {
     _suppressedRegistrationUsers.clear();
     await _auth.signOut();
+    final initialization = _googleInitialization;
+    if (initialization != null) {
+      try {
+        await initialization;
+        await GoogleSignIn.instance.signOut();
+      } on GoogleSignInException {
+        // Firebase has already cleared the application session.
+      }
+    }
   }
 
   Future<FirebaseAuthUser?> _resolveNullableUser(User? user) async =>
@@ -224,6 +299,7 @@ class FlutterFirebaseAuthGateway
   Future<FirebaseAuthUser> _resolveUser(
     User user, {
     bool provisionIfMissing = false,
+    bool googleSignIn = false,
   }) async {
     final email = user.email;
     if (email == null || email.isEmpty) {
@@ -247,6 +323,9 @@ class FlutterFirebaseAuthGateway
               functions: _functions)
           .call<Object?>({'schemaVersion': 1});
       final session = FypDatasetSession.fromResponse(response.data);
+      if (googleSignIn && session.member['role'] != 'member') {
+        throw const AuthException('Google sign-in is available to members.');
+      }
       return FirebaseAuthUser(
           userId: user.uid,
           email: email,
@@ -267,6 +346,10 @@ class FlutterFirebaseAuthGateway
       await _provision(_fallbackDisplayName(user));
       userData =
           (await _firestore.collection('users').doc(user.uid).get()).data();
+    }
+    if (userData == null && googleSignIn) {
+      throw const AuthException(
+          'No GainPath membership exists for this Google account. Choose Create an account to sign up with Google.');
     }
     final organizationId = userData?['organizationId'];
     if (userData == null || organizationId is! String) {
@@ -291,6 +374,9 @@ class FlutterFirebaseAuthGateway
     }
     if (memberData == null) {
       throw StateError('The account has no organization membership.');
+    }
+    if (googleSignIn && memberData['role'] != 'member') {
+      throw const AuthException('Google sign-in is available to members.');
     }
     return FirebaseAuthUser(
       userId: user.uid,

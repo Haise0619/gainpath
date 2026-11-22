@@ -127,8 +127,11 @@ class BlazePoseGpuSession {
         final expected =
             contract.outputs[index].shape.reduce((a, b) => a * b) * 4;
         if (data.length != expected) throw StateError('GPU output byte count');
-        // Codec byte views need not have four-byte aligned offsets.
-        outputs[index] = Uint8List.fromList(data).buffer.asFloat32List();
+        // Codec data is owned by this reply. Reuse aligned payloads and copy
+        // only when the Float32 view would have an invalid byte offset.
+        outputs[index] = data.offsetInBytes % Float32List.bytesPerElement == 0
+            ? data.buffer.asFloat32List(data.offsetInBytes, expected ~/ 4)
+            : Uint8List.fromList(data).buffer.asFloat32List();
       }
       return GpuPoseOutputs(outputs, result['nativeMicros'] as int,
           result['copyMicros'] as int, timer.elapsedMicroseconds);

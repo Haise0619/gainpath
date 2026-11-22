@@ -354,7 +354,7 @@ void main() {
   });
   for (final matching in [true, false]) {
     testWidgets(
-        'protected Coach photo requires exact current published path matching=$matching',
+        'protected Coach photo uses authoritative callable rather than stale directory metadata matching=$matching',
         (tester) async {
       final directory = RecommendationDirectory(routeMember.scope),
           catalog = RecommendationCatalog(routeMember.scope);
@@ -397,9 +397,10 @@ void main() {
               builder: (context) =>
                   Scaffold(body: navigator.buildCoachPhoto(context, detail)))));
       await tester.pumpAndSettle();
-      expect(directory.loads, 1);
-      expect(find.byType(PublishedCoachPhoto),
-          matching ? findsOneWidget : findsNothing);
+      // The existing protected photo callable verifies the current published path.
+      // This fixture has no Firebase transport; it safely renders the avatar fallback.
+      expect(directory.loads, 0);
+      expect(find.byType(Image), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

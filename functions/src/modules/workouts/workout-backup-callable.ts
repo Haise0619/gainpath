@@ -36,6 +36,14 @@ export const workoutBackupCommand = onCall({ region: 'asia-southeast1', enforceA
         throw new InputValidationError('Invalid backup action.');
     }
     catch (error) {
+        // Validation stacks contain code locations, never the submitted payload.
+        // Keep member identity and workout data out of diagnostic logs.
+        if (error instanceof InputValidationError) {
+            console.warn('workout_backup_validation_rejected', {
+                code: 'invalid-argument',
+                location: error.stack?.split('\n').slice(1, 4).join('\n'),
+            });
+        }
         if (error instanceof DomainError)
             throw new HttpsError(error.code, error.message);
         if (error instanceof InputValidationError)

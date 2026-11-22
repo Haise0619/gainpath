@@ -43,6 +43,87 @@ void main() {
         progress: 0),
   ]);
 
+  testWidgets('badge labels stay readable with inherited white title styles',
+      (tester) async {
+    final base = ThemeData.light();
+    final controller = MemberAchievementsController(
+        load: () async => data, isCurrent: () => true);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: base.copyWith(
+        textTheme: base.textTheme.apply(bodyColor: Colors.white),
+      ),
+      home: MemberAchievementsScreen(controller: controller),
+    ));
+    await tester.pumpAndSettle();
+
+    for (final label in [
+      'First Check-in',
+      'Three-day Streak',
+      'Unlocked',
+      'Locked',
+    ]) {
+      final text = find.text(label).last;
+      final rich = tester.widget<RichText>(find.descendant(
+        of: text,
+        matching: find.byType(RichText),
+      ));
+      final card = tester
+          .widgetList<Material>(
+              find.ancestor(of: text, matching: find.byType(Material)))
+          .firstWhere((material) =>
+              material.shape is RoundedRectangleBorder &&
+              material.color != null);
+      final foreground = rich.text.style!.color!.computeLuminance();
+      final status = label == 'Unlocked' || label == 'Locked';
+      final backgroundColor = status
+          ? (tester
+              .widgetList<DecoratedBox>(
+                  find.ancestor(of: text, matching: find.byType(DecoratedBox)))
+              .map((box) => box.decoration)
+              .whereType<BoxDecoration>()
+              .firstWhere((decoration) => decoration.color != null)
+              .color!)
+          : card.color!;
+      final background = backgroundColor.computeLuminance();
+      final lighter = foreground > background ? foreground : background;
+      final darker = foreground > background ? background : foreground;
+      expect((lighter + .05) / (darker + .05), greaterThanOrEqualTo(4.5),
+          reason: label);
+    }
+    final earned = find
+        .ancestor(
+          of: find.text('First Check-in'),
+          matching: find.byType(InkWell),
+        )
+        .first;
+    final locked = find
+        .ancestor(
+          of: find.text('Three-day Streak').last,
+          matching: find.byType(InkWell),
+        )
+        .first;
+    expect(
+        find.descendant(
+            of: earned, matching: find.byIcon(Icons.check_circle_rounded)),
+        findsOneWidget);
+    expect(
+        find.descendant(of: locked, matching: find.byIcon(Icons.lock_rounded)),
+        findsOneWidget);
+    await tester.ensureVisible(locked);
+    await tester.pumpAndSettle();
+    await tester.tap(locked);
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Unlock requirement'), findsOneWidget);
+    final progress = tester.widgetList<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator));
+    expect(progress, hasLength(2));
+    expect(
+        progress.every((bar) => bar.stopIndicatorColor == Colors.transparent),
+        isTrue);
+  });
+
   for (final width in [320.0, 390.0]) {
     testWidgets('collection and locked detail at width $width and 200% text',
         (tester) async {
@@ -78,6 +159,13 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
+      final unlockedTitle = find.text('First Check-in');
+      await tester.scrollUntilVisible(unlockedTitle, 120);
+      await tester.ensureVisible(unlockedTitle);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockedTitle);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

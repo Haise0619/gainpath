@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { branchAnswer, branchQuestion, selectedGym } from './branch-answers';
+import { branchAnswer, branchQuestion, selectedGym, findGym, type BranchQuestion } from './branch-answers';
 import { getFirestore, FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
@@ -66,13 +66,27 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       return { ok: true, bookmarks: state.bookmarks, contextMode:privateProviderApproved()?'private-approved':'public' };
     });
     if (input.action !== 'reply') return result;
-    const branchIntent = branchQuestion(input.text!);
+    let branchCard: Record<string, unknown> | undefined;
+    let branchReply: string | undefined;
+    let nearbyGym = false;
+    const answerBranch = async (intent: BranchQuestion, name?: string) => {
+      await reauthorize();
+      nearbyGym = intent === 'nearby';
+      const followUp = /\b(?:there|it|that (?:gym|branch))\b/i.test(input.text!);
+      const previousBranch = followUp ? (input.history ?? []).filter(turn => turn.role === 'user')
+        .reverse().map(turn => /^(?:where is|show me|take me to) (.{1,120}?)[?.!]*$/i.exec(turn.text.trim())?.[1])
+        .find(value => value !== undefined) : undefined;
+      branchCard = undefined;
+      branchReply = await branchAnswer(db, org, uid, intent, now, branch => { branchCard = branch; }, name ?? previousBranch ?? (followUp ? input.branchContext : undefined));
+      return branchReply;
+    };
+    const namedGym = /^(?:where is|show me) (gainpath[\w -]*|.{1,90} branch)[?.!]*$/i.exec(input.text!.trim())?.[1];
+    const branchIntent = namedGym ? 'details' : branchQuestion(input.text!);
     if (branchIntent) {
-      let branchCard: Record<string, unknown> | undefined;
-      const text = await branchAnswer(db, org, uid, branchIntent, now, branch => { branchCard = branch; });
+      const text = await answerBranch(branchIntent, namedGym);
       await reauthorize();
       return { responseId: randomUUID(), text, sources: ['branch_directory'],
-        ...(branchCard ? { branchCard } : {}),
+        ...(branchCard ? { branchCard } : {}), ...(nearbyGym ? { nearbyGym: true } : {}),
         telemetry: { ...metrics, responseTimeMillis: Math.max(0, Date.now() - started) } };
     }
     const progress = async () => {
@@ -98,6 +112,28 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     const execute = async (name: string,args:Record<string,unknown> = {}) => {
       if(name==='get_my_progress'&&!personalMetricsIntent(input.text!)){personalReadRefused=true;return{available:false,reason:'An explicit personal-progress question is required.'};}
       sources.add(name);
+      if (name === 'lookup_gym') {
+        const topic = String(args.topic);
+        const branchName = typeof args.branchName === 'string' ? args.branchName : undefined;
+        if (topic === 'coach_availability') {
+          await reauthorize();
+          const gym = branchName ? await findGym(db, org, branchName) : await selectedGym(db, org, uid);
+          if (!gym) { branchReply = 'Choose an active GainPath branch first.'; return { available: false }; }
+          coachAvailability = await bookingTools.availableCoaches({
+            branchId: gym.id, coachName: args.coachName as string | undefined,
+            localDate: args.localDate as string | undefined, dayOffset: args.dayOffset as 0 | 1 | undefined,
+          });
+          branchReply = coachAvailability.items.length
+            ? `Here are the available coaching sessions for ${gym.name} on ${coachAvailability.localDate}.`
+            : `No bookable coaching slots were found for ${gym.name} on ${coachAvailability.localDate}. Try another date or coach.`;
+        } else {
+          const intent = topic.startsWith('equipment')
+            ? { equipment: String(args.equipmentName), allBranches: topic === 'equipment_across_branches' }
+            : topic as BranchQuestion;
+          await answerBranch(intent, branchName);
+        }
+        return { available: true };
+      }
       if(['list_coaches','get_coaching_options','propose_booking'].includes(name)){
         await reauthorize();const value=await bookingTools.execute(name,args) as any;
         if(name==='list_coaches'){
@@ -179,7 +215,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
           await reauthorize();publicBookingContext=undefined;bookingTools.context=undefined;
         }
       }
-      text = await runGemini(dependencies.apiKey ?? key.value(), input.text!, input.history ?? [], execute, dependencies.fetcher,publicBookingContext,{metrics,terminalReply:()=>bookingTools.suggestion?'Here is an available session suggestion. Nothing has been booked or charged.':bookingReadReply??(personalReadRefused?PERSONAL_FACTS_UNVERIFIED_REPLY:requestedProgress?progressText(requestedProgress):undefined)});
+      text = await runGemini(dependencies.apiKey ?? key.value(), input.text!, input.history ?? [], execute, dependencies.fetcher,publicBookingContext,{metrics,terminalReply:()=>branchReply ?? (bookingTools.suggestion?'Here is an available session suggestion. Nothing has been booked or charged.':bookingReadReply??(personalReadRefused?PERSONAL_FACTS_UNVERIFIED_REPLY:requestedProgress?progressText(requestedProgress):undefined))});
       if(!bookingReadReply&&!bookingTools.suggestion&&bookingActionClaim(text))text=noBookingAction;
       else if (!requestedProgress && !bookingReadReply && !bookingTools.suggestion && unsupportedPersonalMetrics(text)) {
         text = PERSONAL_FACTS_UNVERIFIED_REPLY;
@@ -189,10 +225,11 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     if (/\b(take|inject|prescrib|dose)\b.{0,60}\b(steroid|insulin|opioid|medication|drug)\b|\b(ignore|push through)\b.{0,30}\b(chest pain|injur|faint)/i.test(text)) text = SAFETY_REPLY;
     await reauthorize();
     const bookingSuggestion=bookingTools.suggestion;
-    if(bookingSuggestion)text='Here is an available session suggestion. Nothing has been booked or charged. Review it in checkout; availability and price will be checked again before you continue.';
+    if (branchReply) text = branchReply;
+    else if(bookingSuggestion)text='Here is an available session suggestion. Nothing has been booked or charged. Review it in checkout; availability and price will be checked again before you continue.';
     else if(bookingReadReply)text=bookingReadReply;
     else if(!requestedProgress&&!coachAvailability&&!sources.has('find_equipment')&&bookingActionClaim(text))text=noBookingAction;
-    return { responseId: randomUUID(), text, ...(coachAvailability?{coachAvailability}:{}), ...(coachSuggestions?{coachSuggestions}:{}), telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
+    return { responseId: randomUUID(), text, ...(branchCard ? { branchCard } : {}), ...(nearbyGym ? { nearbyGym: true } : {}), ...(coachAvailability?{coachAvailability}:{}), ...(coachSuggestions?{coachSuggestions}:{}), telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
     if (error instanceof DomainError) throw new HttpsError(error.code, error.message);

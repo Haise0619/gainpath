@@ -44,7 +44,7 @@ MoveCatchTorsoSample? moveCatchTorsoSample(PoseFrame frame,
 }
 
 /// Game-only partial-torso tracking. Learned offsets preserve the body centre
-/// when only one anatomical side remains visible; no missing joint is invented.
+/// when only one anatomical side or both shoulders remain visible.
 class MoveCatchTorsoTracker {
   final Map<PoseLandmark, double> _offsets = {};
   double? _width;
@@ -111,6 +111,18 @@ class MoveCatchTorsoTracker {
         estimates.add(shoulder.x - _offsets[pair.$1]!);
         estimates.add(hip.x - _offsets[pair.$2]!);
       }
+    }
+    if (estimates.isEmpty) {
+      final left = frame.landmark(PoseLandmark.leftShoulder);
+      final right = frame.landmark(PoseLandmark.rightShoulder);
+      if (!usable(left) || !usable(right)) return null;
+      final leftOffset = _offsets[PoseLandmark.leftShoulder]!;
+      final rightOffset = _offsets[PoseLandmark.rightShoulder]!;
+      final relativeWidth = (right!.x - left!.x) / (rightOffset - leftOffset);
+      // Reject crossed, collapsed, or suddenly enlarged shoulder pairs.
+      if (relativeWidth < .65 || relativeWidth > 1.35) return null;
+      estimates.add(left.x - leftOffset);
+      estimates.add(right.x - rightOffset);
     }
     if (estimates.length < 2) return null;
     estimates.sort();

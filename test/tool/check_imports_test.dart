@@ -52,6 +52,23 @@ void main() {
         "import 'package:gainpath_domain/src/model.dart';");
     expect(checkArchitecture(root), isEmpty);
   });
+  test('only package tests can import shared workspace test support', () {
+    owner('apps/mobile', 'gainpath_mobile');
+    write('test_support/fixture.dart', 'const fixture = 1;');
+    write('apps/mobile/test/model_test.dart',
+        "import '../../../test_support/fixture.dart';");
+    expect(checkArchitecture(root), isEmpty);
+
+    write('apps/mobile/lib/main.dart',
+        "import '../../../test_support/fixture.dart';");
+    write('apps/mobile/test/other_test.dart',
+        "import '../../../test_support_extra/fixture.dart';");
+    expect(
+        checkArchitecture(root)
+            .where((f) => f.contains('relative directive escapes')),
+        hasLength(2));
+  });
+
   test('checks every conditional export URI', () {
     owner('apps/admin_web', 'gainpath_admin_web');
     write('apps/admin_web/lib/main.dart',

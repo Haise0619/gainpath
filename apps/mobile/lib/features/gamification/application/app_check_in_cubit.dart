@@ -17,10 +17,12 @@ class AppCheckInState {
 }
 
 class AppCheckInCubit extends Cubit<AppCheckInState> {
-  AppCheckInCubit({required this.repository, required this.activeScope})
+  AppCheckInCubit(
+      {required this.repository, required this.activeScope, this.onAwarded})
       : super(const AppCheckInState(status: AppCheckInStatus.loading));
   final AppCheckInRepository repository;
   final SessionScope? Function() activeScope;
+  final void Function()? onAwarded;
   int _generation = 0;
   bool _claiming = false;
   bool get current => activeScope() == repository.scope;
@@ -67,6 +69,7 @@ class AppCheckInCubit extends Cubit<AppCheckInState> {
                   ? '+${result.snapshot.pointsPerClaim} points · app check-in saved'
                   : 'Already claimed today')
               : null));
+      if (claim && result.awarded) onAwarded?.call();
     } catch (e) {
       if (isClosed || generation != _generation) return;
       if (!current) {

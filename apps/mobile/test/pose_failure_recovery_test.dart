@@ -11,6 +11,15 @@ class ExclusiveCamera extends PreviewCamera
   Object get ownershipKey => 'test-physical-camera';
 }
 
+class PausingCamera extends ExclusiveCamera {
+  Completer<void>? stopping;
+  @override
+  Future<void> stop() async {
+    await stopping?.future;
+    await super.stop();
+  }
+}
+
 class FaultDetector implements ManagedPoseDetector {
   bool fail = false;
   int closes = 0;
@@ -39,6 +48,112 @@ class FaultDetector implements ManagedPoseDetector {
 
 void main() {
   final scope = SessionScope(userId: 'fixture', organizationId: 'gainpath');
+  testWidgets('resume waits for an ordinary in-progress pause before reopening',
+      (tester) async {
+    final camera = PausingCamera();
+    final controller = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => FaultDetector(),
+        clockMicros: () => 1);
+    await controller.start(consented: true);
+    final staleFrame = camera.receive!;
+    camera.stopping = Completer<void>();
+    final pausing = controller.pause();
+    var resumed = false;
+    final resuming = controller.resume().then((_) => resumed = true);
+    await tester.pump();
+    expect(controller.phase, PosePreviewPhase.paused);
+    expect(controller.errorMessage, isNull);
+    expect(resumed, isFalse);
+    expect(camera.starts, 1);
+    staleFrame(PoseInput(timestampMicros: 1));
+    expect(controller.receivedFrames, 0);
+    camera.stopping!.complete();
+    await tester.pump();
+    await Future.wait([pausing, resuming]);
+    expect(controller.phase, PosePreviewPhase.tracking);
+    expect(camera.starts, 2);
+    await controller.close();
+    controller.dispose();
+  });
+  testWidgets(
+      'a new background event cancels resume waiting for camera disposal',
+      (tester) async {
+    final camera = PausingCamera();
+    final controller = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => FaultDetector(),
+        clockMicros: () => 1);
+    await controller.start(consented: true);
+    camera.stopping = Completer<void>();
+    final pausing = controller.pause();
+    final resuming = controller.resume();
+    final background = controller.background();
+    camera.stopping!.complete();
+    await tester.pump();
+    await Future.wait([pausing, resuming, background]);
+    expect(camera.starts, 1);
+    expect(controller.phase, PosePreviewPhase.paused);
+    await controller.foreground();
+    expect(camera.starts, 1);
+    await controller.resume();
+    expect(camera.starts, 2);
+    await controller.close();
+    controller.dispose();
+  });
+  testWidgets(
+      'pause timeout keeps the lease until late native disposal finishes',
+      (tester) async {
+    final camera = PausingCamera();
+    final controller = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => FaultDetector(),
+        clockMicros: () => 1,
+        cleanupTimeout: const Duration(milliseconds: 20));
+    await controller.start(consented: true);
+    camera.stopping = Completer<void>();
+    final pausing = controller.pause();
+    final resuming = controller.resume();
+    await tester.pump(const Duration(milliseconds: 21));
+    await Future.wait([pausing, resuming]);
+    expect(camera.starts, 1);
+    expect(controller.phase, PosePreviewPhase.failure);
+    camera.stopping!.complete();
+    await tester.pump();
+    await controller.resume();
+    expect(camera.starts, 2);
+    await controller.close();
+    controller.dispose();
+  });
+  testWidgets(
+      'failed reset retires the detector and allows a fresh camera retry',
+      (tester) async {
+    final camera = ExclusiveCamera(),
+        detector = FaultDetector(),
+        replacement = FaultDetector();
+    var created = 0;
+    final controller = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => ++created == 1 ? detector : replacement,
+        clockMicros: () => 1);
+    await controller.start(consented: true);
+    detector.fail = true;
+    await controller.pause();
+    expect(detector.closes, 1);
+    await controller.resume();
+    expect(created, 2);
+    expect(controller.phase, PosePreviewPhase.tracking);
+    await controller.close();
+    controller.dispose();
+  });
   testWidgets('hung camera startup fails, then allows retry after cleanup',
       (tester) async {
     final opening = Completer<void>();

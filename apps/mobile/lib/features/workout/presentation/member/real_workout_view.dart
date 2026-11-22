@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../../../infrastructure/audio/sound_effects.dart';
 import '../../application/pose_preview_controller.dart';
 import '../../application/workout_preferences_controller.dart';
 import '../../application/workout_set_continuation.dart';
@@ -16,6 +17,7 @@ import '../../domain/routine_workout_context.dart';
 import 'widgets/workout_session_sheet.dart';
 import 'widgets/workout_alignment_guide.dart';
 import 'widgets/workout_camera_feedback.dart';
+import 'widgets/workout_tracking_feedback.dart';
 import 'widgets/workout_completion_feedback.dart';
 import 'workout_ai_consent_guard.dart';
 
@@ -51,6 +53,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView>
   Timer? _visualTimer;
   Completer<void>? _visualWait;
   int? _announcedReadySet;
+  int? _effectReadySet, _previousSoundReps;
   final _sheetController = DraggableScrollableController();
   WorkoutPreferencesController? _preferences;
 
@@ -124,6 +127,8 @@ class _RealWorkoutViewState extends State<RealWorkoutView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
       _announcedReadySet = null;
+      _effectReadySet = null;
+      _previousSoundReps = widget.session.analysis?.repetitions;
       oldWidget.session.removeListener(_sessionChanged);
       _continuationFor(oldWidget.session)?.cancel();
       widget.session.addListener(_sessionChanged);
@@ -138,21 +143,41 @@ class _RealWorkoutViewState extends State<RealWorkoutView>
     final flow = session.guidance;
     final analysis = session.analysis;
     final set = flow?.completedSets ?? 0;
-    if (_announcedReadySet != set &&
+    final previousReps = _previousSoundReps;
+    _previousSoundReps = analysis?.repetitions ?? previousReps;
+    final activeTracking = _foreground &&
         !_ending &&
         !_leaving &&
-        session is WorkoutVoiceSession &&
-        session.voiceMode == WorkoutVoiceMode.fullCoaching &&
         session.viewPhase == MeasuredWorkoutPhase.active &&
         session.preview.phase == PosePreviewPhase.tracking &&
+        !session.isManuallyPaused &&
+        !session.isRecalibrating;
+    final fullCoaching = session.voiceMode == WorkoutVoiceMode.fullCoaching;
+    if (activeTracking &&
+        session.voiceMode == WorkoutVoiceMode.muted &&
+        previousReps != null &&
+        analysis != null &&
+        analysis.repetitions > previousReps) {
+      SoundEffects.play(SoundEffect.rep);
+    }
+    final ready = activeTracking &&
         !session.isPaused &&
-        !session.isRecalibrating &&
         (flow == null || flow.stage == GuidedWorkoutStage.working) &&
         session.analysisAvailable &&
         analysis != null &&
         !analysis.needsCalibration &&
         analysis.health == TrackingStatus.healthy &&
-        (flow?.setRepetitions ?? analysis.repetitions) == 0) {
+        (flow?.setRepetitions ?? analysis.repetitions) == 0;
+    if (ready &&
+        session.voiceMode == WorkoutVoiceMode.muted &&
+        _effectReadySet != set) {
+      _effectReadySet = set;
+      SoundEffects.play(SoundEffect.ready);
+    }
+    if (ready &&
+        _announcedReadySet != set &&
+        fullCoaching &&
+        session is WorkoutVoiceSession) {
       final announced = (session as WorkoutVoiceSession)
           .voiceFeedback
           .announceTransition('tracking-ready-$set', 'Ready.',
@@ -264,6 +289,9 @@ class _RealWorkoutViewState extends State<RealWorkoutView>
           result == null ||
           c.viewPhase != MeasuredWorkoutPhase.saved) {
         return;
+      }
+      if (completedExercise && _foreground) {
+        await SoundEffects.playCompletion();
       }
       await celebration;
       if (!_foreground) {
@@ -609,6 +637,31 @@ class _RealWorkoutViewState extends State<RealWorkoutView>
                         ? sidePanelWidth + 8 + (safe.right < 8 ? 8 : safe.right)
                         : 0,
                     child: RepaintBoundary(child: widget.viewport)),
+                ListenableBuilder(
+                  listenable: _sheetController,
+                  child: WorkoutTrackingFeedback(
+                      session: c,
+                      alignment: MediaQuery.textScalerOf(context).scale(14) > 21
+                          ? Alignment.bottomCenter
+                          : Alignment.center),
+                  builder: (context, child) => Positioned(
+                    top: safe.top +
+                        (MediaQuery.textScalerOf(context).scale(14) > 21
+                            ? (landscape ? 200 : 260)
+                            : (landscape ? 72 : 110)),
+                    left: safe.left + 12,
+                    right: landscape
+                        ? sidePanelWidth + 16 + safe.right
+                        : safe.right + 12,
+                    bottom: landscape
+                        ? safe.bottom + 12
+                        : (_sheetController.isAttached
+                                ? _sheetController.pixels
+                                : collapsedHeight) +
+                            12,
+                    child: child!,
+                  ),
+                ),
                 if (landscape)
                   Positioned.fill(
                     key: const ValueKey('workout-landscape-layer'),

@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {MemoryStore} from './memory-store';
 import {seeds,now,start} from './booking-fixture';
-import {automaticBookingChange,deliverAutomaticBooking} from '../src/modules/coaching/automatic-google-delivery';
+import {automaticBookingChange,deliverAutomaticBooking,deliverAutomaticCalendar} from '../src/modules/coaching/automatic-google-delivery';
 import {syncGymBooking} from '../src/modules/coaching/gym-booking-sync';
 let store:MemoryStore;const root='orgs/org-1/bookings/booking';
 const config={enabled:true,organizationId:'org-1',activatedAtMillis:now-1000,allowedRecipients:['member@example.com'],testCoachId:'coach-1',testBookingId:'booking'};
@@ -9,6 +9,30 @@ const b=()=>store.documents.get(root)!;
 const event=(before:Record<string,unknown>,revision='revision-1')=>({organizationId:'org-1',bookingId:'booking',revision,eventAtMillis:now,before,after:structuredClone(b())});
 function deps(){return{authorize:vi.fn(async()=>{}),recipient:vi.fn(async()=> 'member@example.com'),assertCurrent:vi.fn(async()=>{}),gateway:{putCalendar:vi.fn(async()=>({eventId:'event'})),removeCalendar:vi.fn(async()=>({eventId:'event'})),sendConfirmation:vi.fn(async()=>({messageId:'message'})),sendNotification:vi.fn(async(_b:unknown,_to:string,_notice:unknown,_guard?:()=>Promise<void>)=>({messageId:'message'}))}};}
 beforeEach(()=>{store=new MemoryStore();Object.entries(seeds).forEach(([p,d])=>store.documents.set(p,structuredClone(d)));store.documents.set('users/admin',{organizationId:'org-1'});store.documents.set('orgs/org-1/members/admin',{organizationId:'org-1',role:'admin',status:'active',branchIds:[]});store.documents.set(root,{schemaVersion:1,bookingId:'booking',organizationId:'org-1',memberId:'member-1',coachId:'coach-1',branchId:'branch-1',requestId:'hold',createdBy:'member-1',createdAtMillis:now,startAtMillis:start,endAtMillis:start+3600000,durationMinutes:60,status:'confirmed',holdExpiresAtMillis:now+900000,localDate:'2026-10-02',timeZone:'Asia/Kuala_Lumpur',policyVersion:'v1'});store.documents.set('orgs/org-1/transactions/booking',{schemaVersion:1,environment:'sandbox',provider:'billplz',type:'CoachingBooking',currency:'MYR',amountMinor:12000,durationMinutes:60,organizationId:'org-1',bookingId:'booking',memberId:'member-1',coachId:'coach-1',branchId:'branch-1',paymentStatus:'cleared',fulfilmentStatus:'confirmed',coachName:'Coach',branchName:'Gym'});});
+const calendarConfig={...config,enabled:false,calendarEnabled:true,testBookingId:'other-booking',testCoachId:'other-coach',allowedRecipients:[]};
+it('automatically creates, updates and cancels calendar events outside the test recipient and booking scope',async()=>{
+ const d=deps();d.recipient.mockRejectedValue(Error('Email is unavailable'));
+ const confirmed=event({status:'pending_hold'});
+ expect(await deliverAutomaticCalendar(store,confirmed,calendarConfig,d,()=>now)).toEqual({status:'delivered'});
+ await deliverAutomaticCalendar(store,confirmed,calendarConfig,d,()=>now);
+ expect(d.gateway.putCalendar).toHaveBeenCalledOnce();
+ const original=structuredClone(b());b().startAtMillis=start+1800000;b().endAtMillis=start+5400000;
+ await deliverAutomaticCalendar(store,event(original,'reschedule'),calendarConfig,d,()=>now);
+ expect(d.gateway.putCalendar).toHaveBeenCalledTimes(2);
+ const before=structuredClone(b());b().status='cancelled';
+ await deliverAutomaticCalendar(store,event(before,'cancel'),calendarConfig,d,()=>now);
+ expect(d.gateway.removeCalendar).toHaveBeenCalledOnce();
+ expect(d.recipient).not.toHaveBeenCalled();expect(d.gateway.sendNotification).not.toHaveBeenCalled();
+});
+it('keeps organization, activation and cleared payment guards for automatic calendar',async()=>{
+ const d=deps(),change=event({status:'pending_hold'});
+ for(const scope of [{...calendarConfig,organizationId:'other-org'},{...calendarConfig,calendarEnabled:false},{...calendarConfig,activatedAtMillis:now+1}]){
+  expect(await deliverAutomaticCalendar(store,change,scope,d,()=>now)).toEqual({status:'skipped'});
+ }
+ store.documents.get('orgs/org-1/transactions/booking')!.paymentStatus='pending';
+ await expect(deliverAutomaticCalendar(store,change,calendarConfig,d,()=>now)).rejects.toMatchObject({code:'failed-precondition'});
+ expect(d.gateway.putCalendar).not.toHaveBeenCalled();
+});
 it('classifies only real paid-session lifecycle transitions',()=>{expect(automaticBookingChange({status:'pending_hold'},b())).toBe('confirmed');expect(automaticBookingChange(b(),b())).toBeUndefined();expect(automaticBookingChange(b(),{...b(),status:'completed'})).toBeUndefined();expect(automaticBookingChange({status:'pending_hold'},{...b(),status:'cancelled'})).toBeUndefined();expect(automaticBookingChange(b(),{...b(),startAtMillis:start+1800000})).toBe('rescheduled');});
 it('fails closed on absent or different Coach/booking scopes and excludes old bookings edited after cutoff',async()=>{
  const variants=[{...config,testCoachId:''},{...config,testBookingId:''},{...config,testCoachId:'other-coach'},{...config,testBookingId:'other-booking'},{...config,testBookingId:'bad/path'},{...config,allowedRecipients:[]},{...config,allowedRecipients:['member@example.com','other@example.com']}];

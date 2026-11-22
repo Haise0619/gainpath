@@ -76,9 +76,7 @@ class GamificationDashboardScreen extends StatelessWidget {
       body: PageBody(
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: AppColors.heroGradient,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
@@ -87,115 +85,159 @@ class GamificationDashboardScreen extends StatelessWidget {
                     offset: const Offset(0, 10)),
               ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('YOUR POINTS',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  letterSpacing: 1.4,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white70)),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/icons/reward_point.svg',
-                                width: 34,
-                                height: 34,
-                              ),
-                              const SizedBox(width: 10),
-                              if (live)
-                                const Text('-',
-                                    style: TextStyle(
-                                        fontSize: 40,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white))
-                              else
-                                TweenAnimationBuilder<int>(
-                                  tween: IntTween(
-                                      begin: 0,
-                                      end: context
-                                          .watch<GamificationBloc>()
-                                          .state
-                                          .points),
-                                  duration: const Duration(milliseconds: 900),
-                                  curve: Curves.easeOutCubic,
-                                  builder: (context, value, _) => Text('$value',
-                                      style: const TextStyle(
-                                          fontSize: 40,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white,
-                                          height: 1.1,
-                                          letterSpacing: -1.5)),
-                                ),
-                            ],
-                          ),
-                        ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: AppColors.heroGradient,
                       ),
                     ),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => live
-                                  ? RewardsFeatureHost(
-                                      builder: (repo) => LeaderboardScreen(
-                                          connected: true, repository: repo))
-                                  : const LeaderboardScreen())),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.leaderboard_rounded,
-                                size: 14, color: Colors.white),
-                            const SizedBox(width: 5),
-                            Text('#${rank[0]} this week',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800)),
+                  ),
+                  Positioned.fill(
+                    child: Image.asset(
+                      'assets/images/rewards_hero_banner.webp',
+                      fit: BoxFit.cover,
+                      alignment: Alignment.centerRight,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.25),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 18,
-                  runSpacing: 8,
-                  children: [
-                    _miniStat(
-                        Icons.local_fire_department_rounded,
-                        live
-                            ? 'Streak -'
-                            : '${context.watch<GamificationBloc>().state.streak} day streak'),
-                    _miniStat(Icons.military_tech_rounded,
-                        live ? 'Badges -' : '$unlocked badges'),
-                  ],
-                ),
-              ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('YOUR POINTS',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          letterSpacing: 1.4,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white70)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      SvgPicture.asset(
+                                        'assets/icons/reward_point.svg',
+                                        width: 34,
+                                        height: 34,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      if (live)
+                                        const Text('-',
+                                            style: TextStyle(
+                                                fontSize: 40,
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white))
+                                      else
+                                        TweenAnimationBuilder<int>(
+                                          tween: IntTween(
+                                              begin: 0,
+                                              end: context
+                                                  .watch<GamificationBloc>()
+                                                  .state
+                                                  .points),
+                                          duration:
+                                              const Duration(milliseconds: 900),
+                                          curve: Curves.easeOutCubic,
+                                          builder: (context, value, _) => Text(
+                                              '$value',
+                                              style: const TextStyle(
+                                                  fontSize: 40,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Colors.white,
+                                                  height: 1.1,
+                                                  letterSpacing: -1.5)),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => live
+                                          ? RewardsFeatureHost(
+                                              builder: (repo) =>
+                                                  LeaderboardScreen(
+                                                      connected: true,
+                                                      repository: repo))
+                                          : const LeaderboardScreen())),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.leaderboard_rounded,
+                                        size: 14, color: Colors.white),
+                                    const SizedBox(width: 5),
+                                    Text('#${rank[0]} this week',
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 18,
+                          runSpacing: 8,
+                          children: [
+                            _miniStat(
+                                Icons.local_fire_department_rounded,
+                                live
+                                    ? 'Streak -'
+                                    : '${context.watch<GamificationBloc>().state.streak} day streak'),
+                            _miniStat(Icons.military_tech_rounded,
+                                live ? 'Badges -' : '$unlocked badges'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          const Eyebrow('Streak'),
+          const SizedBox(height: 24),
+          const MemberSectionHeader(title: 'Streak'),
           Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,8 +261,8 @@ class GamificationDashboardScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          const Eyebrow('Explore'),
+          const SizedBox(height: 24),
+          const MemberSectionHeader(title: 'Explore'),
           LayoutBuilder(builder: (context, constraints) {
             final tileWidth = (constraints.maxWidth - 12) / 2;
             final titleStyle = Theme.of(context).textTheme.titleMedium;
@@ -312,8 +354,8 @@ class GamificationDashboardScreen extends StatelessWidget {
               ],
             );
           }),
-          const SizedBox(height: 20),
-          const Eyebrow('Recent activity'),
+          const SizedBox(height: 24),
+          const MemberSectionHeader(title: 'Recent activity'),
           Panel(
             padding: EdgeInsets.zero,
             child: Column(

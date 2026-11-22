@@ -326,7 +326,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
         value?.paymentStatus == 'cleared' ||
         value?.status != 'awaiting_payment' ||
         value?.checkoutUrl == null ||
-        !isBillplzSandboxCheckoutUrl(value!.checkoutUrl!)) {
+        !isBookingCheckoutUrl(value!.checkoutUrl!)) {
       return;
     }
     setState(() => _opening = true);
@@ -340,12 +340,12 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
       }
       if (!opened && mounted && widget.isCurrent()) {
         setState(() =>
-            _message = 'Could not open Billplz. Try opening payment again.');
+            _message = 'Could not open checkout. Try opening payment again.');
       }
     } catch (_) {
       if (mounted && widget.isCurrent()) {
         setState(() =>
-            _message = 'Could not open Billplz. Try opening payment again.');
+            _message = 'Could not open checkout. Try opening payment again.');
       }
     } finally {
       if (mounted) setState(() => _opening = false);

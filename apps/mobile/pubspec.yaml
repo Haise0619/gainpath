@@ -45,6 +45,7 @@ dependencies:
   mobile_scanner: 7.4.2
   qr_flutter: 4.1.0
   flutter_svg: ^2.3.0
+  google_sign_in: 7.2.0
 
 dev_dependencies:
   firebase_auth_platform_interface: ^9.1.0
@@ -84,6 +85,7 @@ flutter:
         - asset: assets/fonts/Barlow-ExtraBold.ttf
           weight: 800
   assets:
+    - assets/audio/effects/
     - assets/audio/coach_en/default_v1/
     - assets/audio/coach_en/default_v1/numbers/
     - assets/audio/coach_en/default_v1/lifecycle/
@@ -92,10 +94,16 @@ flutter:
     - assets/audio/coach_en/default_v1/correction/
     - assets/audio/coach_en/default_v1/encouragement/
     - assets/images/ai_coach_mascot.png
-    - assets/images/achievement_gainpath_logo.png
+    - assets/images/google_sign_in_mark.png
     - assets/images/workout_hero_gym.png
     - assets/images/home_workout_gym.webp
     - assets/images/workout_hub_fallback.png
+    - assets/images/lavender_fitness_planning_essentials.png
+    - assets/images/gainpath_equipment_guide.png
+    - assets/images/gainpath_logo_sticker.png
+    - assets/images/achievement_gainpath_logo.png
+    - assets/images/gainpath_ai_camera_setup.png
+    - assets/images/rewards_hero_banner.webp
     - assets/images/camera_setup/
     - assets/icons/
     - assets/fonts/BarlowCondensed-OFL.txt

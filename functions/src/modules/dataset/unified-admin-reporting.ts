@@ -21,6 +21,9 @@ export function mergeUnifiedWorkoutReports(existing:WorkoutReport,fyp:WorkoutRep
   for(const row of report.forms){const key=JSON.stringify([row.exerciseId,row.scoringVersion,row.detectorId,row.detectorVersion,row.cameraView,row.armMode]),before=forms.get(key);
    if(!before){forms.set(key,structuredClone(row));continue;}
    before.scoredSessions+=row.scoredSessions;before.scoreSum+=row.scoreSum;
+   if (before.scoreBands && row.scoreBands) {
+    for (const key of ['below60','from60To79','from80To100'] as const) before.scoreBands[key] += row.scoreBands[key];
+   } else delete before.scoreBands;
    const days=new Map(before.daily.map(d=>[d.date,d]));for(const d of row.daily){const old=days.get(d.date);days.set(d.date,old?{date:d.date,scoredSessions:old.scoredSessions+d.scoredSessions,scoreSum:old.scoreSum+d.scoreSum}:{...d});}before.daily=[...days.values()].sort((a,b)=>a.date.localeCompare(b.date));
   }
  }

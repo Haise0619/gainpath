@@ -9,6 +9,9 @@ import 'package:gainpath_mobile/features/coaching/presentation/coach/live_coach_
 import 'package:gainpath_mobile/features/coaching/presentation/shared/live_coach_schedule_view.dart';
 import 'package:gainpath_mobile/app/mobile_app.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_mobile/features/analytics/data/local_member_progress_repository.dart';
+import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
+import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import 'coach_directory_flow_test.dart' show DriftingCoachAuth, DirectoryFake;
 import 'coach_profile_state_test.dart' show ProfileFake;
@@ -82,14 +85,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Asia/Kuala_Lumpur'), findsWidgets);
+    expect(find.text('Fri, 16 Oct 2026'), findsOneWidget);
+    expect(find.text('Changes to this date only'), findsOneWidget);
+    await tester.ensureVisible(find.text('Add window'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-        find.widgetWithText(FilledButton, 'Add'), 250,
+        find.widgetWithText(FilledButton, 'Add Window'), 250,
         scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Add Window'));
     await tester.pumpAndSettle();
     final saveDay = find.widgetWithText(FilledButton, 'Save day');
     await Scrollable.ensureVisible(tester.element(saveDay), alignment: 0.5);
@@ -135,9 +141,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add window'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Add'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Add Window'), findsOneWidget);
     auth.drift(const AuthSession(
         userId: 'coach',
         organizationId: 'org',
@@ -145,7 +153,7 @@ void main() {
         role: AppRole.coach,
         branchIds: ['other']));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Add'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Add Window'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });
@@ -165,6 +173,12 @@ void main() {
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         coachDirectoryFactory: (scope, current) => DirectoryFake(scope),
+        progressRepositoryFactory: (scope, active) async =>
+            StoredLocalMemberProgressRepository(
+                scope: scope,
+                workoutStore: InMemoryWorkoutSessionStore(scope: scope),
+                syncStore: MemoryRealWorkoutSyncStore(scope: scope),
+                activeScope: active),
         programStoreFactory: (scope) async => MemoryProgramStore(scope),
         routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         coachAvailabilityFactory: (_, current) => repo));
@@ -183,7 +197,7 @@ void main() {
     expect(find.text('10:00 GMT+8 – 10:30 GMT+8'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets('open window editor freezes row mutations until Update or Cancel',
+  testWidgets('open window editor freezes row mutations until the update',
       (tester) async {
     final repo = AvailabilityFake()
       ..stored = [
@@ -210,19 +224,18 @@ void main() {
         scrollable: find.byType(Scrollable).last);
     await tester.tap(find.byKey(const ValueKey('edit-window-1')));
     await tester.pumpAndSettle();
-    for (final control in find
-        .byWidgetPredicate(
-            (w) => w is IconButton && w.tooltip == 'Remove window')
-        .evaluate()) {
-      expect((control.widget as IconButton).onPressed, isNull);
+    for (final tooltip in ['Remove window', 'Edit window']) {
+      final controls = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == tooltip);
+      expect(controls, findsNWidgets(2));
+      for (final button in tester.widgetList<IconButton>(controls)) {
+        expect(button.onPressed, isNull);
+      }
     }
-    for (final control in find
-        .byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Edit window')
-        .evaluate()) {
-      expect((control.widget as IconButton).onPressed, isNull);
-    }
-    await tester.ensureVisible(find.text('Update'));
-    await tester.tap(find.text('Update'));
+    final update = find.text('Update Window');
+    await tester.ensureVisible(update);
+    await tester.pumpAndSettle();
+    await tester.tap(update);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.scrollUntilVisible(

@@ -61,7 +61,8 @@ class Driver {
 }
 
 void main() {
-  test('score event observer preserves actual collision order and active clock', () {
+  test('score event observer preserves actual collision order and active clock',
+      () {
     final h = Driver(random: CenterRandom(alternating: true));
     final events = <String>[];
     h.engine.onScoreEvent = events.add;
@@ -71,7 +72,9 @@ void main() {
     expect(events.where((e) => e == 'obstacle').length, h.engine.obstaclesHit);
     expect(events, isNotEmpty);
     var score = 0;
-    for (final event in events) {score = event == 'catch' ? score + 10 : (score - 5).clamp(0, 4000);}
+    for (final event in events) {
+      score = event == 'catch' ? score + 10 : (score - 5).clamp(0, 4000);
+    }
     expect(score, h.engine.score);
     expect(h.engine.activeMillis, 40000);
   });
@@ -289,17 +292,19 @@ void main() {
     d.run(2000000, frame: false);
     expect(d.engine.phase, MoveCatchPhase.trackingLost);
   });
-  test('a large clock gap with fresh tracking pauses without offscreen scoring',
+  test('a late timer callback skips the stalled interval and keeps playing',
       () {
     final d = Driver()..play();
     d.run(1500000);
     final remaining = d.engine.remainingSeconds;
     final objects = d.engine.objects.map((o) => (o.id, o.y)).toList();
     d.step(micros: 500000);
-    expect(d.engine.phase, MoveCatchPhase.paused);
+    expect(d.engine.phase, MoveCatchPhase.playing);
     expect(d.engine.remainingSeconds, remaining);
     expect(d.engine.objects.map((o) => (o.id, o.y)).toList(), objects);
     expect(d.engine.score, 0);
+    d.step();
+    expect(d.engine.remainingSeconds, lessThan(remaining));
   });
   test(
       'deterministic stars use actual collisions; obstacles subtract with a zero floor',
@@ -373,4 +378,3 @@ void main() {
     expect(d.engine.trackingReady, isFalse);
   });
 }
-

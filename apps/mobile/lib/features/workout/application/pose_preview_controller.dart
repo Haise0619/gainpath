@@ -234,6 +234,22 @@ class PosePreviewController extends ChangeNotifier {
         phase == PosePreviewPhase.tracking) {
       return;
     }
+    // A normal pause publishes its paused state before native camera stop and
+    // detector reset finish. A quick Resume must join that shutdown rather
+    // than turn a healthy pause into a persistent camera error.
+    final retiring = _retirement;
+    if (phase == PosePreviewPhase.paused &&
+        retiring != null &&
+        !_cleanupFailed) {
+      final waitingRevision = _revision;
+      try {
+        await retiring.timeout(cleanupTimeout);
+      } catch (_) {
+        // The bounded cleanup owns the failure message and retains the lease.
+        return;
+      }
+      if (!_active || _background || waitingRevision != _revision) return;
+    }
     if (_retirement != null || _cleanupFailed) {
       errorMessage =
           'Tracking resources are still closing. Reopen after they are released.';
@@ -458,7 +474,8 @@ class PosePreviewController extends ChangeNotifier {
       _scheduler?.suspend();
       camera.invalidate();
       phase = PosePreviewPhase.failure;
-      errorMessage = 'Camera startup timed out. Retry when the camera is released.';
+      errorMessage =
+          'Camera startup timed out. Retry when the camera is released.';
       quality.transition('camera_startup_timeout');
       // Keep the native operation and cleanup serialized. Late startup must
       // finish before either this session or another route can use the camera.
@@ -489,7 +506,18 @@ class PosePreviewController extends ChangeNotifier {
     await _boundedCleanup(_enqueue(() async {
       await camera.stop();
       await _scheduler?.drain();
-      await _detector?.reset();
+      final detector = _detector;
+      if (detector == null) return;
+      try {
+        await detector.reset();
+      } catch (_) {
+        // A failed reset makes this worker unusable. Only a confirmed close
+        // lets the next start create a replacement.
+        await detector.close();
+        _scheduler?.dispose();
+        _scheduler = null;
+        _detector = null;
+      }
     }));
   }
 

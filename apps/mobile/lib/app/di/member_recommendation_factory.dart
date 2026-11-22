@@ -125,6 +125,7 @@ class MemberRecommendationHost extends StatefulWidget {
 class _RecommendationHostState extends State<MemberRecommendationHost> {
   late MemberRecommendationRepository _repository;
   late MemberRecommendationPageLoader _load;
+  Future<void> Function()? _checkProfileCoach;
   MemberRecommendationNavigator? _navigator;
   Future<List<PublishedRecommendationSuggestion>>? _discovery;
   DateTime? _discoveryLoadedAt;
@@ -149,6 +150,8 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         oldWidget.bookingListFactory != widget.bookingListFactory ||
         oldWidget.availabilityFactory != widget.availabilityFactory) {
       _configure();
+    } else if (widget.visible && !oldWidget.visible) {
+      unawaited(_checkProfileCoach?.call());
     }
   }
 
@@ -187,6 +190,34 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
     };
     _signals = signals;
     _updates = _repository.enabled ? signals.stream : null;
+    var checkingProfile = false;
+    _checkProfileCoach = () async {
+      if (checkingProfile || !current() || !_repository.enabled) return;
+      checkingProfile = true;
+      try {
+        final query = <String, Object?>{
+          'schemaVersion': 1,
+          'organizationId': session.organizationId,
+        };
+        final result = canonical != null
+            ? await canonical.call('member.profile.recommend', query)
+            : await (widget.datasetTransport ??
+                    firebaseFypDatasetTransport(session.scope, current))
+                .call('member.profile.recommend', query);
+        if (current() &&
+            !signals.isClosed &&
+            result is Map &&
+            result['delivered'] == 1) {
+          _cache.invalidate();
+          signals.add(null);
+        }
+      } catch (_) {
+        // The feed remains usable when the member has not enabled personalization.
+      } finally {
+        checkingProfile = false;
+      }
+    };
+    if (widget.visible) unawaited(_checkProfileCoach?.call());
     _navigator = null;
     _navigator = MemberRecommendationNavigator(
         session: session,
@@ -204,8 +235,28 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         bookingFactory: widget.bookingFactory,
         bookingListFactory: widget.bookingListFactory,
         availabilityFactory: widget.availabilityFactory,
+        loadPublishedCovers: (ids) async {
+          final query = <String, Object?>{
+            'schemaVersion': 1,
+            'organizationId': session.organizationId,
+            'routineIds': ids,
+          };
+          final response = canonical != null
+              ? await canonical.call('member.routine.covers', query)
+              : await (widget.datasetTransport ??
+                      firebaseFypDatasetTransport(session.scope, current))
+                  .call('member.routine.covers', query);
+          if (!current() || response is! Map) return {};
+          return {
+            for (final id in ids)
+              if (response[id] is String) id: response[id] as String
+          };
+        },
         bookingNavigationEnabled: true);
   }
+
+  Future<Map<String, String>> _loadRoutineCovers(List<String> ids) async =>
+      await _navigator?.loadPublishedCovers?.call(ids) ?? {};
 
   Future<List<PublishedRecommendationSuggestion>> _loadDiscovery() async {
     final navigator = _navigator;
@@ -242,35 +293,44 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
     if (!mounted) return;
     _cache.invalidate();
     _signals?.add(null);
+    unawaited(_checkProfileCoach?.call());
   }
 
   void _openAll() {
+    unawaited(_checkProfileCoach?.call());
     Navigator.push<void>(
         context,
         MaterialPageRoute(
             builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('Recommended for You')),
+                appBar: AppBar(
+                  title: const Text('Recommended for You'),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Personalization settings',
+                      onPressed: _settings,
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                  ],
+                ),
                 body: SafeArea(
-                    child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: MemberRecommendationsView(
-                            repository: _repository,
-                            loadPage: _load,
-                            loadDiscovery: _loadDiscovery,
-                            onOpenDiscovery: _navigator?.openDiscovery,
-                            updates: _updates,
-                            onInvalidate: _cache.invalidate,
-                            isCurrent: widget.isCurrent,
-                            onOpenTarget: (context, detail) async {
-                              final navigator = _navigator;
-                              if (navigator == null) {
-                                throw StateError(
-                                    'Recommendations unavailable.');
-                              }
-                              await navigator.open(context, detail);
-                            },
-                            photoBuilder: _navigator?.buildCoachPhoto,
-                            onSettings: _settings))))));
+                    child: MemberRecommendationsView(
+                        pageScrollable: true,
+                        repository: _repository,
+                        loadPage: _load,
+                        loadDiscovery: _loadDiscovery,
+                        loadRoutineCovers: _loadRoutineCovers,
+                        onOpenDiscovery: _navigator?.openDiscovery,
+                        updates: _updates,
+                        onInvalidate: _cache.invalidate,
+                        isCurrent: widget.isCurrent,
+                        onOpenTarget: (context, detail) async {
+                          final navigator = _navigator;
+                          if (navigator == null) {
+                            throw StateError('Recommendations unavailable.');
+                          }
+                          await navigator.open(context, detail);
+                        },
+                        photoBuilder: _navigator?.buildCoachPhoto)))));
   }
 
   @override
@@ -278,6 +338,7 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
       repository: _repository,
       loadPage: _load,
       loadDiscovery: _loadDiscovery,
+      loadRoutineCovers: _loadRoutineCovers,
       onOpenDiscovery: _navigator?.openDiscovery,
       updates: _updates,
       onInvalidate: _cache.invalidate,
@@ -290,7 +351,6 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         await navigator.open(context, detail);
       },
       photoBuilder: _navigator?.buildCoachPhoto,
-      onSettings: _settings,
       onViewAll: _openAll,
       compact: widget.compact,
       visible: widget.visible);

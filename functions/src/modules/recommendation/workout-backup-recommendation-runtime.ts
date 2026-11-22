@@ -11,10 +11,12 @@ import { tutorialMediaUrl } from '../content/tutorial-media';
 import { bookingCoachScope, bookingDaySnapshot, currentBookingMembership, currentBookingPolicy } from '../coaching/booking-validation';
 import { localDate, plusDate, SLOT } from '../coaching/coach-availability-contracts';
 import { memberBusySlots } from '../coaching/member-booking-conflicts';
+import { membershipCapabilities } from '../commerce/membership-capabilities';
+import { readVerifiedTargetMembershipEntitlement } from '../commerce/membership-entitlement';
 import { recommendationPreferences } from './recommendation-personalization';
 import type {MemberFitnessGoal} from './recommendation-personalization';
 import { parseCanonicalTarget, queueText, type QueueTarget } from './recommendation-queue-contracts';
-import {createGeminiWorkoutRecommendationRanker,rankWorkoutRecommendations,type WorkoutRankingProvider,type WorkoutRankingContext,type WorkoutRankingCandidate} from './workout-recommendation-ranking';
+import {createGeminiWorkoutRecommendationRanker,rankWorkoutRecommendations,personalizedReason,type WorkoutRankingProvider,type WorkoutRankingContext,type WorkoutRankingCandidate} from './workout-recommendation-ranking';
 import type { CanonicalSuggestion, ReviewedCanonicalRuntime } from './canonical-recommendation-lifecycle';
 import type { CurrentRecommendationTarget } from './recommendation-member-contracts';
 
@@ -112,6 +114,11 @@ const GOAL_SPECIALTIES: Readonly<Record<string, readonly string[]>> = {
   reduceStress: ['stress management'],
 };
 const normalized = (value: string) => value.trim().toLowerCase();
+const RANKING_GOALS: Partial<Record<MemberFitnessGoal, WorkoutRankingContext['goal']>> = {
+  buildMuscle:'muscle_gain', loseWeight:'weight_management', improveEndurance:'endurance',
+  increaseFlexibility:'mobility', generalFitness:'general_fitness',
+};
+const coachingNeed = digestOf({kind:'trainer', source:'member_coaching'});
 const timeBand=(minutes:number):NonNullable<WorkoutRankingContext['duration']> =>
   minutes<=20?'short':minutes<=40?'medium':'long';
 const routineGoalCategories:Partial<Record<MemberFitnessGoal,RegExp>>={
@@ -140,8 +147,7 @@ async function routineTarget(tx:TransactionPort,org:string,routineId:string):Pro
       if(mode==='videoGuidedTimed'&&!tutorialMediaUrl(entry.videoUrl))return null;
     }catch{return null;}
   }
-  const illustrated=publication.exercises.find((e:any)=>e.imageUrl||e.coverImageUrl);
-  const image=publication.coverImageUrl??publication.imageUrl??illustrated?.coverImageUrl??illustrated?.imageUrl;
+  const image=publication.coverImageUrl??publication.imageUrl;
   return {target:{kind:'routine',organizationId:org,routineId},label:publication.title,specialization:null,
     imageUrl:typeof image==='string'?image:null,photoPath:null,
     ...(typeof publication.difficulty==='string'?{difficulty:publication.difficulty}:{}),
@@ -149,7 +155,8 @@ async function routineTarget(tx:TransactionPort,org:string,routineId:string):Pro
 }
 
 async function coachTarget(tx: TransactionPort, org: string, coachId: string, now: number,
-  member: string, expectedBranch?: string): Promise<CurrentRecommendationTarget | null> {
+  member: string, memberIsVerified: (uid: string) => Promise<boolean>, expectedBranch?: string,
+  preferred?: string): Promise<CurrentRecommendationTarget | null> {
   try {
     const root = `orgs/${org}`;
     const profile = await tx.get(`${root}/coaches/${coachId}`);
@@ -160,33 +167,44 @@ async function coachTarget(tx: TransactionPort, org: string, coachId: string, no
       !queueText(profile.displayName, 80) || !queueText(profile.specialty, 80)) return null;
     if (typeof await credentialFailure(tx, root, coachId, profile, now) !== 'number') return null;
     const membership = await currentBookingMembership(tx, org, member);
-    const scope = await bookingCoachScope(tx, org, coachId, membership.branchIds);
-    if (expectedBranch && !scope.permitted.includes(expectedBranch)) return null;
+    const scope = await bookingCoachScope(tx, org, coachId);
+    let permitted = scope.permitted.filter(branch => membership.branchIds.includes(branch));
+    if (scope.permitted.some(branch => !permitted.includes(branch)) && await memberIsVerified(member)) {
+      const entitlement = await readVerifiedTargetMembershipEntitlement(tx, member, org, now,
+        { exists: true, disabled: false, emailVerified: true });
+      if (membershipCapabilities(entitlement).canBookCoach) permitted = scope.permitted;
+    }
+    if (expectedBranch && !permitted.includes(expectedBranch)) return null;
     const policy = currentBookingPolicy(await tx.get(`${root}/settings/booking`));
     const today = localDate(now, policy.timeZone);
+    let fallback: CurrentRecommendationTarget | null = null;
     for (const date of [today, plusDate(today, 1), plusDate(today, 2)]) {
       const day = await bookingDaySnapshot(tx, org, coachId, member, date, policy, scope.assigned, now);
       if (day.reservations.length >= policy.cap ||
-        (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + 30 > day.dailyCapacityMinutes)) continue;
+        (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + 60 > day.dailyCapacityMinutes)) continue;
       const busy = await memberBusySlots(tx, org, member, date, policy.timeZone, day.reservations);
       for (const slot of day.grid.slots) {
-        if (slot <= now || day.blocked.has(slot) || busy.has(slot)) continue;
-        const window = day.windows.find(w => scope.permitted.includes(w.branchId) &&
-          (!expectedBranch || w.branchId === expectedBranch) && w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT);
+        if (slot <= now || day.blocked.has(slot) || busy.has(slot) ||
+          day.blocked.has(slot + SLOT) || busy.has(slot + SLOT)) continue;
+        const window = day.windows.find(w => permitted.includes(w.branchId) &&
+          (!expectedBranch || w.branchId === expectedBranch) && w.startAtMillis <= slot && w.endAtMillis >= slot + 2 * SLOT);
         if (!window) continue;
         const target: QueueTarget = {kind: 'trainer', coachId, branchId: window.branchId,
-          observedStartAtMillis: slot, observedEndAtMillis: slot + SLOT};
+          observedStartAtMillis: slot, observedEndAtMillis: slot + 2 * SLOT};
         const prefix = `${root}/coachProfilePhotos/${coachId}/`;
         const photoPath = typeof profile.photoPath === 'string' && profile.photoPath.startsWith(prefix) &&
           /^[a-f0-9]{32}$/.test(profile.photoPath.slice(prefix.length)) ? profile.photoPath : null;
+        if (fallback && window.branchId !== preferred) continue;
         const branch=await tx.get(`${root}/branches/${window.branchId}`);
-        return {target, label: profile.displayName, specialization: profile.specialty, photoPath, imageUrl: null,
+        const result: CurrentRecommendationTarget = {target, label: profile.displayName, specialization: profile.specialty, photoPath, imageUrl: null, durationMinutes:60,
           ...(Number.isSafeInteger(profile.consultationFeeMinor)&&Number(profile.consultationFeeMinor)>=0?
             {priceMinor:Number(profile.consultationFeeMinor),currency:'MYR'}:{}),
-          ...(queueText(branch?.name,120)?{branchLabel:branch.name}:{})};
+          ...(queueText(branch?.name??branch?.displayName??branch?.label??window.branchId,120)?{branchLabel:String(branch?.name??branch?.displayName??branch?.label??window.branchId)}:{})};
+        if (expectedBranch || !identifier(preferred) || window.branchId === preferred || !permitted.includes(preferred)) return result;
+        fallback = result;
       }
     }
-    return null;
+    return fallback;
   } catch (error) {
     if (error instanceof DomainError && ['failed-precondition', 'permission-denied', 'invalid-argument'].includes(error.code)) return null;
     throw error;
@@ -198,6 +216,29 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
   if (cohortRoot !== undefined && cohortRoot !== 'orgs/gainpath/cohorts/fyp-v1') throw new Error('Unsupported workout scope.');
   const physical = (logical: string) => cohortRoot ? cohortRoot + logical.slice('orgs/gainpath'.length) : logical;
   const logical = (physicalPath: string) => cohortRoot ? 'orgs/gainpath' + physicalPath.slice(cohortRoot.length) : physicalPath;
+  async function matchingCoaches(tx:TransactionPort, org:string, member:string, now:number,
+    goals:readonly MemberFitnessGoal[], activityBranch?: string) {
+    const matches:{coach:CurrentRecommendationTarget; goals:MemberFitnessGoal[]}[]=[];
+    if (!goals.length) return matches;
+    const user = await tx.get(`users/${member}`);
+    const home = user?.homeBranchId ?? user?.primaryBranchId;
+    const preferred = activityBranch ?? (identifier(home) ? home : undefined);
+    const candidates=await db.collection(physical(`orgs/${org}/coaches`)).where('status','==','published').limit(25).get();
+    const atPreferred = (branches: unknown) => !!preferred && Array.isArray(branches) && branches.includes(preferred);
+    const ordered = [...candidates.docs].sort((a, b) =>
+      Number(atPreferred(b.data().branchIds)) - Number(atPreferred(a.data().branchIds)));
+    for (const row of ordered) {
+      const data=await tx.get(logical(row.ref.path));
+      if (!data || data.certificationVerified!==true || !identifier(row.id)) continue;
+      const specialties=[data.specialty,...(Array.isArray(data.specializationTags)?data.specializationTags:[])];
+      const matching=goals.filter(goal=>specialties.some(value=>typeof value==='string'&&GOAL_SPECIALTIES[goal]?.includes(normalized(value))));
+      if (!matching.length || !await coachIsVerified(row.id)) continue;
+      const coach=await coachTarget(tx,org,row.id,now,member,coachIsVerified,undefined,preferred);
+      if (coach) matches.push({coach,goals:matching});
+      if (matches.length===6) break;
+    }
+    return matches;
+  }
   return {
     ...(cohortRoot ? {scopedDataset: true as const} : {}),
     reviewId: POLICY,
@@ -217,15 +258,23 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
       const ranked=await rankWorkoutRecommendations(allowAi?options.provider:undefined,context,candidates);
       return Object.values(ranked.selections).filter(selection=>selection!==undefined).map(selection=>{
         const selected=selection!.candidate.target;
-        return {...selected,summary:selection!.reason??selected.summary,
-          explanations:selection!.reason?[selection!.reason]:selected.explanations,
+        const factors = selection!.factors.filter(factor =>
+              ['goal_match','experience_match','exercise_match','duration_match','coach_specialization','form_practice'].includes(factor)).slice(0,3);
+        const reason = personalizedReason(context, factors, selected.exerciseLabel);
+        return {...selected,summary:reason || selected.summary,
           ai:{...selected.ai!,method:selection!.method,factors:[...selection!.factors],
             changedOrder:selection!.changedOrder,candidateCount:selection!.ranking.length,
-            ...(ranked.inference?{model:ranked.inference.model,latencyMillis:ranked.inference.latencyMillis,
+            ruleFirstLabel:selection!.ruleFirst.target.targetLabel,
+            ...(selection!.method === 'gemini' ? {
+              geminiFirstLabel:selected.targetLabel,
+              changedTopChoice:selection!.ruleFirst !== selection!.candidate,
+            } : {}),
+            ...(ranked.inference && !selection!.fallbackReason?{model:ranked.inference.model,latencyMillis:ranked.inference.latencyMillis,
               inputTokens:ranked.inference.usage.inputTokens,outputTokens:ranked.inference.usage.outputTokens,
               thinkingTokens:ranked.inference.usage.thinkingTokens,totalTokens:ranked.inference.usage.totalTokens,
               providerSource:ranked.inference.providerSource,cacheHit:ranked.inference.cacheHit}:{}),
-            ...(ranked.failure?{fallbackReason:ranked.failure}:!allowAi?{fallbackReason:'ai_consent_required'}:
+            ...(ranked.validationFailure && !selection!.fallbackReason?{validationFailure:ranked.validationFailure}:{}),
+            ...(selection!.fallbackReason?{fallbackReason:selection!.fallbackReason}:ranked.failure?{fallbackReason:ranked.failure}:!allowAi?{fallbackReason:'ai_consent_required'}:
               !options.provider?{fallbackReason:'provider_not_configured'}:{})}};
       });
     },
@@ -256,12 +305,12 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
       if (!member) return null;
       const target = suggestion.target;
       if (!await coachIsVerified(target.coachId)) return null;
-      const current = await coachTarget(tx, org, target.coachId, now, member, target.branchId);
+      const current = await coachTarget(tx, org, target.coachId, now, member, coachIsVerified, target.branchId);
       if (!current) return null;
       if (reading) return {...current, target};
       return digestOf(current.target) === digestOf(target) ? current : null;
     },
-    async backupSuggestions(tx, org, member, key, now, boundary) {
+    async backupSuggestions(tx, org, member, key, now, boundary, outreach = false) {
       // Catalog entries are reused by Tutorials and Routines within this snapshot.
       const underlying=tx,reads=new Map<string,Promise<Awaited<ReturnType<TransactionPort['get']>>>>();
       tx={...underlying,get(path){
@@ -270,6 +319,38 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
         return pending;
       }};
       const root = `orgs/${org}`;
+      if (key === 'fitness-profile') {
+        const preferences=recommendationPreferences(await tx.get(`${root}/profiles/${member}`));
+        const matches=await matchingCoaches(tx,org,member,now,preferences.goals);
+        matches.sort((a,b)=>b.goals.length-a.goals.length);
+        const goal=matches[0]?.goals.find(value=>RANKING_GOALS[value]!==undefined);
+        const context:WorkoutRankingContext=goal?{goal:RANKING_GOALS[goal]}:{};
+        const output=matches.map(({coach,goals}):CanonicalSuggestion=>({
+          needKey:coachingNeed, evidenceFingerprint:digestOf({goals:preferences.goals, matched:goals}),
+          policyVersion:POLICY, exerciseLabel:'Fitness profile', objective:'technique_foundations',
+          source:{kind:'fitness_profile',recordKey:key},
+          title:'Explore coaching for your fitness goal',
+          summary:'This coach’s published specialty matches a goal from your Fitness Profile.',
+          explanations:['A booking time at an eligible branch was available when checked.'],
+          target:parseCanonicalTarget(coach.target,org), targetLabel:coach.label,
+          ai:{method:'rule_fallback',workoutContext:'Fitness Profile matching before workout evidence.',
+            fitnessGoals:goals,context,factors:goal&&goals.includes(goal)?['goal_match','coach_specialization']:[]},
+        }));
+        if(outreach){
+          const rows=await db.collection(physical(`${root}/content`)).where('status','==','published').limit(60).get();
+          const choices=[];
+          for(const row of rows.docs){const target=await routineTarget(tx,org,row.id);if(!target||(preferences.experience??'beginner')==='beginner'&&normalized(target.difficulty??'')==='advanced')continue;
+            const goalMatch=preferences.goals.some(goal=>routineGoalCategories[goal]?.test(JSON.stringify(row.data().exercises)));
+            const experienceMatch=!!preferences.experience&&normalized(target.difficulty??'')===preferences.experience;
+            choices.push({target,goalMatch,experienceMatch});}
+          choices.sort((a,b)=>Number(b.goalMatch)-Number(a.goalMatch)||Number(b.experienceMatch)-Number(a.experienceMatch)||a.target.label.localeCompare(b.target.label));
+          for(const {target,goalMatch,experienceMatch}of choices.slice(0,6))output.push({needKey:digestOf({member,kind:'routine',profile:true}),evidenceFingerprint:digestOf({preferences,target}),policyVersion:POLICY,
+            exerciseLabel:'Fitness profile',objective:'technique_foundations',title:'Explore a routine for your fitness profile',summary:'Explore this published routine using your stated training preferences.',
+            explanations:[experienceMatch?'Matches your stated experience level.':'Published general training content; an exact fitness-goal match is not required.'],target:target.target,targetLabel:target.label,
+            ai:{method:'rule_fallback',workoutContext:'Fitness Profile matching without workout history.',fitnessGoals:preferences.goals,context:{...context,...(preferences.experience?{experience:preferences.experience}:{})},factors:[...(goalMatch?['goal_match' as const]:[]),...(experienceMatch?['experience_match' as const]:[])]}});
+        }
+        return output;
+      }
       const backups = `${root}/members/${member}/workoutBackups`;
       const source = await readWorkoutSource(tx, org, member, key, now, boundary, cohortRoot);
       if (!source) return [];
@@ -332,14 +413,12 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
       const difficulty = (value: unknown) => typeof value === 'string' && normalized(value) === wantedDifficulty ? 1 : 0;
       const selected = tutorials.filter(t => t !== null).sort((a, b) => difficulty(b.difficulty) - difficulty(a.difficulty)).slice(0,6);
       const output: CanonicalSuggestion[] = [];
-      const goals:Record<string,WorkoutRankingContext['goal']>={buildMuscle:'muscle_gain',loseWeight:'weight_management',
-        improveEndurance:'endurance',increaseFlexibility:'mobility',generalFitness:'general_fitness'};
-      const aiGoal=preferences.goals.find(goal=>goals[goal]!==undefined);
+      const aiGoal=preferences.goals.find(goal=>RANKING_GOALS[goal]!==undefined);
       const minutes=profile?.preferredWorkoutDuration;
       const duration=typeof minutes==='number'&&Number.isFinite(minutes)&&minutes>0&&minutes<=240?minutes:undefined;
       const weeklySessions=allRecent.filter(s=>s.ended>=now-7*DAY).length;
       const context:WorkoutRankingContext={
-        ...(aiGoal?{goal:goals[aiGoal]}:{}),
+        ...(aiGoal?{goal:RANKING_GOALS[aiGoal]}:{}),
         ...(preferences.experience?{experience:preferences.experience}:{}),
         frequency:weeklySessions>=6?'regular':weeklySessions>=2?'occasional':'new',
         reps:source.repetitions>=15?'high':source.repetitions>=6?'moderate':'low',
@@ -350,7 +429,7 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
         ...(duration?{duration:timeBand(duration)}:{}),
       };
       const make = (candidate: CurrentRecommendationTarget, title: string, summary: string, explanations: string[]): CanonicalSuggestion => ({
-        needKey: digestOf({exercise: candidate.target.kind==='routine'?'routine_discovery':source.exercise, kind: candidate.target.kind}), policyVersion: POLICY,
+        needKey: candidate.target.kind==='trainer'?coachingNeed:digestOf({exercise: candidate.target.kind==='routine'?'routine_discovery':source.exercise, kind: candidate.target.kind}), policyVersion: POLICY,
         source: {kind: source.origin, recordKey: key},
         evidenceFingerprint: digestOf({source: source.digest, qualified: scored.map(s => s.digest).sort()}),
         exerciseLabel: label, objective, title, summary, explanations,
@@ -396,24 +475,19 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
       }
       // Coaching requires an explicit goal match and repeat practice. One low score cannot trigger an upsell.
       if (recent.length > 1 && preferences.goals.length) {
-        const tags = preferences.goals.flatMap(goal => GOAL_SPECIALTIES[goal] ?? []);
-        const candidates = await db.collection(physical(`${root}/coaches`)).where('status', '==', 'published').limit(25).get();
-        for (const row of candidates.docs) {
-          const data = await tx.get(logical(row.ref.path));
-          if (!data || data.certificationVerified !== true || !identifier(row.id)) continue;
-          const specialties = [data.specialty, ...(Array.isArray(data.specializationTags) ? data.specializationTags : [])];
-          if (!specialties.some(v => typeof v === 'string' && tags.includes(normalized(v))) || !await coachIsVerified(row.id)) continue;
-          const coach = await coachTarget(tx, org, row.id, now, member);
-          if (!coach) continue;
+        const sessionId = key.slice('session-'.length);
+        const activity = key.startsWith('session-') && identifier(sessionId)
+          ? await tx.get(`${root}/workoutSessions/${sessionId}`) : undefined;
+        const activityBranch = activity?.status === 'accepted' && activity.memberId === member && identifier(activity.branchId)
+          ? activity.branchId : undefined;
+        for (const {coach, goals} of await matchingCoaches(tx,org,member,now,preferences.goals,activityBranch)) {
           const suggestion=make(coach, `Explore coaching for ${label}`,
             'Meet a coach whose published specialty matches one of your fitness goals.',
             ['Matches a stated fitness goal.', 'A booking time was available when checked.']);
-          const contextTags=aiGoal?GOAL_SPECIALTIES[aiGoal]??[]:[];
-          if(specialties.some(v=>typeof v==='string'&&contextTags.includes(normalized(v))))
+          if(aiGoal && goals.includes(aiGoal))
             suggestion.ai!.factors.push('goal_match','coach_specialization');
           suggestion.ai!.factors=suggestion.ai!.factors.filter(f=>f!=='exercise_match'&&f!=='form_practice');
           output.push(suggestion);
-          if(output.filter(s=>s.target.kind==='trainer').length>=6)break;
         }
       }
       return output;

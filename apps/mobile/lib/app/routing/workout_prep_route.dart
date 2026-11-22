@@ -20,6 +20,9 @@ import '../../navigation/workout_navigation.dart';
 import '../di/program_store_factory.dart';
 import '../di/equipment_catalog_factory.dart';
 import '../di/workout_store_factory.dart';
+import '../di/local_member_progress_factory.dart';
+import '../../features/analytics/domain/local_member_progress_repository.dart';
+import '../../features/workout/domain/workout_activity_summary.dart';
 import 'pose_preview_route.dart';
 import 'exercise_tracker_route.dart';
 import 'saved_squat_sessions_route.dart';
@@ -42,6 +45,7 @@ class WorkoutPrepRoute extends StatefulWidget {
     this.equipmentReaderFactory,
     this.programStoreFactory = createProgramEnrollmentStore,
     this.routineStoreFactory = createRoutineJourneyStore,
+    this.progressRepositoryFactory = createLocalMemberProgressRepository,
   });
   final PublishedRoutine? publishedRoutine;
   final bool live;
@@ -53,6 +57,7 @@ class WorkoutPrepRoute extends StatefulWidget {
   final Future<ProgramEnrollmentStore> Function(SessionScope)
       programStoreFactory;
   final Future<RoutineJourneyStore> Function(SessionScope) routineStoreFactory;
+  final LocalMemberProgressRepositoryFactory progressRepositoryFactory;
   @override
   State<WorkoutPrepRoute> createState() => _WorkoutPrepRouteState();
 }
@@ -66,6 +71,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
   WorkoutHubProgram? _hub;
   ScheduledWorkoutPreview? _scheduled;
   List<RoutineCheckpoint> _checkpoints = [];
+  WorkoutActivitySummary? _activitySummary;
   bool _loading = false,
       _loadError = false,
       _showFree = false,
@@ -168,12 +174,32 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
       if (!mounted || generation != _generation || _activeScope() != scope) {
         return;
       }
+      WorkoutActivitySummary? activitySummary;
+      try {
+        final progressRepo = await widget.progressRepositoryFactory(
+            scope, () => _activeScope() == scope ? scope : null);
+        final snapshot = await progressRepo.load();
+        if (_activeScope() == scope) {
+          activitySummary = calculateWeeklyWorkoutActivity(
+            now: DateTime.now(),
+            records: snapshot.records,
+            attempts: snapshot.attempts,
+            summaries: snapshot.summaries.values,
+          );
+        }
+      } catch (_) {
+        activitySummary = WorkoutActivitySummary.empty();
+      }
+      if (!mounted || generation != _generation || _activeScope() != scope) {
+        return;
+      }
       final old = _controller;
       setState(() {
         _controller = candidate;
         _hub = hub;
         _scheduled = preview;
         _checkpoints = checkpoints;
+        _activitySummary = activitySummary;
         _loading = false;
       });
       candidate = null;
@@ -424,6 +450,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
             programLoading: _loading,
             programLoadError: _loadError,
             workoutStateUnavailable: _loadError && journal == null,
+            activitySummary: _activitySummary,
             onRetryWorkout: scope == null ? null : () => _reload(scope),
             routineLoadFailed: widget.routineLoadFailed,
             routineStatusMessage: widget.routineStatusMessage,

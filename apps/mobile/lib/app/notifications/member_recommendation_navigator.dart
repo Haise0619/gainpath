@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -34,7 +35,9 @@ class MemberRecommendationNavigator {
       this.bookingListFactory,
       this.availabilityFactory,
       this.bookingNavigationEnabled = true,
-      this.tutorialPlayerFactory});
+      this.tutorialPlayerFactory,
+      this.loadPublishedCovers});
+  final Future<Map<String, String>> Function(List<String>)? loadPublishedCovers;
   final AuthSession session;
   final MemberRecommendationRepository repository;
   final bool Function() isCurrent;
@@ -117,17 +120,27 @@ class MemberRecommendationNavigator {
     _checkPublic();
     final page = await catalog.loadPage();
     _checkPublic();
+    final routines = page.items.take(3).toList();
+    final missing = routines
+        .where((r) => r.coverImageUrl == null)
+        .map((r) => r.id)
+        .toList();
+    Map<String, String> covers = {};
+    if (missing.isNotEmpty && loadPublishedCovers != null) {
+      try {
+        covers = await loadPublishedCovers!(missing);
+      } catch (_) {}
+    }
+    _checkPublic();
     final items = <PublishedRecommendationSuggestion>[];
-    for (final routine in page.items.take(3)) {
+    for (final routine in routines) {
       items.add(PublishedRecommendationSuggestion(
           kind: RecommendationKind.routine,
           target:
               RoutineRecommendationTarget(session.organizationId, routine.id),
           title: routine.title,
           difficulty: routine.difficulty,
-          imageUrl: routine.exercises.isEmpty
-              ? null
-              : routine.exercises.first.imageUrl,
+          imageUrl: routine.coverImageUrl ?? covers[routine.id],
           exerciseCount: routine.exercises.length,
           durationMinutes: routine.estimatedMinutes));
       final index = routine.exercises.indexWhere((e) =>
@@ -140,7 +153,7 @@ class MemberRecommendationNavigator {
                 routine.id, index, exercise.exerciseId, exercise.dayNumber),
             title: exercise.name,
             imageUrl: exercise.imageUrl,
-            difficulty: routine.difficulty));
+            difficulty: exercise.tutorial.difficulty));
       }
     }
     return List.unmodifiable(items);
@@ -334,48 +347,63 @@ class _RecommendationCoachPhoto extends StatefulWidget {
 }
 
 class _RecommendationCoachPhotoState extends State<_RecommendationCoachPhoto> {
-  late final Future<PublishedCoachProfile?> _profile = _load();
-  Future<PublishedCoachProfile?> _load() async {
-    final target = widget.detail.target;
-    if (!widget.isCurrent() ||
-        target is! TrainerRecommendationTarget ||
-        widget.directory.scope.organizationId != widget.detail.organizationId) {
-      return null;
-    }
-    return widget.directory.loadPublished(target.coachId);
+  Future<Uint8List?>? _bytes;
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
 
   @override
-  Widget build(BuildContext context) => Container(
-      height: 144,
-      width: double.infinity,
-      decoration: BoxDecoration(
-          color: AppColors.primaryTint,
-          borderRadius: BorderRadius.circular(16)),
-      alignment: Alignment.center,
-      child: FutureBuilder<PublishedCoachProfile?>(
-          future: _profile,
-          builder: (context, snapshot) {
-            final profile = snapshot.data;
-            final target = widget.detail.target;
-            final valid = widget.isCurrent() &&
-                target is TrainerRecommendationTarget &&
-                profile != null &&
-                profile.id == target.coachId &&
-                profile.isPublished &&
-                profile.certificationVerified &&
-                profile.branchIds.contains(target.branchId) &&
-                profile.fields.photoPath == widget.detail.photoPath &&
-                profile.fields.photoPath != null &&
-                profile.fields.photoPath!.startsWith(
-                    'orgs/${widget.detail.organizationId}/coachProfilePhotos/${target.coachId}/');
-            return valid
-                ? PublishedCoachPhoto(
-                    coach: profile,
-                    repository: widget.directory,
-                    isCurrent: widget.isCurrent,
-                    size: 120)
-                : const Icon(Icons.person_outline_rounded,
-                    size: 48, color: AppColors.primary);
-          }));
+  void didUpdateWidget(covariant _RecommendationCoachPhoto old) {
+    super.didUpdateWidget(old);
+    if (old.detail.photoPath != widget.detail.photoPath ||
+        old.detail.target != widget.detail.target) {
+      _load();
+    }
+  }
+
+  void _load() {
+    final target = widget.detail.target, path = widget.detail.photoPath;
+    _bytes = widget.isCurrent() &&
+            widget.directory.scope.organizationId ==
+                widget.detail.organizationId &&
+            target is TrainerRecommendationTarget &&
+            path != null
+        ? loadPublishedCoachPhotoBytes(
+            organizationId: widget.detail.organizationId,
+            coachId: target.coachId,
+            photoPath: path,
+            isCurrent: widget.isCurrent)
+        : null;
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final avatar =
+            constraints.maxWidth <= 110 && constraints.maxHeight <= 110;
+        final size = avatar && constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 96.0;
+        Widget fallback() => Container(
+            color: AppColors.primaryTint,
+            alignment: Alignment.center,
+            child: Icon(Icons.person_rounded,
+                color: AppColors.primary, size: size * .5));
+        return SizedBox(
+            width: avatar ? size : double.infinity,
+            height: avatar ? size : 144,
+            child: ClipRRect(
+                borderRadius: BorderRadius.circular(avatar ? size / 2 : 16),
+                child: FutureBuilder<Uint8List?>(
+                    future: _bytes,
+                    builder: (context, snapshot) => widget.isCurrent() &&
+                            snapshot.connectionState == ConnectionState.done &&
+                            snapshot.data != null
+                        ? Image.memory(snapshot.data!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => fallback())
+                        : fallback())));
+      });
 }

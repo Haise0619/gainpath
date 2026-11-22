@@ -111,6 +111,9 @@ void main() {
         child: const MaterialApp(home: ExerciseTutorialsScreen())));
     await tester.pumpAndSettle();
     expect(find.textContaining('AI tracking · Front view'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey(
+        'exercise-more-dumbbell-shoulder-press-front-v1')));
+    await tester.pumpAndSettle();
     expect(find.byTooltip('Delete exercise'), findsOneWidget);
   });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -148,6 +151,8 @@ void main() {
       (tester) async {
     final catalog = CatalogStatusFixture();
     await openStatusCatalog(tester, catalog);
+    await tester.tap(find.byKey(const ValueKey('exercise-more-active')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('exercise-delete-active')));
     await tester.pumpAndSettle();
     expect(find.textContaining('archives'), findsWidgets);
@@ -160,6 +165,8 @@ void main() {
       (tester) async {
     final catalog = CatalogStatusFixture();
     await openStatusCatalog(tester, catalog);
+    await tester.tap(find.byKey(const ValueKey('exercise-more-active')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('exercise-delete-active')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
@@ -195,6 +202,8 @@ void main() {
     expect(catalog.entries.first.status, TutorialStatus.draft);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Inactive'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('exercise-more-active')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('exercise-status-active')));
     await tester.pumpAndSettle();
     expect(catalog.entries.first.status, TutorialStatus.active);
@@ -206,6 +215,8 @@ void main() {
     final catalog = CatalogStatusFixture()
       ..failure = StateError('private-credential-sentinel');
     await openStatusCatalog(tester, catalog);
+    await tester.tap(find.byKey(const ValueKey('exercise-more-active')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('exercise-status-active')));
     await tester.pumpAndSettle();
     expect(
@@ -215,25 +226,26 @@ void main() {
     expect(find.textContaining('private-credential-sentinel'), findsNothing);
     expect(
         tester
-            .widget<TextButton>(
-                find.byKey(const ValueKey('exercise-status-active')))
-            .onPressed,
-        isNull);
+            .widget<PopupMenuButton<String>>(
+                find.byKey(const ValueKey('exercise-more-active')))
+            .enabled,
+        isFalse);
     catalog.failure = null;
     await tester.tap(find.byTooltip('Reload catalog'));
     await tester.pumpAndSettle();
     expect(
         tester
-            .widget<TextButton>(
-                find.byKey(const ValueKey('exercise-status-active')))
-            .onPressed,
-        isNotNull);
+            .widget<PopupMenuButton<String>>(
+                find.byKey(const ValueKey('exercise-more-active')))
+            .enabled,
+        isTrue);
   });
   testWidgets(
       'release hold hides lifecycle mutations while statuses remain readable',
       (tester) async {
     await openStatusCatalog(tester, CatalogStatusFixture(), enabled: false);
     expect(find.text('Archived row'), findsOneWidget);
+    expect(find.byKey(const ValueKey('exercise-more-active')), findsNothing);
     expect(find.byKey(const ValueKey('exercise-delete-active')), findsNothing);
     expect(find.byKey(const ValueKey('exercise-status-active')), findsNothing);
   });
@@ -254,9 +266,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('exercise-delete-active')), 250);
+        find.byKey(const ValueKey('exercise-more-active')), 250,
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey('exercise-more-active')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('exercise-delete-active')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

@@ -68,6 +68,8 @@ class Module13DemoTransport implements ScopedCommandTransport {
     'member.coach',
     'member.routine',
     'member.discovery',
+    'member.routine.covers',
+    'member.profile.recommend',
     'member.workoutHistory'
   };
   void _check() {

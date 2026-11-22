@@ -22,15 +22,11 @@ class FirebaseAnnouncementRepository extends ContentRepository {
   bool get isLive => true;
   @override
   List<Announcement> get announcements => const [];
-  CollectionReference<Map<String, dynamic>> get _records => _db
-      .scopeRoot(scope)
-      .collection('announcements');
-  DocumentReference<Map<String, dynamic>> get _user =>
-      _db.scopeUser(scope);
-  DocumentReference<Map<String, dynamic>> get _member => _db
-      .scopeRoot(scope)
-      .collection('members')
-      .doc(scope.userId);
+  CollectionReference<Map<String, dynamic>> get _records =>
+      _db.scopeRoot(scope).collection('announcements');
+  DocumentReference<Map<String, dynamic>> get _user => _db.scopeUser(scope);
+  DocumentReference<Map<String, dynamic>> get _member =>
+      _db.scopeRoot(scope).collection('members').doc(scope.userId);
   void _check() {
     if (_invalidated ||
         !isCurrent() ||
@@ -92,7 +88,19 @@ class FirebaseAnnouncementRepository extends ContentRepository {
       'body': entry.body.trim(),
       'validFrom': Timestamp.fromDate(entry.validFrom),
       'validTo': Timestamp.fromDate(entry.validTo),
-      'status': entry.status.name
+      'status': entry.status.name,
+      if (entry.audience != AnnouncementAudience.all ||
+          baseline?.document.containsKey('audienceScope') == true)
+        'audienceScope': entry.audience.name,
+      if (entry.targetBranchIds.isNotEmpty ||
+          baseline?.document.containsKey('targetBranchIds') == true)
+        'targetBranchIds': entry.targetBranchIds,
+      if (entry.category != AnnouncementCategory.general ||
+          baseline?.document.containsKey('category') == true)
+        'category': entry.category.name,
+      if (entry.priority != AnnouncementPriority.normal ||
+          baseline?.document.containsKey('priority') == true)
+        'priority': entry.priority.name,
     };
     Object? failure;
     Map<String, dynamic>? savedUser, savedMember;
@@ -182,6 +190,14 @@ class FirebaseAnnouncementRepository extends ContentRepository {
         validFrom: (d['validFrom'] as Timestamp).toDate(),
         validTo: (d['validTo'] as Timestamp).toDate(),
         status: AnnouncementStatus.values.byName(d['status'] as String),
+        audience: AnnouncementAudience.values
+            .byName(d['audienceScope'] as String? ?? 'all'),
+        targetBranchIds: List<String>.unmodifiable(
+            (d['targetBranchIds'] as List?)?.cast<String>() ?? const []),
+        category: AnnouncementCategory.values
+            .byName(d['category'] as String? ?? 'general'),
+        priority: AnnouncementPriority.values
+            .byName(d['priority'] as String? ?? 'normal'),
         revision: d['revision'] as int,
         editBaseline: baseline);
     entry.validate();

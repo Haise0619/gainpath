@@ -1,8 +1,8 @@
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
+import 'member_home_activity.dart';
 import 'member_home_data.dart';
 import '../../features/gamification/application/rewards_feature_host.dart';
-import '../../features/analytics/domain/member_workout_report.dart';
 import '../di/chatbot_factory.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import '../../features/gamification/presentation/member/app_check_in_card.dart';
@@ -14,7 +14,7 @@ import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:gainpath_mobile/infrastructure/platform/branch_location.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
@@ -37,7 +37,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show AuthSession, FitnessProfile, SessionScope, PersistedBookingRecord;
+    show AuthSession, FitnessProfile, PersistedBookingRecord;
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast
@@ -118,6 +118,140 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   final _homeScroll = ScrollController();
   PersistedBookingRecord? _upcoming;
   int _coachingRequest = 0;
+  List<Map<String, dynamic>> _branches = [];
+  String? _selectedBranchId;
+  String? _selectedBranchName;
+  String? _homeBranchId;
+  int _branchRequest = 0;
+
+  Future<void> _loadBranches() async {
+    final session = widget.liveSession;
+    if (session == null) return;
+    final request = ++_branchRequest;
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+          .httpsCallable('branchManagementCommand')
+          .call({'action': 'list', 'organizationId': session.scope.organizationId});
+      if (!mounted || request != _branchRequest) return;
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final records = (data['records'] as List?)
+              ?.map((v) => Map<String, dynamic>.from(v as Map))
+              .toList() ??
+          [];
+      final selectedId = data['selectedBranchId'] as String?;
+      final homeId = data['homeBranchId'] as String?;
+      final selectedBranch = records
+              .where((b) => b['branchId'] == selectedId)
+              .firstOrNull ??
+          records.where((b) => b['branchId'] == homeId).firstOrNull ??
+          records.firstOrNull;
+      setState(() {
+        _branches = records;
+        _selectedBranchId = selectedId ?? selectedBranch?['branchId'] as String?;
+        _homeBranchId = homeId;
+        _selectedBranchName = selectedBranch?['displayName'] as String?;
+      });
+    } catch (_) {
+      // Graceful fallback
+    }
+  }
+
+  void _openBranchDirectory() {
+    final session = widget.liveSession;
+    _go(BranchDirectoryPage(
+      scanVisit: (context) => Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => const _GymVisitScanner()),
+      ),
+      locate: locateNearbyGyms,
+      openDirections: (uri) =>
+          launchUrl(uri, mode: LaunchMode.externalApplication),
+      onSelected: (branchId) {
+        final branch =
+            _branches.where((b) => b['branchId'] == branchId).firstOrNull;
+        if (mounted) {
+          setState(() {
+            _selectedBranchId = branchId;
+            if (branch != null) {
+              _selectedBranchName = branch['displayName'] as String?;
+            }
+          });
+        }
+      },
+      request: (input) async {
+        if (session != null) {
+          final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+              .httpsCallable('branchManagementCommand')
+              .call({...input, 'organizationId': session.scope.organizationId});
+          if (mounted &&
+              (input['action'] == 'setSelected' || input['action'] == 'setHome')) {
+            await widget.onRefreshAnnouncements?.call();
+          }
+          return Map<String, dynamic>.from(result.data as Map);
+        }
+        return {
+          'records': _branches,
+          'selectedBranchId': _selectedBranchId,
+          'homeBranchId': _homeBranchId,
+        };
+      },
+    ));
+  }
+
+  Future<void> _openBranchSwitcher() async {
+    final session = widget.liveSession;
+    if (_branches.isEmpty && session != null) {
+      await _loadBranches();
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => GymBranchSwitcherSheet(
+        branches: _branches,
+        selectedBranchId: _selectedBranchId,
+        homeBranchId: _homeBranchId,
+        onSelectBranch: (branchId) async {
+          Navigator.of(ctx).pop();
+          if (session != null) {
+            try {
+              await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                  .httpsCallable('branchManagementCommand')
+                  .call({
+                'action': 'setSelected',
+                'branchId': branchId,
+                'organizationId': session.scope.organizationId,
+              });
+              final branch =
+                  _branches.where((b) => b['branchId'] == branchId).firstOrNull;
+              if (mounted) {
+                setState(() {
+                  _selectedBranchId = branchId;
+                  if (branch != null) {
+                    _selectedBranchName = branch['displayName'] as String?;
+                  }
+                });
+                await widget.onRefreshAnnouncements?.call();
+              }
+            } catch (_) {}
+          } else {
+            final branch =
+                _branches.where((b) => b['branchId'] == branchId).firstOrNull;
+            setState(() {
+              _selectedBranchId = branchId;
+              if (branch != null) {
+                _selectedBranchName = branch['displayName'] as String?;
+              }
+            });
+          }
+        },
+        onExploreAll: () {
+          Navigator.of(ctx).pop();
+          _openBranchDirectory();
+        },
+      ),
+    );
+  }
 
   Future<void> _loadCoaching() async {
     final request = ++_coachingRequest;
@@ -146,6 +280,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
       _upcoming = null;
       _loadCoaching();
+      _loadBranches();
     }
   }
 
@@ -156,6 +291,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   void initState() {
     super.initState();
     _loadCoaching();
+    _loadBranches();
     _claimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -191,6 +327,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   Future<void> _refreshLive() async {
     await Future.wait<void>([
       _loadCoaching(),
+      _loadBranches(),
       if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
       if (widget.onRefreshCheckIn != null) widget.onRefreshCheckIn!(),
       if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
@@ -280,68 +417,27 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
           controller: _homeScroll,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-                if (widget.liveSession case final session?)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.location_on_outlined),
-                          label: const Text('Find a gym'),
-                          onPressed: () => _go(BranchDirectoryPage(
-                            scanVisit: (context) => Navigator.of(context).push<String>(
-                              MaterialPageRoute(builder: (_) => const _GymVisitScanner()),
-                            ),
-                            locate: () async {
-                              if (!await Geolocator.isLocationServiceEnabled()) {
-                                throw StateError('Turn on location services to find nearby gyms.');
-                              }
-                              var permission = await Geolocator.checkPermission();
-                              if (permission == LocationPermission.denied) {
-                                permission = await Geolocator.requestPermission();
-                              }
-                              if (permission != LocationPermission.whileInUse &&
-                                  permission != LocationPermission.always) {
-                                throw StateError('Location access is off. You can still browse branches.');
-                              }
-                              final point = await Geolocator.getCurrentPosition(
-                                locationSettings: const LocationSettings(
-                                  accuracy: LocationAccuracy.medium,
-                                  timeLimit: Duration(seconds: 12),
-                                ),
-                              );
-                              return (latitude: point.latitude, longitude: point.longitude);
-                            },
-                            openDirections: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
-                            request: (input) async {
-                              final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-                                  .httpsCallable('branchManagementCommand')
-                                  .call({...input, 'organizationId': session.scope.organizationId});
-                              return Map<String, dynamic>.from(result.data as Map);
-                            },
-                          )),
-                        ),
-                      ),
-                    ),
-                  ),
-                _HeroHeader(
-                    greeting: _greeting,
-                    firstName: firstName,
-                    points: live
-                        ? widget.appCheckIn?.snapshot?.balance
-                        : gamification?.points,
-                    live: live,
-                    onOpenNotifications: widget.onOpenNotifications,
-                    onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
-                    onOpenAnnouncements: live && widget.announcements != null
-                        ? _openAnnouncements
-                        : null,
-                    avatarText: live
-                        ? (firstName.isEmpty
-                            ? '?'
-                            : firstName.substring(0, 1).toUpperCase())
-                        : 'ZY'),
+            _HeroHeader(
+              greeting: _greeting,
+              firstName: firstName,
+              points: live
+                  ? widget.appCheckIn?.snapshot?.balance
+                  : gamification?.points,
+              live: live,
+              branchName:
+                  _selectedBranchName ?? (live ? 'Select Gym' : 'Main Branch'),
+              onSelectBranch: _openBranchSwitcher,
+              onOpenNotifications: widget.onOpenNotifications,
+              onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
+              onOpenAnnouncements: live && widget.announcements != null
+                  ? _openAnnouncements
+                  : null,
+              avatarText: live
+                  ? (firstName.isEmpty
+                      ? '?'
+                      : firstName.substring(0, 1).toUpperCase())
+                  : 'ZY',
+            ),
                 SliverToBoxAdapter(
                   child: DecoratedBox(
                     decoration:
@@ -382,7 +478,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                               live ? () => showUnavailable(context) : _claim,
                           reward: RewardPolicy.dailyCheckIn,
                         ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       const _HomeSectionHeading("Today's workout"),
                       _TodayWorkoutCard(
                           live: live,
@@ -402,47 +498,23 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                                       publishedRoutine:
                                           widget.publishedRoutine))
                               : () => _go(const WorkoutPrepRoute(live: false))),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Expanded(
-                              child: _HomeSectionHeading('Weekly progress',
-                                  padded: false)),
-                          if (widget.onOpenProgress != null || !live)
-                            InkWell(
-                              onTap: widget.onOpenProgress ??
-                                  () => _go(GoalProgressScreen(
-                                      live: live,
-                                      localProgress: widget.localProgress)),
-                              borderRadius: BorderRadius.circular(6),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 2),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Text(
-                                      'Details',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                    SizedBox(width: 2),
-                                    Icon(Icons.chevron_right_rounded,
-                                        size: 14, color: AppColors.primary),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
+                      const SizedBox(height: 24),
+                      MemberSectionHeader(
+                        title: 'Weekly progress',
+                        padded: false,
+                        actionText: (widget.onOpenProgress != null || !live)
+                            ? 'Details'
+                            : null,
+                        showChevron: true,
+                        onAction: (widget.onOpenProgress != null || !live)
+                            ? (widget.onOpenProgress ??
+                                () => _go(GoalProgressScreen(
+                                    live: live,
+                                    localProgress: widget.localProgress)))
+                            : null,
                       ),
                       const SizedBox(height: 10),
-                      _WeeklySummaryCard(
-                        live: live,
+                      HomeWeeklyActivity(
                         progress: widget.localProgress,
                         routines: widget.routineProgress,
                       ),
@@ -473,7 +545,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                         ),
                       ],
                       if (nextBooking != null) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         const _HomeSectionHeading('Next with a coach'),
                         _NextSessionCard(
                           booking: nextBooking,
@@ -487,7 +559,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                           _upcoming!.status == domain.BookingStatus.confirmed &&
                           _upcoming!.startAtMillis >
                               DateTime.now().millisecondsSinceEpoch) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         const _HomeSectionHeading('Upcoming coaching'),
                         Panel(
                             padding: const EdgeInsets.all(14),
@@ -507,8 +579,8 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                                           fontSize: 13)),
                                 ])),
                       ],
-                      const SizedBox(height: 20),
-                      _RecentActivitySection(
+                      const SizedBox(height: 24),
+                      HomeRecentActivity(
                         live: live,
                         localProgress: widget.localProgress,
                         routines: widget.routineProgress,
@@ -520,10 +592,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                             () => _go(const ProgressDashboardScreen()),
                         onOpenWorkout: widget.onOpenWorkout,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       if (widget.recommendations != null) ...[
                         widget.recommendations!,
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                       ],
                       const _HomeSectionHeading('Quick access'),
                       _QuickActionsGrid(
@@ -543,7 +615,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       if (live &&
                           widget.liveProfile != null &&
                           widget.liveProfile!.goals.isNotEmpty) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         const _HomeSectionHeading('Your goals'),
                         _GoalPreviewCard(
                           live: true,
@@ -552,20 +624,20 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                               live: true, localProgress: widget.localProgress)),
                         ),
                       ] else if (!live) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         const _HomeSectionHeading('Your goals'),
                         _GoalPreviewCard(
                           live: false,
                           onTap: () => _go(const GoalProgressScreen()),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         _MembershipStrip(
                           live: false,
                           onTap: () => _go(const MembershipDashboardScreen()),
                         ),
                       ],
                       if (widget.announcements != null) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
                         widget.announcements!
                       ],
                     ],
@@ -579,25 +651,12 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 }
 
 class _HomeSectionHeading extends StatelessWidget {
-  const _HomeSectionHeading(this.text, {this.padded = true});
+  const _HomeSectionHeading(this.text);
 
   final String text;
-  final bool padded;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(bottom: padded ? 10 : 0),
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontFamily: 'BarlowCondensed',
-            fontSize: 16,
-            height: 1.25,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-          ),
-        ),
-      );
+  Widget build(BuildContext context) => MemberSectionHeader(title: text);
 }
 
 /// Collapsing gradient header. Expanded it carries the greeting and the
@@ -609,19 +668,24 @@ class _HeroHeader extends StatelessWidget {
   final int? points;
   final bool live;
   final String avatarText;
+  final String? branchName;
+  final VoidCallback? onSelectBranch;
   final VoidCallback? onOpenAnnouncements;
   final VoidCallback? onOpenCoachingUpdates;
   final VoidCallback? onOpenNotifications;
 
-  const _HeroHeader(
-      {required this.greeting,
-      required this.firstName,
-      required this.points,
-      required this.live,
-      this.onOpenNotifications,
-      this.onOpenAnnouncements,
-      this.onOpenCoachingUpdates,
-      this.avatarText = 'ZY'});
+  const _HeroHeader({
+    required this.greeting,
+    required this.firstName,
+    required this.points,
+    required this.live,
+    this.branchName,
+    this.onSelectBranch,
+    this.onOpenNotifications,
+    this.onOpenAnnouncements,
+    this.onOpenCoachingUpdates,
+    this.avatarText = 'ZY',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +698,19 @@ class _HeroHeader extends StatelessWidget {
       elevation: 0,
       titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
-      title: const Text('GainPath'),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('GainPath'),
+          if (branchName != null || onSelectBranch != null) ...[
+            const SizedBox(width: 8),
+            BranchSelectorPill(
+              branchName: branchName ?? 'Find Gym',
+              onTap: onSelectBranch,
+            ),
+          ],
+        ],
+      ),
       actions: [
         IconButton(
           tooltip: 'Notifications',
@@ -721,6 +797,69 @@ class _HeroHeader extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class BranchSelectorPill extends StatelessWidget {
+  final String branchName;
+  final VoidCallback? onTap;
+
+  const BranchSelectorPill({
+    super.key,
+    required this.branchName,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.32),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                size: 13,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 110),
+                child: Text(
+                  branchName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -980,141 +1119,6 @@ class _TodayWorkoutCard extends StatelessWidget {
   }
 }
 
-class _WeeklySummaryCard extends StatelessWidget {
-  const _WeeklySummaryCard({this.live = false, this.progress, this.routines});
-  final bool live;
-  final MemberLocalProgress? progress;
-  final RoutineProgress? routines;
-  @override
-  Widget build(BuildContext context) {
-    final completed = routines?.weeklyCompleted;
-    final days = routines?.records
-        .where((a) =>
-            a.isComplete &&
-            a.finishedAtMicros != null &&
-            a.finishedAtMicros! >= routines!.weekStart.microsecondsSinceEpoch &&
-            a.finishedAtMicros! < routines!.weekEnd.microsecondsSinceEpoch &&
-            a.finishedAtMicros! <=
-                (progress?.asOf ?? DateTime.now()).microsecondsSinceEpoch)
-        .map((a) => reportDate(DateTime.fromMicrosecondsSinceEpoch(
-            a.finishedAtMicros!,
-            isUtc: true)))
-        .toSet()
-        .length;
-    return Panel(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(
-              completed == null
-                  ? 'Workout progress is loading.'
-                  : '$completed completed workout${completed == 1 ? '' : 's'}',
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text(
-              completed == null
-                  ? 'Your saved workouts will appear here.'
-                  : completed == 0
-                      ? 'No completed workouts this week. Every workout starts with one session.'
-                      : 'Across $days training day${days == 1 ? '' : 's'} this week.',
-              style: const TextStyle(color: AppColors.inkSoft, fontSize: 13)),
-          if (progress != null && progress!.weeklySessions > 0) ...[
-            const SizedBox(height: 6),
-            Text('${progress!.weeklySessions} exercise records saved this week',
-                style: const TextStyle(color: AppColors.inkSoft, fontSize: 12))
-          ],
-        ]));
-  }
-}
-
-class _RecentActivitySection extends StatelessWidget {
-  const _RecentActivitySection(
-      {required this.live,
-      this.localProgress,
-      this.routines,
-      this.selected,
-      this.scope,
-      this.onOpenHistory,
-      this.onOpenWorkout,
-      this.onOpenRoutine});
-  final bool live;
-  final MemberLocalProgress? localProgress;
-  final RoutineProgress? routines;
-  final PublishedRoutine? selected;
-  final SessionScope? scope;
-  final VoidCallback? onOpenHistory;
-  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
-  final void Function(RoutineAttempt)? onOpenRoutine;
-  @override
-  Widget build(BuildContext context) {
-    final items = scope == null
-        ? <HomeActivity>[]
-        : homeRecentActivities(scope!, localProgress, routines, selected);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        const Expanded(
-            child: _HomeSectionHeading('Recent activity', padded: false)),
-        TextButton(onPressed: onOpenHistory, child: const Text('View all'))
-      ]),
-      const SizedBox(height: 8),
-      if (items.isEmpty)
-        Panel(
-            padding: const EdgeInsets.all(14),
-            child: Text(
-                live && localProgress == null && routines == null
-                    ? 'Loading saved activity…'
-                    : 'No saved workouts yet.',
-                style: const TextStyle(color: AppColors.inkSoft))),
-      for (final item in items)
-        Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Panel(
-                padding: const EdgeInsets.all(14),
-                onTap: item.attempt != null
-                    ? (onOpenRoutine == null
-                        ? null
-                        : () => onOpenRoutine!(item.attempt!))
-                    : (onOpenWorkout == null
-                        ? null
-                        : () => onOpenWorkout!(item.record!)),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item.title,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text('${_date(item.at)} · ${item.result}',
-                          style: const TextStyle(
-                              color: AppColors.inkSoft, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text(item.backupLabel,
-                          style: const TextStyle(
-                              color: AppColors.inkSoft, fontSize: 12)),
-                    ]))),
-    ]);
-  }
-
-  String _date(DateTime at) {
-    final d =
-        at.toUtc().add(localProgress?.utcOffset ?? const Duration(hours: 8));
-    return '${d.day} ${const [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ][d.month - 1]}';
-  }
-}
-
 class _NextSessionCard extends StatelessWidget {
   final Booking? booking;
   final VoidCallback onTap;
@@ -1193,11 +1197,7 @@ class _NextSessionCard extends StatelessWidget {
                   children: [
                     Text(
                       booking == null ? 'with -' : 'with ${booking!.coachName}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(width: 4),
                     const Icon(Icons.verified_rounded,
@@ -1563,15 +1563,15 @@ class _GoalPreviewCard extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
-            children: const [
+            children: [
               Text('See all goals',
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary)),
-              SizedBox(width: 4),
-              Icon(Icons.arrow_forward_ios_rounded,
-                  size: 12, color: AppColors.primary),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(color: AppColors.primary)),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 13, color: AppColors.primary),
             ],
           ),
         ],
@@ -1637,21 +1637,88 @@ class _GymVisitScannerState extends State<_GymVisitScanner> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Scan gym check-in')),
-    body: MobileScanner(
-      errorBuilder: (context, error) => const Center(
-        child: Text('Camera is unavailable. Check the app camera permission.'),
-      ),
-      onDetect: (capture) {
-        if (_done) return;
-        final value = capture.barcodes
-            .map((barcode) => barcode.rawValue)
-            .whereType<String>()
-            .firstOrNull;
-        if (value == null) return;
-        _done = true;
-        Navigator.pop(context, value);
-      },
-    ),
-  );
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          title: const Text('Scan gym check-in'),
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              errorBuilder: (context, error) => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Camera is unavailable. Check the app camera permission.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ),
+              onDetect: (capture) {
+                if (_done) return;
+                final value = capture.barcodes
+                    .map((barcode) => barcode.rawValue)
+                    .whereType<String>()
+                    .firstOrNull;
+                if (value == null) return;
+                _done = true;
+                Navigator.pop(context, value);
+              },
+            ),
+            Center(
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.primary, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 48,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.qr_code_scanner_rounded,
+                        color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Align the gym check-in QR code within the frame',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 }

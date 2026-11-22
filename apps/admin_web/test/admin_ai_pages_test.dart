@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/recommendation/application/admin_ai_repository.dart';
+import 'package:gainpath_admin_web/features/recommendation/application/admin_ai_drafts.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_ai_pages.dart';
 import 'package:gainpath_admin_web/features/workout/domain/admin_workout_program_repository.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -16,38 +18,83 @@ import '../../../test_support/fyp_render_support.dart';
 Map<String, dynamic> draft(String type, [int n = 1]) => {
       'type': type,
       'name': type == 'exercise'
-          ? 'Glute Bridge $n'
+          ? ['Glute Bridge', 'Dead Bug', 'Bird Dog'][n - 1]
           : type == 'routine'
               ? 'Lower Body Foundations $n'
               : 'Strength Foundations $n',
       'description':
           'Beginner-friendly guidance using the current exercise catalog.',
       'difficulty': 'Beginner',
-      'category': 'Accessory',
-      'muscleGroups': ['Glutes'],
-      'equipment': 'Bodyweight',
-      'instructions': [
-        'Start in a comfortable position.',
-        'Move slowly and return to the start.'
-      ],
-      'durationMinutes': 20,
-      'goal': 'Muscle gain',
-      'exercises': [
-        {
-          'exerciseId': 'squat',
-          'name': 'Squat',
-          'sets': 3,
-          'reps': 8,
-          'restSeconds': 60,
-          'executionMode': 'aiTracked',
-          'revision': 1
-        }
-      ],
-      'routineIds': ['foundation'],
+      'contentGap': type == 'exercise'
+          ? 'Adds beginner-friendly movement coverage.'
+          : type == 'routine'
+              ? 'Adds a combined knee and hip workout.'
+              : 'Adds a consistent four-week training schedule.',
+      'whyRecommended': type == 'exercise'
+          ? 'Expands movement variety with a controlled floor exercise.'
+          : type == 'routine'
+              ? 'Pairs complementary movements in one manageable session.'
+              : 'Organizes published routines with recovery between training days.',
       'evidence': [
         'Fixture: one published lower-body routine; beginner catalog coverage.'
       ],
-      'sources': []
+      'sources': [],
+      if (type == 'exercise') ...{
+        'category': 'Accessory',
+        'primaryMuscleGroup': n == 1 ? 'Glutes' : 'Core',
+        'equipment': 'Bodyweight',
+        'variantDifference': '',
+        'instructions': [
+          'Start in a comfortable position.',
+          'Move slowly and return to the start.'
+        ]
+      },
+      if (type == 'routine') ...{
+        'durationMinutes': 20,
+        'goal': 'Muscle gain',
+        'muscleGroups': ['Glutes'],
+        'equipment': 'Bodyweight',
+        'exercises': [
+          {
+            'exerciseId': 'squat',
+            'name': 'Squat',
+            'sets': 3,
+            'reps': 8,
+            'restSeconds': 60,
+            'executionMode': 'aiTracked',
+            'revision': 1
+          },
+          {
+            'exerciseId': 'bridge',
+            'name': 'Glute Bridge',
+            'sets': 3,
+            'reps': 10,
+            'restSeconds': 60,
+            'executionMode': 'videoGuidedTimed',
+            'revision': 1
+          }
+        ]
+      },
+      if (type == 'program') ...{
+        'weeks': 4,
+        'goal': 'Muscle gain',
+        'trainingDays': [
+          {
+            'weekday': 2,
+            'routineId': 'foundation',
+            'routineDay': 1,
+            'routineName': 'Foundation Workout',
+            'category': 'Lower Body'
+          },
+          {
+            'weekday': 5,
+            'routineId': 'foundation',
+            'routineDay': 1,
+            'routineName': 'Foundation Workout',
+            'category': 'Lower Body'
+          }
+        ]
+      },
     };
 final ai = {
   'model': 'fixture-model',
@@ -69,6 +116,13 @@ class Catalog extends TutorialRepository {
             status: TutorialStatus.active,
             executionMode: ExerciseExecutionMode.aiTracked,
             trackingCapability: ExerciseTrackingCapability.sideViewSquat,
+            editRevision: 1),
+        TutorialVideo(
+            id: 'bridge',
+            title: 'Glute Bridge',
+            category: 'Accessory',
+            status: TutorialStatus.active,
+            executionMode: ExerciseExecutionMode.videoGuidedTimed,
             editRevision: 1)
       ];
   @override
@@ -138,7 +192,11 @@ Future<void> capture(WidgetTester t, GlobalKey key, String name) async {
         await (key.currentContext!.findRenderObject() as RenderRepaintBoundary)
             .toImage(pixelRatio: 1);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final f = File('../../build/module13-admin-ai/screenshots/$name.png');
+    final f = File(name.startsWith('workspace-')
+        ? '../../build/module13-completion-20261118/screenshots/$name.png'
+        : name.startsWith('outreach-fix-')
+            ? '../../build/outreach-fix-20261118/screenshots/$name.png'
+            : '../../build/planner-types-fix/screenshots/$name.png');
     f.parent.createSync(recursive: true);
     f.writeAsBytesSync(bytes!.buffer.asUint8List());
     image.dispose();
@@ -180,7 +238,16 @@ void main() {
                 builder: (context, child) => MediaQuery(
                     data: MediaQuery.of(context)
                         .copyWith(textScaler: TextScaler.linear(scale)),
-                    child: child!),
+                    child: Column(children: [
+                      if (const bool.fromEnvironment(
+                          'GAINPATH_RENDER_ADMIN_AI'))
+                        const Material(
+                            child: SizedBox(
+                                width: double.infinity,
+                                child: Text(
+                                    'OFFLINE WIDGET FIXTURE · no live provider request'))),
+                      Expanded(child: child!),
+                    ])),
                 home: Scaffold(backgroundColor: AppColors.bg, body: page)))));
     await t.pumpAndSettle();
   }
@@ -207,6 +274,24 @@ void main() {
     await t.pumpAndSettle();
   }
 
+  test(
+      'Program seed preserves weekly choices and the existing four-week contract',
+      () {
+    final p = aiProgramSeed(draft('program'), 'local-program');
+    expect(p.weeks, 4);
+    expect(p.days.length, 28);
+    expect(
+        p.days
+            .where((d) => d.toJson()['kind'] == 'workout')
+            .map((d) => d.weekday)
+            .toSet(),
+        {2, 5});
+    expect(
+        p.days
+            .where((d) => d.kind == 'workout')
+            .every((d) => d.routineId == 'foundation'),
+        isTrue);
+  });
   testWidgets(
       'planner calls only on Generate and applies to the existing Exercise editor',
       (t) async {
@@ -229,7 +314,7 @@ void main() {
     expect(calls, 1);
     await capture(t, key, 'planner-exercise');
     await tap(t, 'Apply suggestion');
-    expect(find.text('Glute Bridge 1'), findsWidgets);
+    expect(find.text('Glute Bridge'), findsWidgets);
     expect(c.saved, isNull);
     expect(
         find.widgetWithText(FilledButton, 'Create exercise'), findsOneWidget);
@@ -240,6 +325,7 @@ void main() {
         find.byType(TextFormField).at(1), 'https://example.test/tutorial.mp4');
     await tap(t, 'Create exercise');
     expect(c.saved!.title, 'Edited Glute Bridge');
+    expect(c.saved!.executionMode, ExerciseExecutionMode.videoGuidedTimed);
     expect(c.saved!.status, TutorialStatus.draft);
     expect(c.saved!.trackingCapability.hasPoseTracking, isFalse);
   });
@@ -251,6 +337,8 @@ void main() {
         routines: r, key: key);
     await tap(t, 'Routine');
     await tap(t, 'Generate suggestions');
+    await t.ensureVisible(find.text('Lower Body Foundations 1'));
+    await t.pumpAndSettle();
     await capture(t, key, 'planner-routine');
     await tap(t, 'Apply suggestion');
     expect(find.text('Lower Body Foundations 1'), findsWidgets);
@@ -271,21 +359,60 @@ void main() {
     expect(find.text('Squat'), findsWidgets);
     await tap(t, 'Review');
     await tap(t, 'Create template');
-    expect(r.saved!.days.single.exercises.single.exerciseId, 'squat');
+    expect(r.saved!.days.single.exercises.first.exerciseId, 'squat');
     expect(r.uploaded, isNotNull);
     expect(r.publishes, 0);
   });
   testWidgets('Program Apply uses existing Program editor without saving',
       (t) async {
-    final p = Programs();
-    await open(t, AiContentPlannerPage(repository: planner()), programs: p);
+    final p = Programs(), key = GlobalKey();
+    await open(t, AiContentPlannerPage(repository: planner()),
+        programs: p, key: key);
     await tap(t, 'Program');
     await tap(t, 'Generate suggestions');
+    await t.ensureVisible(find.text('Strength Foundations 1'));
+    await t.pumpAndSettle();
+    await capture(t, key, 'planner-program');
     await tap(t, 'Apply suggestion');
+    await capture(t, key, 'program-prefill');
     expect(find.text('Strength Foundations 1'), findsWidgets);
     expect(p.saved, isNull);
     expect(t.takeException(), isNull);
   });
+  testWidgets('Outreach uses one home branch for member search and ranking',
+      (tester) async {
+    final listScopes = <Object?>[];
+    final searchScopes = <Object?>[];
+    final repo = AdminAiRepository(
+      organizationId: 'gainpath',
+      isCurrent: () => true,
+      invoke: (op, input) async {
+        if (op.endsWith('.members')) {
+          listScopes.add(input['branchId']);
+          return {'members': [], 'branches': [{'id': 'north', 'name': 'North Gym'}]};
+        }
+        if (op.endsWith('.search')) {
+          searchScopes.add(input['branchId']);
+          return {'members': []};
+        }
+        throw StateError('Unexpected operation');
+      },
+    );
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: AiMemberOutreachPage(repository: repo),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All Branches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('North Gym').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'fixture');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Search members'));
+    await tester.pumpAndSettle();
+    expect(listScopes, [null, 'north']);
+    expect(searchScopes, ['north']);
+  });
+
   testWidgets('Outreach analyzes, previews, edits and sends selected content',
       (t) async {
     Map<String, Object?>? sent;
@@ -365,10 +492,11 @@ void main() {
     await tap(t, 'Generate AI recommendations');
     await capture(t, key, 'outreach-preview');
     await t.ensureVisible(find.byType(Checkbox).first);
+    await t.pumpAndSettle();
     await t.tap(find.byType(Checkbox).first);
     await t.pumpAndSettle();
     await t.enterText(
-        find.byType(TextField).first, 'A message edited by your gym.');
+        find.byType(TextField).at(1), 'A message edited by your gym.');
     await tap(t, 'Send 1 recommendation');
     expect((sent!['selections'] as List).single['message'],
         'A message edited by your gym.');
@@ -382,9 +510,141 @@ void main() {
     await tap(t, 'Generate suggestions');
     expect(t.takeException(), isNull);
     await capture(t, key, 'planner-narrow-large-text');
+    await t.ensureVisible(find.text('Glute Bridge'));
+    await t.pumpAndSettle();
+    await capture(t, key, 'planner-narrow-cards');
+    expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
     await t.pumpAndSettle();
   });
+  testWidgets(
+      'Exercise grid is two columns and hides routine metadata, with ordered instructions',
+      (t) async {
+    final key = GlobalKey();
+    await open(t, AiContentPlannerPage(repository: planner()), key: key);
+    await tap(t, 'Generate suggestions');
+    expect(t.getTopLeft(find.text('Glute Bridge')).dy,
+        t.getTopLeft(find.text('Dead Bug')).dy);
+    expect(find.textContaining(RegExp(r'[0-9]+ min$')), findsNothing);
+    expect(find.textContaining('Published routine:'), findsNothing);
+    await t.ensureVisible(find.text('Glute Bridge'));
+    await t.pumpAndSettle();
+    await capture(t, key, 'exercise-grid');
+    await tap(t, 'Preview details');
+    expect(find.text('1. Start in a comfortable position.'), findsOneWidget);
+    await capture(t, key, 'exercise-expanded');
+    expect(t.takeException(), isNull);
+  });
+  for (final (failed, width) in [
+    (true, 1400.0),
+    (false, 1400.0),
+    (false, 420.0)
+  ]) {
+    testWidgets(
+        'Outreach search outside Top 10, goal labels and generation $failed at $width',
+        (t) async {
+      var generations = 0, sends = 0;
+      final repo = AdminAiRepository(
+          organizationId: 'gainpath',
+          isCurrent: () => true,
+          invoke: (op, q) async {
+            if (op == 'admin.ai.members') return {'members': []};
+            if (op == 'admin.ai.member.search') {
+              return {
+                'members': [
+                  {
+                    'memberId': 'm13-e2e-fixture',
+                    'name': 'Module 13 TEST',
+                    'isTest': true,
+                    'canAnalyze': true
+                  }
+                ]
+              };
+            }
+            if (op == 'admin.ai.member') {
+              return {
+                'memberId': 'm13-e2e-fixture',
+                'name': 'Module 13 TEST',
+                'goals': ['increaseFlexibility', 'generalFitness'],
+                'experience': 'intermediate',
+                'workouts': 14,
+                'completedRoutines': 0
+              };
+            }
+            if (op == 'admin.ai.outreach.generate') {
+              generations++;
+              if (failed) {
+                throw FirebaseFunctionsException(
+                    code: 'failed-precondition',
+                    message:
+                        'No usable AI recommendations (invalid_candidate_id). Your member analysis is retained.');
+              }
+              return {
+                'previewId': 'fixture-preview',
+                'ai': ai,
+                'availabilityNotes': [
+                  'No eligible coach is currently available.'
+                ],
+                'recommendations': [
+                  {
+                    'index': 0,
+                    'kind': 'content',
+                    'title': 'Squat',
+                    'message':
+                        'Review your recent Squat practice for general training.',
+                    'target': {'label': 'Squat'},
+                    'why': ['Recent exercise practice.']
+                  }
+                ]
+              };
+            }
+            if (op == 'admin.ai.outreach.send') sends++;
+            throw StateError('Unexpected fixture operation');
+          });
+      final key = GlobalKey();
+      await open(t, AiMemberOutreachPage(repository: repo),
+          key: key, width: width, scale: width < 600 ? 1.3 : 1);
+      await t.enterText(find.byType(TextField).first, 'Module 13 TEST');
+      final searchButton =
+          find.widgetWithText(OutlinedButton, 'Search members');
+      await t.ensureVisible(searchButton);
+      await t.tap(searchButton);
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byTooltip('Analyze search result'));
+      await t.tap(find.byTooltip('Analyze search result'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Improve Flexibility'), findsWidgets);
+      expect(find.textContaining('increaseFlexibility'), findsNothing);
+      if (width >= 1000) {
+        expect(
+            t.getTopLeft(find.text('Selected member')).dx,
+            lessThan(
+                t.getTopLeft(find.text('Generate AI recommendations')).dx));
+      }
+      await capture(t, key, 'workspace-analysis-$width');
+      await tap(t, 'Generate AI recommendations');
+      expect(generations, 1);
+      expect(sends, 0);
+      expect(find.textContaining('14 workouts'), findsWidgets);
+      if (failed) {
+        final error = find.textContaining('invalid_candidate_id');
+        expect(error, findsOneWidget);
+        await t.ensureVisible(error);
+        await t.pumpAndSettle();
+        expect(
+            t.getTopLeft(error).dy,
+            greaterThan(
+                t.getTopLeft(find.text('Generate AI recommendations')).dy));
+      } else {
+        expect(find.text('Squat'), findsWidgets);
+        await t.ensureVisible(find.text('Squat').first);
+        await t.pumpAndSettle();
+      }
+      await capture(t, key,
+          failed ? 'workspace-error-$width' : 'workspace-preview-$width');
+      expect(t.takeException(), isNull);
+    });
+  }
   testWidgets('failed generation exits Loading and offers a retry', (t) async {
     final repo = AdminAiRepository(
         organizationId: 'gainpath',

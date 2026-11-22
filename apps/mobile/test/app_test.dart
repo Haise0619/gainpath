@@ -72,7 +72,7 @@ void main() {
     await tester.pumpWidget(const TestMobileApp());
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.text('Member or coach'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('New here? Create an account'), findsOneWidget);
     expect(find.text('Google'), findsNothing);
   });
@@ -90,7 +90,7 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.text('Member or coach'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
   });
 
   testWidgets('Firebase registration opens without demo repositories',
@@ -246,7 +246,7 @@ void main() {
         coachProfileFactory: (_, current) => ProfileFake(),
       ));
       await tester.pumpAndSettle();
-      expect(find.text('Member or coach'), findsOneWidget);
+      expect(find.text('Welcome back'), findsOneWidget);
       expect(find.byType(LoginScreen), findsOneWidget);
       await tester.enterText(find.byType(TextField).at(0), '$role@example.com');
       await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -272,7 +272,7 @@ void main() {
         await tester.pumpAndSettle();
       }
       expect(find.byType(LoginScreen), findsOneWidget);
-      expect(find.text('Member or coach'), findsOneWidget);
+      expect(find.text('Welcome back'), findsOneWidget);
       expect(find.text('Firebase identity connected'), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await repository.dispose();

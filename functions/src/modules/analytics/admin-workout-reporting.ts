@@ -23,6 +23,7 @@ export const emptyWorkoutTotals = () => ({sessions: 0, fullReps: 0, partialReps:
   routineAttempts: 0, completedRoutineDays: 0, partialRoutineDays: 0, inProgressRoutineDays: 0, unknownCompletionDays: 0, manualSets: 0});
 type Totals = ReturnType<typeof emptyWorkoutTotals>;
 type Form = {exerciseId: string; scoringVersion: string; detectorId: string; detectorVersion: string; cameraView: string; armMode: string;
+  scoreBands?: {below60: number; from60To79: number; from80To100: number};
   scoredSessions: number; scoreSum: number; daily: {date: string; scoredSessions: number; scoreSum: number}[]};
 type Exercise = {exerciseId: string; name: string; sessions: number; fullReps: number; partialReps: number; trackedMicros: number; manualSets: number};
 export interface WorkoutReport {
@@ -139,9 +140,10 @@ export async function adminWorkoutReport(store: DocumentStore, auth: Auth | unde
             const armMode = m.schemaVersion === 2 ? String((m.curlArms as DocumentData).mode) : 'not_applicable';
             const key = JSON.stringify([p.exerciseId, m.scoringVersion, m.detectorId, m.detectorVersion, m.cameraView, armMode]);
             if (!forms.has(key)) forms.set(key, {exerciseId: String(p.exerciseId), scoringVersion: String(m.scoringVersion), detectorId: String(m.detectorId),
-              detectorVersion: String(m.detectorVersion), cameraView: String(m.cameraView), armMode, scoredSessions: 0, scoreSum: 0, daily: []});
+              detectorVersion: String(m.detectorVersion), cameraView: String(m.cameraView), armMode, scoreBands: {below60: 0, from60To79: 0, from80To100: 0}, scoredSessions: 0, scoreSum: 0, daily: []});
             const f = forms.get(key)!, score = Number(m.formScorePercent);
             f.scoredSessions++; f.scoreSum += score;
+            f.scoreBands![score < 60 ? 'below60' : score < 80 ? 'from60To79' : 'from80To100']++;
             let fd = f.daily.find(v => v.date === d.date);
             if (!fd) {fd = {date: d.date, scoredSessions: 0, scoreSum: 0}; f.daily.push(fd);}
             fd.scoredSessions++; fd.scoreSum += score;

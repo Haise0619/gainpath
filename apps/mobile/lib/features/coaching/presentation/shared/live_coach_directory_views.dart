@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../../../infrastructure/firebase/firebase_function_transport.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/browse_coaches_screen.dart';
 import 'coach_profile_screen.dart';
 import 'published_coach_presentation.dart';
@@ -139,40 +140,68 @@ class PublishedCoachPhotoState extends State<PublishedCoachPhoto> {
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: FutureBuilder<Uint8List?>(
-          future: bytes,
-          builder: (context, snapshot) {
-            final data = snapshot.data;
-            if (!widget.isCurrent() ||
-                !widget.coach.certificationVerified ||
-                data == null) {
-              return Icon(Icons.person_outline, size: widget.size);
-            }
-            return ClipOval(
-                child: Image.memory(data,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        Icon(Icons.person_outline, size: widget.size)));
-          }));
+  Widget build(BuildContext context) {
+    Widget placeholder() => Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: const BoxDecoration(
+            color: AppColors.primaryTint,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Icon(
+              Icons.person_rounded,
+              size: widget.size * 0.52,
+              color: AppColors.primary,
+            ),
+          ),
+        );
+
+    return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: FutureBuilder<Uint8List?>(
+            future: bytes,
+            builder: (context, snapshot) {
+              final data = snapshot.data;
+              if (!widget.isCurrent() ||
+                  !widget.coach.certificationVerified ||
+                  data == null) {
+                return placeholder();
+              }
+              return ClipOval(
+                  child: Image.memory(data,
+                      width: widget.size,
+                      height: widget.size,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => placeholder()));
+            }));
+  }
 }
 
-extension on PublishedCoachPhotoState {
-  Future<Uint8List?> _readPhoto(String path) async {
-    if (!widget.isCurrent()) return null;
-    final result =
-        await firebaseCallable('getCoachPublishedPhotoCommand').call({
+/// Same protected loader for directory and recommendation avatars; never direct Storage reads.
+Future<Uint8List?> loadPublishedCoachPhotoBytes(
+    {required String organizationId,
+    required String coachId,
+    required String photoPath,
+    required bool Function() isCurrent}) async {
+  if (!isCurrent() ||
+      !photoPath.startsWith(
+          'orgs/$organizationId/coachProfilePhotos/$coachId/')) {
+    return null;
+  }
+  try {
+    final result = await firebaseCallable('getCoachPublishedPhotoCommand')
+        .call({
       'schemaVersion': 1,
-      'organizationId': widget.repository.scope.organizationId,
-      'coachId': widget.coach.id,
+      'organizationId': organizationId,
+      'coachId': coachId
     });
-    if (!widget.isCurrent()) return null;
-    final data = Map<String, dynamic>.from(result.data as Map);
-    final encoded = data['bytesBase64'];
+    if (!isCurrent()) return null;
+    final data = Map<String, dynamic>.from(result.data as Map),
+        encoded = data['bytesBase64'];
     if (data['schemaVersion'] != 1 ||
-        data['photoPath'] != path ||
+        data['photoPath'] != photoPath ||
         encoded is! String ||
         encoded.length > 7 * 1024 * 1024 ||
         !['image/jpeg', 'image/png', 'image/webp']
@@ -181,5 +210,15 @@ extension on PublishedCoachPhotoState {
     }
     final bytes = base64Decode(encoded);
     return bytes.length <= 5 * 1024 * 1024 ? bytes : null;
+  } catch (_) {
+    return null;
   }
+}
+
+extension on PublishedCoachPhotoState {
+  Future<Uint8List?> _readPhoto(String path) => loadPublishedCoachPhotoBytes(
+      organizationId: widget.repository.scope.organizationId,
+      coachId: widget.coach.id,
+      photoPath: path,
+      isCurrent: widget.isCurrent);
 }

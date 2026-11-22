@@ -58,13 +58,14 @@ void main() {
   });
 
   testWidgets(
-      'persisted bookings use original schedule buckets without legacy providers',
+      'persisted bookings use schedule buckets without legacy providers',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: LiveBookingListView(repository: Lists(), isCurrent: () => true)));
     await tester.pumpAndSettle();
     expect(find.byType(BookingScheduleScreen), findsOneWidget);
-    expect(find.text('ELAPSED HOLDS'), findsOneWidget);
+    expect(find.text('Reservation time elapsed'), findsOneWidget);
+    expect(find.text('Hold time elapsed'), findsOneWidget);
     await tester.tap(find.text('Upcoming'));
     await tester.pumpAndSettle();
     expect(find.text('No upcoming sessions'), findsOneWidget);

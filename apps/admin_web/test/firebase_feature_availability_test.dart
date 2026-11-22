@@ -192,10 +192,10 @@ void main() {
     expect(find.text(_session.email), findsWidgets);
     expect(find.text(_session.displayName!), findsWidgets);
     expect(find.text('GainPath, Kulim'), findsNothing);
-    expect(
-        find.text(
-            'Individual activity feed is unavailable. This report contains aggregates only.'),
-        findsOneWidget);
+    expect(find.text('Dashboard Overview'), findsOneWidget);
+    expect(find.text('Active Members'), findsOneWidget);
+    expect(find.text('Hafiz Aziz uploaded a certification document'),
+        findsNothing);
     await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
     expect(find.text('Connected Member'), findsOneWidget);

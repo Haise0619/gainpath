@@ -66,15 +66,16 @@ class AppTheme {
 
     final textTheme = TextTheme(
       displaySmall: headingFont(
-          fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -1.0, color: AppColors.ink),
+          fontSize: 36, fontWeight: FontWeight.w800, letterSpacing: -1.0, color: AppColors.ink),
       headlineMedium: headingFont(
-          fontSize: 26, fontWeight: FontWeight.w600, letterSpacing: -0.6, color: AppColors.ink),
+          fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.6, color: AppColors.ink),
       titleLarge: headingFont(
-          fontSize: 19, fontWeight: FontWeight.w600, letterSpacing: -0.3, color: AppColors.ink),
-      titleMedium: bodyFont(fontSize: 15.5, fontWeight: FontWeight.w600, color: AppColors.ink),
+          fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3, color: AppColors.ink),
+      titleMedium: bodyFont(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ink),
       bodyLarge: bodyFont(fontSize: 15, height: 1.45, color: AppColors.ink),
       bodyMedium: bodyFont(fontSize: 14, height: 1.45, color: AppColors.inkSoft),
-      labelLarge: bodyFont(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ink),
+      bodySmall: bodyFont(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.inkSoft),
+      labelLarge: bodyFont(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary),
       labelSmall: bodyFont(
         fontSize: 11,
         fontWeight: FontWeight.w700,

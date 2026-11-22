@@ -81,8 +81,8 @@ void main() {
         home: RefundsScreen(
             live: true, repository: repo, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
     expect(find.text('Original booking fee'), findsOneWidget);
     expect(find.text('RM 100.00'), findsOneWidget);
@@ -92,12 +92,13 @@ void main() {
     expect(repo.actions, 0);
   });
   testWidgets(
-      'queue shows schedule and uncertain detail explains safe recovery',
+      'queue leaves the schedule in View and uncertain detail explains safe recovery',
       (tester) async {
     final repo = ReviewFake();
     repo.record = PaymentReviewRecord({
       ...repo.record.data,
       'localDate': '2026-10-23',
+      'sessionLocalDate': '2026-10-23',
       'startLabel': '10:00 GMT+8',
       'endLabel': '11:00 GMT+8',
       'refundStatus': 'uncertain',
@@ -107,10 +108,11 @@ void main() {
         home: RefundsScreen(
             live: true, repository: repo, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.textContaining('2026-10-23'), findsWidgets);
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    expect(find.textContaining('2026-10-23'), findsNothing);
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
+    expect(find.textContaining('2026-10-23'), findsOneWidget);
     expect(find.textContaining('Do not execute again'), findsOneWidget);
     expect(find.text('Execute sandbox refund'), findsNothing);
     expect(find.text('refund-booking-1'), findsOneWidget);
@@ -123,8 +125,8 @@ void main() {
         home: RefundsScreen(
             live: true, repository: repo, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
     expect(find.text('Execute sandbox refund'), findsNothing);
     await tester.ensureVisible(find.text('Approve refund'));
@@ -159,8 +161,8 @@ void main() {
         .pumpWidget(MaterialApp(home: RefundsScreen(repository: ReviewFake())));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
@@ -172,8 +174,8 @@ void main() {
         home: RefundsScreen(
             live: true, repository: repo, isCurrent: () => current)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Approve refund'));
     await tester.tap(find.text('Approve refund'));
@@ -255,8 +257,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Open detail from Transactions
-    await tester.ensureVisible(find.text('booking-1'));
-    await tester.tap(find.text('booking-1'));
+    await tester.ensureVisible(find.text('Coach Booking — Coach'));
+    await tester.tap(find.text('Coach Booking — Coach'));
     await tester.pumpAndSettle();
 
     // Verify cross-navigation banner is visible
@@ -305,15 +307,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // Table view header should be rendered
-    expect(find.text('Transaction / Title'), findsOneWidget);
+    expect(find.text('Transaction'), findsOneWidget);
     expect(find.text('Member'), findsOneWidget);
     expect(find.text('Amount'), findsOneWidget);
     expect(find.text('Payment Status'), findsOneWidget);
-    expect(find.text('Date / Time'), findsOneWidget);
+    expect(find.text('Created · MYT'), findsOneWidget);
     expect(find.text('Action'), findsOneWidget);
 
     // Formatted currency and ID
     expect(find.text('RM 120.00'), findsWidgets);
-    expect(find.text('booking-1'), findsOneWidget);
+    expect(find.text('Coach Booking — Coach'), findsOneWidget);
   });
 }

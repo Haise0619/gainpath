@@ -1,11 +1,16 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
-import 'branch_map.dart';
+import '../../tokens/app_theme.dart';
+import 'admin_dialogs.dart';
 import 'branch_activity_page.dart';
+import 'branch_map.dart';
+import 'gym_details_screen.dart';
+
+part 'branch_admin_directory.dart';
+part 'branch_admin_editor.dart';
 
 typedef BranchRequest = Future<Map<String, dynamic>> Function(
     Map<String, Object?> input);
@@ -16,29 +21,38 @@ class BranchDirectoryPage extends StatefulWidget {
     required this.request,
     required this.openDirections,
     this.admin = false,
+    this.adminVisible = true,
     this.onSelected,
     this.locate,
     this.scanVisit,
     this.pickCover,
     this.initialDetails,
     this.onOpenReports,
+    this.onOpenCalendar,
     this.onOpenCoaches,
-    this.onOpenBookings,
-    this.onOpenMembers,
+    this.adminRoute = const BranchAdminRoute(),
+    this.onAdminNavigate,
+    this.onEditorLeaveCheckChanged,
+    this.adminOperation,
   });
 
   final BranchRequest request;
   final Future<bool> Function(Uri) openDirections;
-  final bool admin;
+  final bool admin, adminVisible;
   final ValueChanged<String>? onSelected;
   final Future<({double latitude, double longitude})> Function()? locate;
   final Future<String?> Function(BuildContext context)? scanVisit;
   final Future<String?> Function()? pickCover;
   final Map<String, dynamic>? initialDetails;
   final ValueChanged<String>? onOpenReports;
+  final ValueChanged<String>? onOpenCalendar;
   final ValueChanged<String>? onOpenCoaches;
-  final ValueChanged<String>? onOpenBookings;
-  final ValueChanged<String>? onOpenMembers;
+  final BranchAdminRoute adminRoute;
+  final void Function(BranchAdminRoute route, {required bool replace})?
+      onAdminNavigate;
+  final void Function(BranchAdminRoute, Future<bool> Function()?)?
+      onEditorLeaveCheckChanged;
+  final Widget Function(BranchAdminRoute route)? adminOperation;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -48,11 +62,27 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   List<Map<String, dynamic>> _branches = [];
   String? _home, _next;
   String _query = '';
+  final _adminSearch = TextEditingController();
+  int _mapFocusRequest = 0;
   String _statusFilter = 'all';
   bool _busy = false, _failed = false;
+  Future<void>? _directoryLoad;
   bool _showMap = false, _locating = false;
   LatLng? _location;
-  String? _selection;
+  String? _selection, _mapSelection;
+  BranchAdminRoute _localAdminRoute = const BranchAdminRoute();
+
+  BranchAdminRoute get _adminRoute =>
+      widget.onAdminNavigate == null ? _localAdminRoute : widget.adminRoute;
+
+  void _navigate(BranchAdminRoute route, {bool replace = false}) {
+    final callback = widget.onAdminNavigate;
+    if (callback == null) {
+      setState(() => _localAdminRoute = route);
+    } else {
+      callback(route, replace: replace);
+    }
+  }
 
   Future<void> _useLocation() async {
     setState(() => _locating = true);
@@ -75,7 +105,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadDirectory();
     final details = widget.initialDetails;
     if (details != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -84,8 +114,46 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
     }
   }
 
-  Future<void> _load({bool more = false}) async {
-    if (_busy) return;
+  @override
+  void dispose() {
+    _adminSearch.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant BranchDirectoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.admin && oldWidget.adminRoute.id != widget.adminRoute.id) {
+      _resolveRouteBranch();
+    }
+  }
+
+  Future<void> _loadDirectory() async {
+    await _load();
+    await _resolveRouteBranch();
+  }
+
+  Future<void> _resolveRouteBranch() async {
+    if (!mounted || !widget.admin) return;
+    final id = _adminRoute.id;
+    if (id == null) return;
+    await _directoryLoad;
+    final seen = <String>{};
+    while (mounted &&
+        _adminRoute.id == id &&
+        !_failed &&
+        _next != null &&
+        !_branches.any((branch) => branch['branchId'] == id) &&
+        seen.add(_next!)) {
+      await _load(more: true);
+    }
+  }
+
+  Future<void> _load({bool more = false}) =>
+      _directoryLoad ??= _readDirectory(after: more ? _next : null)
+          .whenComplete(() => _directoryLoad = null);
+
+  Future<void> _readDirectory({String? after}) async {
     setState(() {
       _busy = true;
       _failed = false;
@@ -93,16 +161,19 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
     try {
       final result = await widget.request({
         'action': 'list',
-        if (more) 'afterId': _next,
+        if (after != null) 'afterId': after,
       });
       if (!mounted) return;
       final branches = (result['records'] as List)
           .map((value) => Map<String, dynamic>.from(value as Map));
+      final next = result['nextAfterId'] as String?;
       setState(() {
-        _branches = [if (more) ..._branches, ...branches];
+        _branches = [if (after != null) ..._branches, ...branches];
         _home = result['homeBranchId'] as String?;
         _selection = result['selectedBranchId'] as String?;
-        _next = result['nextAfterId'] as String?;
+        _next = after != null && next != null && next.compareTo(after) <= 0
+            ? null
+            : next;
       });
     } catch (_) {
       if (mounted) setState(() => _failed = true);
@@ -112,196 +183,68 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   }
 
   Future<void> _details(Map<String, dynamic> branch) async {
-    final address = (branch['address'] as String?) ?? '';
-    final latitude = branch['latitude'];
-    final longitude = branch['longitude'];
-    final destination =
-        latitude is num && longitude is num ? '$latitude,$longitude' : address;
-    final facilities = (branch['facilities'] as List?)?.join(' · ') ?? '';
-    final hours = branch['openingHours'] as List?;
-    final cover = branch['coverUrl'] as String?;
     final id = branch['branchId'] as String;
-    final stats = widget.admin
-        ? Future<Map<String, dynamic>>.sync(
-            () => widget.request({'action': 'branchStats', 'branchId': id}))
-        : null;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(branch['displayName'] as String? ?? 'Branch'),
-        content: SingleChildScrollView(
-          child: SizedBox(
-            width: 440,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (cover != null && cover.isNotEmpty)
-                  Image.network(cover,
-                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
-                      height: 150,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) =>
-                          const SizedBox.shrink()),
-                if (address.isNotEmpty) Text(address),
-                if (branch['description'] case final String description
-                    when description.isNotEmpty)
-                  Text(description),
-                if (branch['contactPhone'] case final String phone
-                    when phone.isNotEmpty)
-                  Text(phone),
-                if (facilities.isNotEmpty) Text(facilities),
-                if (stats != null)
-                  FutureBuilder<Map<String, dynamic>>(
-                    future: stats,
-                    builder: (context, snapshot) {
-                      final result = snapshot.data;
-                      if (snapshot.hasError) {
-                        return const Text('Branch totals unavailable.');
-                      }
-                      if (result == null) {
-                        return const LinearProgressIndicator();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Wrap(spacing: 8, runSpacing: 4, children: [
-                          Chip(
-                              label:
-                                  Text('${result['coaches']} coach profiles')),
-                          Chip(
-                              label: Text(
-                                  '${result['equipment']} equipment units')),
-                          Chip(label: Text('${result['bookings']} bookings')),
-                          Chip(label: Text('${result['visits']} gym visits')),
-                        ]),
-                      );
-                    },
-                  ),
-                const SizedBox(height: 12),
-                if (hours == null || hours.length != 7)
-                  const Text('Opening hours unavailable')
-                else ...[
-                  Text(branchOpeningStatus(hours)),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < 7; i++)
-                    Text('${_days[i]}  ${_dayLabel(hours[i])}'),
-                ],
-              ],
-            ),
-          ),
+    if (widget.admin) {
+      _navigate(BranchAdminRoute(BranchAdminSection.overview, id));
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => GymDetailsScreen(
+          branch: branch,
+          isHome: _home == id,
+          isSelected: _selection == id,
+          openDirections: widget.openDirections,
+          onSelectGym: () async {
+            try {
+              await widget.request({'action': 'setSelected', 'branchId': id});
+              if (mounted) {
+                setState(() => _selection = id);
+                widget.onSelected?.call(id);
+                _notice('Selected as current workout gym.');
+              }
+            } catch (_) {
+              if (mounted) _notice('Could not select this branch.');
+            }
+          },
+          onSetHome: () async {
+            try {
+              await widget.request({'action': 'setHome', 'branchId': id});
+              if (mounted) {
+                await _load();
+                _notice('Home branch updated.');
+              }
+            } catch (_) {
+              if (mounted) _notice('Could not update the home branch.');
+            }
+          },
+          onCheckIn: widget.scanVisit != null ? _checkIn : null,
+          onOpenEquipment: () => _activity(branch: branch, visits: false),
         ),
-        actions: [
-          if (widget.admin && widget.onOpenMembers != null)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'members'),
-              child: const Text('Members'),
-            ),
-          if (widget.admin && widget.onOpenBookings != null)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'bookings'),
-              child: const Text('Bookings'),
-            ),
-          if (widget.admin && widget.onOpenCoaches != null)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'coaches'),
-              child: const Text('Coaches'),
-            ),
-          if (widget.admin && widget.onOpenReports != null)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'reports'),
-              child: const Text('Reports'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'equipment'),
-            child: const Text('Equipment'),
-          ),
-          if (widget.admin)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'visits'),
-              child: const Text('Gym visits'),
-            )
-          else if (_selection != id)
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'select'),
-              child: const Text('Use this branch'),
-            ),
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
-          if (destination.isNotEmpty)
-            TextButton(
-                onPressed: () => Navigator.pop(context, 'directions'),
-                child: const Text('Get directions')),
-          if (address.isNotEmpty)
-            TextButton(
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: address)),
-                child: const Text('Copy address')),
-          if (widget.admin)
-            FilledButton(
-                onPressed: () => Navigator.pop(context, 'edit'),
-                child: const Text('Edit branch'))
-          else if (_home != id)
-            FilledButton(
-                onPressed: () => Navigator.pop(context, 'home'),
-                child: const Text('Set as home branch')),
-        ],
       ),
     );
-    if (!mounted || action == null) return;
-    if (action == 'members') {
-      widget.onOpenMembers?.call(id);
-      return;
-    }
-    if (action == 'bookings') {
-      widget.onOpenBookings?.call(id);
-      return;
-    }
-    if (action == 'coaches') {
-      widget.onOpenCoaches?.call(id);
-      return;
-    }
-    if (action == 'reports') {
-      widget.onOpenReports?.call(id);
-      return;
-    }
-    if (action == 'equipment' || action == 'visits') {
-      await _activity(branch: branch, visits: action == 'visits');
-      return;
-    }
-    if (action == 'select') {
-      try {
-        await widget.request({'action': 'setSelected', 'branchId': id});
-        if (mounted) {
-          setState(() => _selection = id);
-          widget.onSelected?.call(id);
-        }
-      } catch (_) {
-        if (mounted) _notice('Could not select this branch.');
-      }
-      return;
-    }
-    if (action == 'edit') {
-      await _edit(branch);
-    } else if (action == 'home') {
-      try {
-        await widget.request({'action': 'setHome', 'branchId': id});
-        if (mounted) await _load();
-      } catch (_) {
-        if (mounted) _notice('Could not update the home branch.');
-      }
-    } else if (action == 'directions') {
-      try {
-        final opened = await widget
-            .openDirections(Uri.https('www.google.com', '/maps/dir/', {
+  }
+
+  String _destination(Map<String, dynamic> branch) {
+    final point = branchMapPoint(branch);
+    return point == null
+        ? _branchAddress(branch)
+        : '${point.latitude},${point.longitude}';
+  }
+
+  Future<void> _directions(Map<String, dynamic> branch) async {
+    try {
+      final opened = await widget.openDirections(
+        Uri.https('www.google.com', '/maps/dir/', {
           'api': '1',
-          'destination': destination,
+          'destination': _destination(branch),
           'travelmode': 'driving',
           'dir_action': 'navigate',
-        }));
-        if (!opened && mounted) _notice('Could not open directions.');
-      } catch (_) {
-        if (mounted) _notice('Could not open directions.');
-      }
+        }),
+      );
+      if (!opened && mounted) _notice('Could not open directions.');
+    } catch (_) {
+      if (mounted) _notice('Could not open directions.');
     }
   }
 
@@ -349,16 +292,193 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
     }
   }
 
-  Future<void> _edit([Map<String, dynamic>? branch]) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => _BranchEditor(
-          branch: branch, request: widget.request, pickCover: widget.pickCover),
+  Widget _adminPage(List<Map<String, dynamic>> visible) {
+    final route = _adminRoute;
+    return IndexedStack(
+      sizing: StackFit.expand,
+      index: route.section == BranchAdminSection.directory ? 0 : 1,
+      children: [
+        _AdminBranchDirectory(
+          branches: _branches,
+          visible: visible,
+          search: _adminSearch,
+          mapFocusRequest: _mapFocusRequest,
+          homeId: _home,
+          statusFilter: _statusFilter,
+          showMap: _showMap,
+          renderMap: widget.adminVisible &&
+              route.section == BranchAdminSection.directory,
+          mapSelection: _mapSelection,
+          loading: _busy,
+          failed: _failed,
+          hasMore: _next != null,
+          onAdd: () =>
+              _navigate(const BranchAdminRoute(BranchAdminSection.add)),
+          onRefresh: _loadDirectory,
+          onQuery: (value) => setState(() => _query = value),
+          onStatus: (value) => setState(() => _statusFilter = value),
+          onView: (visible) => setState(() => _showMap = visible),
+          onSelectMarker: (branch) => setState(() {
+            _mapSelection = branch['branchId'] as String;
+            _mapFocusRequest++;
+          }),
+          onManage: _details,
+          onMore: () => _load(more: true),
+          openAttribution: widget.openDirections,
+        ),
+        if (route.section != BranchAdminSection.directory)
+          KeyedSubtree(key: ValueKey(route), child: _branchSubpage(route)),
+      ],
     );
-    if (mounted && saved == true) {
-      _notice(branch == null ? 'Branch added.' : 'Branch saved.');
-      await _load();
+  }
+
+  Widget _branchSubpage(BranchAdminRoute route) {
+    final id = route.id;
+    final branch = _branches.where((row) => row['branchId'] == id).firstOrNull;
+    const directory = BranchAdminRoute();
+    final overview = id == null
+        ? directory
+        : BranchAdminRoute(BranchAdminSection.overview, id);
+    if (route.section == BranchAdminSection.add ||
+        (route.section == BranchAdminSection.edit && branch != null)) {
+      return _AdminBranchEditor(
+        branch: branch,
+        request: widget.request,
+        pickCover: widget.pickCover,
+        onSaved: () {
+          _navigate(overview, replace: true);
+          _notice(id == null ? 'Branch added.' : 'Branch saved.');
+          _loadDirectory();
+        },
+        onCancel: () => _navigate(overview, replace: true),
+        onLeaveCheckChanged: (check) =>
+            widget.onEditorLeaveCheckChanged?.call(route, check),
+      );
     }
+    if (branch == null || id == null) {
+      return ListView(padding: _branchPadding, children: [
+        Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _navigate(directory),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back to branches'),
+            )),
+        const SizedBox(height: 12),
+        if (_busy || (!_failed && _next != null))
+          const LinearProgressIndicator()
+        else ...[
+          Text(_failed
+              ? 'Could not load the branch.'
+              : 'This branch is unavailable.'),
+          if (_failed)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton(
+                  onPressed: _loadDirectory,
+                  child: const Text('Retry'),
+                )),
+        ],
+      ]);
+    }
+    final tabs = [
+      BranchAdminSection.overview,
+      BranchAdminSection.equipment,
+      BranchAdminSection.visits,
+      if (widget.adminOperation != null) ...[
+        BranchAdminSection.members,
+        BranchAdminSection.bookings,
+      ],
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: _branchPadding.copyWith(bottom: 12, top: 12),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _navigate(directory),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Back to branches'),
+              )),
+          const SizedBox(height: 4),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 10,
+            children: [
+              Text(_branchName(branch),
+                  style: Theme.of(context).textTheme.headlineMedium),
+              FilledButton.icon(
+                onPressed: () =>
+                    _navigate(BranchAdminRoute(BranchAdminSection.edit, id)),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit Branch'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 42)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            for (final section in tabs)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(BranchAdminRoute(section, id).label),
+                  selected: route.section == section,
+                  selectedColor: AppColors.primaryTint,
+                  checkmarkColor: AppColors.primaryDark,
+                  onSelected: (selected) {
+                    if (selected) _navigate(BranchAdminRoute(section, id));
+                  },
+                ),
+              ),
+            if (widget.onOpenCoaches != null)
+              TextButton(
+                  onPressed: () => widget.onOpenCoaches!(id),
+                  child: const Text('Coaches')),
+            if (widget.onOpenCalendar != null)
+              TextButton.icon(
+                  key: const ValueKey('branch-operations-calendar'),
+                  onPressed: () => widget.onOpenCalendar!(id),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 16),
+                  label: const Text('Operations Calendar')),
+            if (widget.onOpenReports != null)
+              TextButton(
+                  onPressed: () => widget.onOpenReports!(id),
+                  child: const Text('Reports')),
+          ]),
+        ]),
+      ),
+      Expanded(
+        child: switch (route.section) {
+          BranchAdminSection.equipment ||
+          BranchAdminSection.visits =>
+            BranchActivityPage(
+              title: route.label,
+              branchId: id,
+              admin: true,
+              embedded: true,
+              canIssueVisitCode: branch['status'] == 'active',
+              visits: route.section == BranchAdminSection.visits,
+              request: widget.request,
+            ),
+          BranchAdminSection.members ||
+          BranchAdminSection.bookings =>
+            widget.adminOperation?.call(route) ??
+                const Center(child: Text('Section unavailable.')),
+          _ => _AdminBranchOverview(
+              branch: branch,
+              request: widget.request,
+              home: id == _home,
+              onDirections: _destination(branch).isEmpty
+                  ? null
+                  : () => _directions(branch),
+            ),
+        },
+      ),
+    ]);
   }
 
   @override
@@ -371,6 +491,12 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                 .toLowerCase()
                 .contains(query))
         .toList();
+    if (widget.admin) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: _adminPage(visible),
+      );
+    }
     final location = _location;
     if (location != null) {
       double distance(Map<String, dynamic> branch) =>
@@ -383,122 +509,1006 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       });
     }
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: Text(widget.admin ? 'Branch management' : 'Find a gym'),
-        actions: [
-          IconButton(
-              tooltip: 'Refresh',
-              onPressed: _busy ? null : () => _load(),
-              icon: const Icon(Icons.refresh)),
-          if (widget.admin)
-            TextButton.icon(
-                onPressed: _busy ? null : () => _edit(),
-                icon: const Icon(Icons.add),
-                label: const Text('Add branch')),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          TextField(
-              onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                  labelText: 'Search branches',
-                  prefixIcon: Icon(Icons.search))),
-          const SizedBox(height: 16),
-          Wrap(spacing: 8, children: [
-            if (widget.admin)
-              for (final filter in const {
-                'all': 'All',
-                'active': 'Active',
-                'inactive': 'Inactive'
-              }.entries)
-                ChoiceChip(
-                    label: Text(filter.value),
-                    selected: _statusFilter == filter.key,
-                    onSelected: (_) =>
-                        setState(() => _statusFilter = filter.key)),
-            if (widget.scanVisit != null) ...[
-              OutlinedButton.icon(
-                  onPressed: _checkIn,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Gym check-in')),
-              TextButton(
-                  onPressed: () => _activity(visits: true),
-                  child: const Text('My gym visits')),
-            ],
-            OutlinedButton.icon(
-                onPressed: () => setState(() => _showMap = !_showMap),
-                icon: const Icon(Icons.map_outlined),
-                label: Text(_showMap ? 'Hide map' : 'Show map')),
-            if (widget.locate != null)
-              OutlinedButton.icon(
-                  onPressed: _locating ? null : _useLocation,
-                  icon: const Icon(Icons.my_location),
-                  label: Text(
-                      _locating ? 'Finding location…' : 'Use my location')),
-          ]),
-          if (_showMap)
-            BranchMap(
-              key: ValueKey(
-                  (location, visible.map((b) => b['branchId']).join(','))),
-              branches: visible,
-              location: location,
-              selectedId: _selection,
-              onBranch: _details,
-            ),
-          if (location != null)
-            const Text('Approximate straight-line distance · loaded branches'),
-          if (_busy) const LinearProgressIndicator(),
-          if (_failed)
-            const Text('Branches could not be loaded. Refresh to retry.'),
-          if (!_busy && !_failed && visible.isEmpty)
-            const Text('No matching branches.'),
-          for (final branch in visible)
-            Card(
-              child: ListTile(
-                leading: _branchThumbnail(branch['coverUrl']),
-                title: Text(branch['displayName'] as String? ?? 'Branch'),
-                subtitle: Text([
-                  if (branch['branchId'] == _home) 'Home branch',
-                  if (branch['branchId'] == _selection) 'Selected branch',
-                  if ((location == null
-                          ? null
-                          : branchDistanceKm(branch, location))
-                      case final double km)
-                    '${km.toStringAsFixed(1)} km away',
-                  if (widget.admin)
-                    branch['status'] == 'active' ? 'Active' : 'Inactive',
-                  if (branch['address'] case final String address
-                      when address.isNotEmpty)
-                    address,
-                ].join(' · ')),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _details(branch),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.ink,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Explore Gyms',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+                letterSpacing: -0.3,
               ),
             ),
-          if (_next != null)
-            TextButton(
-                onPressed: _busy ? null : () => _load(more: true),
-                child: const Text('Load more')),
+            Text(
+              'Find your next place to train.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: AppColors.inkSoft,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (widget.scanVisit != null)
+            IconButton(
+              tooltip: 'Gym check-in',
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+              color: AppColors.primary,
+              onPressed: _checkIn,
+            ),
+          IconButton(
+            tooltip: 'My gym visits',
+            icon: const Icon(Icons.history_rounded, size: 22),
+            color: AppColors.ink,
+            onPressed: () => _activity(visits: true),
+          ),
+          const SizedBox(width: 4),
         ],
+      ),
+      body: _showMap
+          ? Stack(
+              children: [
+                Positioned.fill(
+                  child: BranchMap(
+                    key: ValueKey((
+                      location,
+                      visible.map((b) => b['branchId']).join(',')
+                    )),
+                    branches: visible,
+                    location: location,
+                    selectedId: _mapSelection ?? _selection,
+                    onBranch: (b) =>
+                        setState(() => _mapSelection = b['branchId'] as String),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  left: 16,
+                  right: 16,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search,
+                              size: 20, color: AppColors.inkSoft),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              decoration: const InputDecoration(
+                                hintText: 'Search gyms by name or area...',
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (widget.locate != null)
+                            IconButton(
+                              tooltip: _locating ? 'Locating…' : 'Near me',
+                              icon: Icon(
+                                Icons.near_me_outlined,
+                                size: 18,
+                                color: location != null
+                                    ? AppColors.primary
+                                    : AppColors.inkSoft,
+                              ),
+                              onPressed: _locating ? null : _useLocation,
+                            ),
+                          Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _segmentButton(
+                                  icon: Icons.format_list_bulleted_rounded,
+                                  label: 'List',
+                                  isSelected: false,
+                                  onTap: () => setState(() => _showMap = false),
+                                ),
+                                _segmentButton(
+                                  icon: Icons.map_outlined,
+                                  label: 'Map',
+                                  isSelected: true,
+                                  onTap: () {},
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (visible.isNotEmpty)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      top: false,
+                      child: _GymMapPreviewCard(
+                        branch: visible
+                                .where((b) => b['branchId'] == _mapSelection)
+                                .firstOrNull ??
+                            visible.first,
+                        isHome: (_mapSelection ??
+                                visible.first['branchId'] as String) ==
+                            _home,
+                        isSelected: (_mapSelection ??
+                                visible.first['branchId'] as String) ==
+                            _selection,
+                        distanceKm: location == null
+                            ? null
+                            : branchDistanceKm(
+                                visible
+                                        .where((b) =>
+                                            b['branchId'] == _mapSelection)
+                                        .firstOrNull ??
+                                    visible.first,
+                                location,
+                              ),
+                        onTap: () => _details(visible
+                                .where((b) => b['branchId'] == _mapSelection)
+                                .firstOrNull ??
+                            visible.first),
+                        onDirections: () => _directions(visible
+                                .where((b) => b['branchId'] == _mapSelection)
+                                .firstOrNull ??
+                            visible.first),
+                      ),
+                    ),
+                  ),
+              ],
+            )
+          : RefreshIndicator(
+              onRefresh: () => _load(),
+              color: AppColors.primary,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  TextField(
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: 'Search gyms by name or area...',
+                      prefixIcon: const Icon(Icons.search,
+                          size: 20, color: AppColors.inkSoft),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.hairline),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: AppColors.primary, width: 1.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Compact horizontal discovery toolbar
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (widget.locate != null)
+                        InkWell(
+                          onTap: _locating ? null : _useLocation,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: location != null
+                                  ? AppColors.primaryTint
+                                  : const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: location != null
+                                    ? AppColors.primary.withValues(alpha: 0.25)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.near_me_outlined,
+                                  size: 14,
+                                  color: location != null
+                                      ? AppColors.primary
+                                      : AppColors.inkSoft,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _locating ? 'Finding location…' : 'Near me',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: location != null
+                                        ? AppColors.primary
+                                        : AppColors.ink,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _segmentButton(
+                              icon: Icons.format_list_bulleted_rounded,
+                              label: 'List',
+                              isSelected: true,
+                              onTap: () {},
+                            ),
+                            _segmentButton(
+                              icon: Icons.map_outlined,
+                              label: 'Map',
+                              isSelected: false,
+                              onTap: () => setState(() => _showMap = true),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Compact result header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'All gyms',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.inkSoft,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                        Text(
+                          '${visible.length} ${visible.length == 1 ? "location" : "locations"}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (location != null) ...[
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.near_me_outlined,
+                              size: 13, color: AppColors.primary),
+                          SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              'Approximate straight-line distance · sorted',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11, color: AppColors.inkSoft),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_busy) const LinearProgressIndicator(),
+                  if (_failed) ...[
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Column(
+                        children: [
+                          const Text(
+                              'Branches could not be loaded. Pull down to retry.'),
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: _load,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (!_busy && !_failed && visible.isEmpty) ...[
+                    const SizedBox(height: 40),
+                    const Center(
+                      child: Text(
+                        'No matching branches.',
+                        style:
+                            TextStyle(color: AppColors.inkSoft, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                  for (final branch in visible)
+                    _GymCard(
+                      branch: branch,
+                      isHome: branch['branchId'] == _home,
+                      isSelected: branch['branchId'] == _selection,
+                      distanceKm: location == null
+                          ? null
+                          : branchDistanceKm(branch, location),
+                      onTap: () => _details(branch),
+                      onDirections: () => _directions(branch),
+                    ),
+                  if (_next != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Center(
+                        child: OutlinedButton(
+                          onPressed: _busy ? null : () => _load(more: true),
+                          child: const Text('Load more'),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _segmentButton({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? AppColors.primary : AppColors.inkSoft,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppColors.primary : AppColors.inkSoft,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-Widget _branchThumbnail(Object? url) {
-  const fallback = Icon(Icons.location_on_outlined);
-  if (url is! String || url.isEmpty) return fallback;
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(8),
-    child: Image.network(url,
-        webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
-        width: 48,
-        height: 48,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stack) => fallback),
-  );
+class _GymCard extends StatelessWidget {
+  const _GymCard({
+    required this.branch,
+    required this.isHome,
+    required this.isSelected,
+    required this.distanceKm,
+    required this.onTap,
+    required this.onDirections,
+  });
+
+  final Map<String, dynamic> branch;
+  final bool isHome;
+  final bool isSelected;
+  final double? distanceKm;
+  final VoidCallback onTap;
+  final VoidCallback onDirections;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = branch['displayName'] as String? ?? 'Branch';
+    final address = _branchAddress(branch);
+    final coverUrl = branch['coverUrl'] as String?;
+    final hours = branch['openingHours'] as List?;
+    final statusInfo = branchCardOpeningStatus(hours);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.35)
+              : AppColors.hairline,
+          width: 1.0,
+        ),
+      ),
+      color: Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Clean landscape gym cover - no badges on top
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+              child: SizedBox(
+                height: 130,
+                child: coverUrl != null && coverUrl.isNotEmpty
+                    ? Image.network(
+                        coverUrl,
+                        webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _cardCoverPlaceholder(),
+                      )
+                    : _cardCoverPlaceholder(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Gym name and indicators
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      if (isSelected)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTint,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.25),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_outline_rounded,
+                                  size: 13, color: AppColors.primary),
+                              SizedBox(width: 4),
+                              Text(
+                                'Current gym',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (isHome)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.hairline,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.home_outlined,
+                                  size: 13, color: AppColors.inkSoft),
+                              SizedBox(width: 4),
+                              Text(
+                                'Home gym',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Opening status + distance
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: statusInfo.isOpen
+                              ? AppColors.success
+                              : (statusInfo.isAvailable
+                                  ? const Color(0xFFEF4444)
+                                  : const Color(0xFF9CA3AF)),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Text(
+                        statusInfo.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: statusInfo.isOpen
+                              ? AppColors.inkSoft
+                              : (statusInfo.isAvailable
+                                  ? AppColors.inkSoft
+                                  : const Color(0xFF9CA3AF)),
+                        ),
+                      ),
+                      if (distanceKm != null) ...[
+                        const Text('•',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF9CA3AF))),
+                        Text(
+                          '${distanceKm!.toStringAsFixed(1)} km away',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (address.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Icon(Icons.location_on_outlined,
+                              size: 14, color: Color(0xFF9CA3AF)),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            address,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.inkSoft,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  const Divider(
+                      height: 1, thickness: 1, color: AppColors.hairline),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      InkWell(
+                        onTap: onDirections,
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.directions_outlined,
+                                  size: 16, color: AppColors.inkSoft),
+                              SizedBox(width: 6),
+                              Text(
+                                'Directions',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: onTap,
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'View gym',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              SizedBox(width: 4),
+                              Icon(Icons.arrow_forward_rounded,
+                                  size: 15, color: AppColors.primary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardCoverPlaceholder() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryDark, AppColors.primary],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.fitness_center_rounded,
+          size: 40,
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+      ),
+    );
+  }
+}
+
+class _GymMapPreviewCard extends StatelessWidget {
+  const _GymMapPreviewCard({
+    required this.branch,
+    required this.isHome,
+    required this.isSelected,
+    required this.distanceKm,
+    required this.onTap,
+    required this.onDirections,
+  });
+
+  final Map<String, dynamic> branch;
+  final bool isHome;
+  final bool isSelected;
+  final double? distanceKm;
+  final VoidCallback onTap;
+  final VoidCallback onDirections;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = branch['displayName'] as String? ?? 'Branch';
+    final address = _branchAddress(branch);
+    final coverUrl = branch['coverUrl'] as String?;
+    final hours = branch['openingHours'] as List?;
+    final statusInfo = branchCardOpeningStatus(hours);
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
+      color: Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 72,
+                      height: 72,
+                      child: coverUrl != null && coverUrl.isNotEmpty
+                          ? Image.network(
+                              coverUrl,
+                              webHtmlElementStrategy:
+                                  WebHtmlElementStrategy.fallback,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _thumbPlaceholder(),
+                            )
+                          : _thumbPlaceholder(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: statusInfo.isOpen
+                                        ? AppColors.success
+                                        : (statusInfo.isAvailable
+                                            ? const Color(0xFFEF4444)
+                                            : const Color(0xFF9CA3AF)),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  statusInfo.label,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: statusInfo.isOpen
+                                        ? AppColors.inkSoft
+                                        : (statusInfo.isAvailable
+                                            ? AppColors.inkSoft
+                                            : const Color(0xFF9CA3AF)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (isSelected)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.25),
+                                      width: 0.6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_outline_rounded,
+                                        size: 11, color: AppColors.primary),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Current gym',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (isHome)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3F4F6),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: AppColors.hairline, width: 0.6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.home_outlined,
+                                        size: 11, color: AppColors.inkSoft),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Home gym',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.inkSoft,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        if (address.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            address,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                        ],
+                        if (distanceKm != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${distanceKm!.toStringAsFixed(1)} km away',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: AppColors.ink,
+                        side: const BorderSide(color: AppColors.hairline),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: onDirections,
+                      icon: const Icon(Icons.directions_outlined,
+                          size: 15, color: AppColors.inkSoft),
+                      label: const Text('Directions',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: onTap,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+                      label: const Text('View gym',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbPlaceholder() {
+    return Container(
+      color: AppColors.primaryTint,
+      child: const Center(
+        child: Icon(Icons.fitness_center_rounded,
+            size: 24, color: AppColors.primary),
+      ),
+    );
+  }
 }
 
 const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -508,6 +1518,66 @@ String _dayLabel(Object? value) {
   if (value['closed'] == true) return 'Closed';
   if (value['allDay'] == true) return 'Open 24 hours';
   return '${value['open']}–${value['close']}';
+}
+
+({String label, bool isOpen, bool isAvailable}) branchCardOpeningStatus(
+    List? hours) {
+  if (hours == null || hours.length != 7) {
+    return (
+      label: 'Opening hours unavailable',
+      isOpen: false,
+      isAvailable: false
+    );
+  }
+  final local = DateTime.now().toUtc().add(const Duration(hours: 8));
+  final today = hours[local.weekday - 1];
+  final yesterday = hours[(local.weekday + 5) % 7];
+  final minute = local.hour * 60 + local.minute;
+
+  int? parse(Object? value) {
+    if (value is! String ||
+        !RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(value)) {
+      return null;
+    }
+    return int.parse(value.substring(0, 2)) * 60 +
+        int.parse(value.substring(3));
+  }
+
+  if (hours.any((day) =>
+      day is! Map ||
+      (day['closed'] != true &&
+          day['allDay'] != true &&
+          (parse(day['open']) == null ||
+              parse(day['close']) == null ||
+              day['open'] == day['close'])))) {
+    return (
+      label: 'Opening hours unavailable',
+      isOpen: false,
+      isAvailable: false
+    );
+  }
+
+  bool open(Object? value, {required bool previous}) {
+    if (value is! Map || value['closed'] == true) return false;
+    if (value['allDay'] == true) return !previous;
+    final start = parse(value['open']), end = parse(value['close']);
+    if (start == null || end == null) return false;
+    return previous
+        ? start > end && minute < end
+        : minute >= start && (start > end || minute < end);
+  }
+
+  if (today is Map && today['allDay'] == true) {
+    return (label: 'Open 24 hours', isOpen: true, isAvailable: true);
+  }
+
+  final isOpenNow =
+      open(today, previous: false) || open(yesterday, previous: true);
+  if (isOpenNow) {
+    return (label: 'Open now', isOpen: true, isAvailable: true);
+  } else {
+    return (label: 'Closed', isOpen: false, isAvailable: true);
+  }
 }
 
 String branchOpeningStatus(List hours) {
@@ -525,6 +1595,16 @@ String branchOpeningStatus(List hours) {
         int.parse(value.substring(3));
   }
 
+  if (hours.any((day) =>
+      day is! Map ||
+      (day['closed'] != true &&
+          day['allDay'] != true &&
+          (parse(day['open']) == null ||
+              parse(day['close']) == null ||
+              day['open'] == day['close'])))) {
+    return 'Opening hours unavailable';
+  }
+
   bool open(Object? value, {required bool previous}) {
     if (value is! Map || value['closed'] == true) return false;
     if (value['allDay'] == true) return !previous;
@@ -538,330 +1618,4 @@ String branchOpeningStatus(List hours) {
   return open(today, previous: false) || open(yesterday, previous: true)
       ? 'Open now · MYT'
       : 'Closed now · MYT';
-}
-
-class _BranchEditor extends StatefulWidget {
-  const _BranchEditor({this.branch, required this.request, this.pickCover});
-  final Map<String, dynamic>? branch;
-  final BranchRequest request;
-  final Future<String?> Function()? pickCover;
-
-  @override
-  State<_BranchEditor> createState() => _BranchEditorState();
-}
-
-class _BranchEditorState extends State<_BranchEditor> {
-  final _form = GlobalKey<FormState>();
-  static const _labels = {
-    'branchId': 'Branch ID',
-    'displayName': 'Branch name',
-    'description': 'Description',
-    'address': 'Full address',
-    'city': 'City',
-    'state': 'State',
-    'postalCode': 'Postal code',
-    'country': 'Country',
-    'contactPhone': 'Phone',
-    'contactEmail': 'Email',
-    'latitude': 'Latitude',
-    'longitude': 'Longitude',
-    'facilities': 'Facilities (comma-separated)',
-  };
-  late final _values = {
-    for (final key in _labels.keys)
-      key: TextEditingController(
-          text: key == 'facilities'
-              ? (widget.branch?[key] as List?)?.join(', ')
-              : widget.branch?[key]?.toString()),
-  };
-  late bool _active = widget.branch?['status'] != 'inactive';
-  late final _hours = List.generate(7, (index) {
-    final hours = widget.branch?['openingHours'];
-    final saved = hours is List && hours.length == 7 ? hours[index] : null;
-    final label = _dayLabel(saved);
-    return TextEditingController(
-        text: label == 'Unavailable'
-            ? ''
-            : label == 'Open 24 hours'
-                ? '24 hours'
-                : label.replaceAll('–', '-'));
-  });
-  bool _busy = false;
-  late String? _cover = widget.branch?['coverUrl'] as String?;
-  Uint8List? _coverPreview;
-  bool _coverUploadFailed = false;
-  bool _uploading = false;
-
-  Future<void> _upload() async {
-    setState(() {
-      _uploading = true;
-      _error = null;
-    });
-    try {
-      final encoded = await widget.pickCover!();
-      if (!mounted || encoded == null) return;
-      final bytes = base64Decode(encoded);
-      setState(() {
-        _coverPreview = bytes;
-        _coverUploadFailed = false;
-      });
-      final result = await widget
-          .request({'action': 'uploadBranchCover', 'dataBase64': encoded});
-      final url = result['url'];
-      if (url is! String || url.isEmpty) throw StateError('Missing cover URL');
-      if (mounted) setState(() => _cover = url);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _coverUploadFailed = _coverPreview != null;
-          _error = _coverUploadFailed
-              ? 'Cover upload failed. Try again or discard the selected cover.'
-              : 'Could not open the image. Choose a JPG or PNG up to 2 MB.';
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _uploading = false);
-    }
-  }
-
-  bool _pickOnMap = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    for (final controller in _values.values) {
-      controller.dispose();
-    }
-    for (final controller in _hours) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_busy || _uploading) return;
-    if (_coverUploadFailed) {
-      setState(() => _error =
-          'Upload the selected cover again or discard it before saving.');
-      return;
-    }
-    String value(String key) => _values[key]!.text.trim();
-    final branchId = value('branchId');
-    final name = value('displayName');
-    if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(branchId)) {
-      _form.currentState?.validate();
-      setState(() => _error =
-          'Enter a branch ID using letters, numbers, hyphens or underscores.');
-      return;
-    }
-    if (name.isEmpty || name.length > 120) {
-      _form.currentState?.validate();
-      setState(() => _error = 'Enter a branch name of up to 120 characters.');
-      return;
-    }
-    final schedule = <Map<String, Object>>[];
-    if (_hours.any((controller) => controller.text.trim().isNotEmpty)) {
-      final slot = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
-      for (final controller in _hours) {
-        final input = controller.text.trim().toLowerCase();
-        if (input == 'closed') {
-          schedule.add({'closed': true});
-        } else if (input == '24 hours') {
-          schedule.add({'allDay': true});
-        } else if (slot.hasMatch(input) &&
-            input.substring(0, 5) != input.substring(6)) {
-          schedule.add(
-              {'open': input.substring(0, 5), 'close': input.substring(6)});
-        } else {
-          setState(() => _error =
-              'Set all seven days. Use HH:mm-HH:mm, Closed, or 24 hours.');
-          return;
-        }
-      }
-    }
-    final latitude = double.tryParse(value('latitude'));
-    final longitude = double.tryParse(value('longitude'));
-    if ((value('latitude').isNotEmpty || value('longitude').isNotEmpty) &&
-        (latitude == null ||
-            longitude == null ||
-            !latitude.isFinite ||
-            !longitude.isFinite ||
-            latitude.abs() > 90 ||
-            longitude.abs() > 180)) {
-      setState(() => _error = 'Enter valid latitude and longitude.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.request({
-        'action': 'save',
-        'branchId': value('branchId'),
-        'create': widget.branch == null,
-        'branch': {
-          for (final key in _labels.keys.where((key) => ![
-                'branchId',
-                'latitude',
-                'longitude',
-                'facilities'
-              ].contains(key)))
-            key: value(key),
-          'latitude': latitude,
-          'longitude': longitude,
-          'status': _active ? 'active' : 'inactive',
-          if (_cover != null) 'coverUrl': _cover,
-          if (schedule.isNotEmpty) 'openingHours': schedule,
-          'facilities': value('facilities')
-              .split(',')
-              .map((part) => part.trim())
-              .where((part) => part.isNotEmpty)
-              .toList(),
-        },
-      });
-      if (mounted) Navigator.pop(context, true);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = 'Branch could not be saved. Check the details and retry.';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.branch == null ? 'Add branch' : 'Edit branch'),
-        content: SizedBox(
-          width: 480,
-          height: 540,
-          child: Form(
-            key: _form,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                if (_coverPreview case final Uint8List bytes)
-                  Image.memory(
-                    bytes,
-                    height: 130,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) =>
-                        const Text('Cover preview unavailable'),
-                  )
-                else if (_cover case final String url when url.isNotEmpty)
-                  Image.network(url,
-                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
-                      height: 120,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) =>
-                          const Text('Cover preview unavailable')),
-                if (widget.pickCover != null)
-                  OutlinedButton.icon(
-                      onPressed: _busy || _uploading ? null : _upload,
-                      icon: const Icon(Icons.image_outlined),
-                      label: Text(_uploading ? 'Uploading…' : 'Upload cover')),
-                if (_coverUploadFailed)
-                  TextButton(
-                    onPressed: _uploading ? null : () => setState(() {
-                      _coverPreview = null;
-                      _coverUploadFailed = false;
-                      _error = null;
-                    }),
-                    child: const Text('Discard selected cover'),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() => _pickOnMap = !_pickOnMap),
-                  icon: const Icon(Icons.map_outlined),
-                  label: Text(_pickOnMap
-                      ? 'Hide location picker'
-                      : 'Pick location on map'),
-                ),
-                if (_pickOnMap) ...[
-                  const Text(
-                      'Tap the map or drag the marker to set coordinates.'),
-                  BranchMap(
-                    pin: branchMapPoint({
-                      'latitude': double.tryParse(_values['latitude']!.text),
-                      'longitude': double.tryParse(_values['longitude']!.text),
-                    }),
-                    onPin: (point) => setState(() {
-                      _values['latitude']!.text =
-                          point.latitude.toStringAsFixed(6);
-                      _values['longitude']!.text =
-                          point.longitude.toStringAsFixed(6);
-                    }),
-                  ),
-                ],
-                for (final entry in _labels.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TextFormField(
-                      controller: _values[entry.key],
-                      onChanged:
-                          entry.key == 'latitude' || entry.key == 'longitude'
-                              ? (_) {
-                                  if (_pickOnMap) setState(() {});
-                                }
-                              : null,
-                      enabled: !_busy &&
-                          (entry.key != 'branchId' || widget.branch == null),
-                      decoration: InputDecoration(labelText: entry.value),
-                      validator: (value) {
-                        if (entry.key == 'branchId' &&
-                            !RegExp(r'^[A-Za-z0-9_-]{1,128}$')
-                                .hasMatch(value?.trim() ?? '')) {
-                          return 'Use letters, numbers, hyphens or underscores.';
-                        }
-                        if (entry.key == 'displayName' &&
-                            (value?.trim().isEmpty ?? true)) {
-                          return 'Enter the branch name.';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                const Text('Opening hours · MYT'),
-                for (var day = 0; day < _days.length; day++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: TextFormField(
-                      enabled: !_busy,
-                      controller: _hours[day],
-                      decoration: InputDecoration(
-                          labelText: _days[day],
-                          hintText: '08:00-22:00, Closed, or 24 hours'),
-                    ),
-                  ),
-                SwitchListTile(
-                    title: const Text('Active'),
-                    value: _active,
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() => _active = value)),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          if (_error case final String error)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(error,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              ),
-            ),
-          TextButton(
-              onPressed: _busy ? null : () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: _busy || _uploading ? null : _save,
-              child: Text(_busy ? 'Saving…' : 'Save branch')),
-        ],
-      );
 }

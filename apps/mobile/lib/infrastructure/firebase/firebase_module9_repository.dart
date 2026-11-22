@@ -97,11 +97,7 @@ class FirebaseModule9Repository implements Module9Repository {
       if (error.code != 'invalid-argument') rethrow;
       data = await _call('module9MemberCommandCallable', query);
     }
-    return NoticePage(
-        (data['records'] as List)
-            .map((r) => parseMemberNotice(r, _scope.organizationId))
-            .toList(),
-        data['nextAfterId'] as String?);
+    return parseMemberNoticePage(data, _scope.organizationId);
   }
 
   @override
@@ -156,6 +152,8 @@ MemberNotice parseMemberNotice(Object? raw, String organizationId) {
       raw['message'] is! String ||
       raw['read'] is! bool ||
       raw['createdAtMillis'] is! int ||
+      (raw['createdAtMillis'] as int) <= 0 ||
+      (raw['createdAtMillis'] as int) > 8640000000000000 ||
       (raw['bookingId'] != null && raw['bookingId'] is! String)) {
     throw const FormatException('Invalid Member notice');
   }
@@ -170,4 +168,21 @@ MemberNotice parseMemberNotice(Object? raw, String organizationId) {
       recommendation: raw['recommendation'] == null
           ? null
           : RecommendationNotice.parse(raw['recommendation'], organizationId));
+}
+
+/// One incompatible notice must not hide other already-authorized server records.
+NoticePage parseMemberNoticePage(Map data, String organizationId) {
+  if (data['records'] is! List ||
+      (data['nextAfterId'] != null && data['nextAfterId'] is! String)) {
+    throw const FormatException('Invalid notification page');
+  }
+  final records = <MemberNotice>[];
+  for (final raw in data['records'] as List) {
+    try {
+      records.add(parseMemberNotice(raw, organizationId));
+    } on FormatException {
+      /* Server keeps authoritative records; skip only this incompatible projection. */
+    }
+  }
+  return NoticePage(records, data['nextAfterId'] as String?);
 }

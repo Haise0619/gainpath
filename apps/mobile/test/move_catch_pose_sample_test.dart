@@ -73,9 +73,7 @@ void main() {
     expect(
         noBaseline.sample(partial, mirrored: false, nowMicros: 50100), isNull);
   });
-  test(
-      'partial pose needs a real same-side shoulder and hip; no stale or one-point movement',
-      () {
+  test('partial pose rejects stale and one-point movement', () {
     final tracker = MoveCatchTorsoTracker();
     tracker.sample(frame(), mirrored: true, nowMicros: 100);
     final one = PoseFrame(
@@ -90,6 +88,35 @@ void main() {
     expect(tracker.sample(frame(), mirrored: true, nowMicros: 1000000), isNull);
     tracker.reset();
     expect(tracker.sample(one, mirrored: true, nowMicros: 50100), isNull);
+  });
+  test('reliably visible shoulders bridge a hip dropout after full tracking',
+      () {
+    final tracker = MoveCatchTorsoTracker();
+    final shoulders = PoseFrame(
+        capturedAtMicros: 50100,
+        detectorId: 'blazepose-tflite',
+        modelVersion: 'test',
+        landmarks: const {
+          PoseLandmark.leftShoulder:
+              PosePoint(x: .3, y: .26, z: 0, visibility: .9),
+          PoseLandmark.rightShoulder:
+              PosePoint(x: .6, y: .24, z: 0, visibility: .9),
+        });
+    expect(tracker.sample(shoulders, mirrored: true, nowMicros: 50100), isNull);
+    tracker.reset();
+    tracker.sample(frame(), mirrored: true, nowMicros: 100);
+    final sample = tracker.sample(shoulders, mirrored: true, nowMicros: 50100);
+    expect(sample?.fullTorso, isFalse);
+    expect(sample?.centerX, closeTo(.55, .001));
+    final crossed = PoseFrame(
+        capturedAtMicros: 100100,
+        detectorId: 'blazepose-tflite',
+        modelVersion: 'test',
+        landmarks: {
+          PoseLandmark.leftShoulder: shoulders.landmark(PoseLandmark.rightShoulder)!,
+          PoseLandmark.rightShoulder: shoulders.landmark(PoseLandmark.leftShoulder)!,
+        });
+    expect(tracker.sample(crossed, mirrored: true, nowMicros: 100100), isNull);
   });
   test('torso center mirrors once and preserves capture identity', () {
     final plain = moveCatchTorsoSample(frame(), mirrored: false)!;

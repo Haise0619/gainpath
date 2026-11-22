@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc && node -e \"require('./' + require('./package.json').main)\"",
     "test": "vitest run",
+    "test:retained-evidence": "vitest run --mode retained-evidence",
     "typecheck:tests": "tsc -p tsconfig.test.json",
     "test:emulator": "node emulator/run-suites.cjs",
     "test:availability:callable": "pnpm run build && firebase emulators:exec --project demo-gainpath --config ../firebase/coach-availability.emulator.test.json --only auth,functions,firestore \"node emulator/coach-availability-callable-smoke.cjs\"",

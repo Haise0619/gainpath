@@ -162,8 +162,37 @@ class WorkoutScoreDistribution extends StatelessWidget {
       Text(
           '${group.scoredSessions} scored sessions · selected compatible group'),
       if (bands == null)
-        const Text(
-            'Distribution is unavailable for this older report aggregate.')
+        Container(
+          margin: const EdgeInsets.only(top: 8, bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 20, color: Colors.blueGrey.shade400),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Score distribution unavailable.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF334155))),
+                    const SizedBox(height: 2),
+                    Text(
+                        'This historical aggregate does not contain score-distribution data. Available score samples and trends can still be reviewed.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF64748B))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        )
       else
         SizedBox(
             height: 190,

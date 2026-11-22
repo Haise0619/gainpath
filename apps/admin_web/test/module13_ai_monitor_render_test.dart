@@ -1,6 +1,7 @@
 // Actual Flutter widgets with fictional saved records. Offline renders substitute
 // Arial for production Poppins/Inter through the existing render infrastructure.
 import 'dart:io';
+import 'package:gainpath_admin_web/features/recommendation/presentation/admin/recommendation_monitor.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -55,6 +56,7 @@ void main() {
       final base = AppTheme.build();
       final typography =
           ThemeData(useMaterial3: true).textTheme.apply(fontFamily: 'CReview');
+      final tab = ValueNotifier(RecommendationMonitorTab.overview);
       final elapsed = Stopwatch()..start();
       await tester.pumpWidget(RepaintBoundary(
           key: boundary,
@@ -71,9 +73,9 @@ void main() {
                 child: child!),
             home: ColoredBox(
                 color: AppColors.bg,
-                child: RiskLeaderboardScreen(
-                    canonicalRepository: harness.repository,
-                    queueClock: () => queueNow)),
+                child: ValueListenableBuilder(valueListenable: tab, builder: (context, value, _) => RiskLeaderboardScreen(
+                    initialTab: value, canonicalRepository: harness.repository,
+                    queueClock: () => queueNow))),
           )));
       await tester.pumpAndSettle();
       elapsed.stop();
@@ -101,16 +103,17 @@ void main() {
       }
 
       await capture('overview');
-      await tester.ensureVisible(find.text('View').first);
+      await tester.ensureVisible(find.text('View Details').first);
       await tester.pumpAndSettle();
       if (layout.$1 < 1100) {
         await Scrollable.ensureVisible(
-            tester.element(find.byKey(ValueKey(records.first['id']! as String))),
+            tester
+                .element(find.byKey(ValueKey(records.first['id']! as String))),
             alignment: 0);
         await tester.pumpAndSettle();
         await capture('records');
       }
-      await tester.tap(find.text('View').first);
+      await tester.tap(find.text('View Details').first);
       await tester.pumpAndSettle();
       expect(find.text('Workout context'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -125,14 +128,10 @@ void main() {
       await tester.ensureVisible(find.text('Close'));
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delivery Issues'));
+      tab.value = RecommendationMonitorTab.attention;
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await capture('issues');
-      await tester.tap(find.text('History'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await capture('history');
       await tester.runAsync(() =>
           File('../../build/module13-ai/evidence/admin-render-metrics.json')
               .writeAsString(const JsonEncoder.withIndent('  ').convert({

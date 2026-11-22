@@ -3,7 +3,8 @@ import 'assistant_reply_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../app/routing/branch_directions.dart';
+import 'package:gainpath_mobile/infrastructure/platform/branch_directions.dart';
+import 'package:gainpath_mobile/infrastructure/platform/branch_location.dart';
 import 'package:flutter/services.dart';
 import '../../application/chat_bloc.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -526,6 +527,26 @@ class _Bubble extends StatelessWidget {
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: _EquipmentCard(equipment: equipment)),
+              if (attachment case NearbyGymsAttachment(:final organizationId))
+                TextButton.icon(
+                  icon: const Icon(Icons.near_me_outlined),
+                  label: const Text('Find nearby gyms'),
+                  onPressed: () =>
+                      Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => BranchDirectoryPage(
+                      locate: locateNearbyGyms,
+                      request: (input) async {
+                        final result = await FirebaseFunctions.instanceFor(
+                                region: 'asia-southeast1')
+                            .httpsCallable('branchManagementCommand')
+                            .call({'organizationId': organizationId, ...input});
+                        return Map<String, dynamic>.from(result.data as Map);
+                      },
+                      openDirections: (uri) =>
+                          launchUrl(uri, mode: LaunchMode.externalApplication),
+                    ),
+                  )),
+                ),
               if (attachment case BranchChatAttachment gym)
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
@@ -641,24 +662,32 @@ class _BranchChatCard extends StatelessWidget {
           if (cover is String && cover.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: SizedBox(height: 126, width: double.infinity, child: _networkHero(cover)),
+              child: SizedBox(
+                  height: 126,
+                  width: double.infinity,
+                  child: _networkHero(cover)),
             ),
-          Text(branch['displayName'] as String, style: Theme.of(context).textTheme.titleMedium),
+          Text(branch['displayName'] as String,
+              style: Theme.of(context).textTheme.titleMedium),
           if (address is String && address.isNotEmpty) Text(address),
           Text(branchOpeningStatus(hours is List ? hours : const [])),
           Wrap(
             children: [
               TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => BranchDirectoryPage(
                     initialDetails: branch,
                     request: (input) async {
-                      final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                      final result = await FirebaseFunctions.instanceFor(
+                              region: 'asia-southeast1')
                           .httpsCallable('branchManagementCommand')
-                          .call({'organizationId': gym.organizationId, ...input});
+                          .call(
+                              {'organizationId': gym.organizationId, ...input});
                       return Map<String, dynamic>.from(result.data as Map);
                     },
-                    openDirections: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
+                    openDirections: (uri) =>
+                        launchUrl(uri, mode: LaunchMode.externalApplication),
                   ),
                 )),
                 child: const Text('View branch'),

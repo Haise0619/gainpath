@@ -96,7 +96,9 @@ class AndroidPoseCamera
               planes: [
                 for (final p in image.planes)
                   PoseImagePlane(
-                      bytes: Uint8List.fromList(p.bytes),
+                      // CameraX sends an owned byte snapshot for each plane.
+                      // Keep it read-only without allocating a second copy.
+                      bytes: p.bytes.asUnmodifiableView(),
                       rowStride: p.bytesPerRow,
                       pixelStride: p.bytesPerPixel ??
                           (format == PosePixelFormat.bgra8888 ? 4 : 1))

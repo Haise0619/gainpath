@@ -2,7 +2,8 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:test/test.dart';
 
-class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
+class _FakeFirebaseAuthGateway
+    implements FirebaseAuthGateway, FirebaseGoogleAuthGateway {
   _FakeFirebaseAuthGateway({required this.user});
 
   FirebaseAuthUser user;
@@ -17,6 +18,14 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
   }) async {
     return user;
   }
+
+  @override
+  bool get supportsGoogleSignIn => true;
+
+  @override
+  Future<FirebaseAuthUser> signInWithGoogle(
+          {required bool registering}) async =>
+      user;
 
   @override
   Future<FirebaseAuthUser> register({
@@ -40,6 +49,41 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
 }
 
 void main() {
+  test('Google login preserves member identity and rejects staff roles',
+      () async {
+    final gateway = _FakeFirebaseAuthGateway(
+        user: const FirebaseAuthUser(
+      userId: 'member-123',
+      email: 'member@example.com',
+      emailVerified: true,
+      claims: {
+        'role': 'member',
+        'organizationId': 'gainpath',
+        'branchIds': ['main']
+      },
+    ));
+    final repository = FirebaseAuthRepository(gateway);
+    addTearDown(repository.dispose);
+
+    final session = await repository.signInWithGoogle(registering: false);
+    expect(session.userId, 'member-123');
+    expect(session.needsVerification, isFalse);
+
+    gateway.user = const FirebaseAuthUser(
+      userId: 'coach-456',
+      email: 'coach@example.com',
+      emailVerified: true,
+      claims: {
+        'role': 'coach',
+        'organizationId': 'gainpath',
+        'branchIds': ['main']
+      },
+    );
+    await expectLater(repository.signInWithGoogle(registering: false),
+        throwsA(isA<AuthException>()));
+    expect(gateway.signOutCalls, 1);
+  });
+
   test(
       'inactive or inconsistent membership claims cannot become active sessions',
       () async {

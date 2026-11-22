@@ -714,11 +714,21 @@ Commits0c7164e/da31559 provide grouped bank/wallet/card preferences, branded ico
 
 The phone called an undeployed payment-method endpoint while read/create handlers still used38234a4. Committed54e23e9 reuses the existing protected payment-read callable for selection discovery. Seven existing matching handlers are now source-only updated; deployed archives, runtime/environment/secrets/IAM and unrelated Functions verified.225 backend/30 focused Mobile tests, type checks, scoped analysis, sealed-artifact review and clean Debug build pass. Same-signer APK installed/launched in place; hash/UID/data-directory/first-install preserved and prior APK retained. Owner confirms payment methods load. No provider payment/configuration or automated booking/bill creation; actual hosted-payment UAT remains pending. Admin bundle unchanged. [Fix, acceptance and rollback evidence](ux/member-coach-booking-commercial-checkout.md).
 
+## Workout flow visual feedback — 15 November 2026
+
+Local Member UI now has a purple remaining-rest ring/final-three-second pulse, compact saved completion, published next-exercise cover/mode/targets, and short Ready/accepted-rep animations. Existing camera, pose, counting, audio and business behavior is preserved. Fresh 96 affected Mobile tests, eight-file analysis and arm64 Debug build pass; actual Flutter portrait/landscape/200% renders were inspected. No Android device was connected; installation and physical camera performance remain pending. Details: docs/superpowers/plans/2026-11-15-workout-flow-feedback.md (from docs pages: superpowers/plans/2026-11-15-workout-flow-feedback.md).
+
+## Routine backup signature compatibility — 15 November 2026
+
+Authenticated Firebase backup HTTP400 was traced to the routine signature comparison. A reviewed fix compares parsed values and normalizes empty optional video references without rewriting records/digests or changing authorization, camera, counting or rewards.180 backup tests, production/test TypeScript compilation and24 existing account-backup compatibility checks pass. Owner retry now shows Synced;16 post-fix backup responses returned HTTP200 with no validation rejection. Details: docs/ux/workout-backup-signature-compatibility.md (from docs pages: ux/workout-backup-signature-compatibility.md).
+
+## Workout completion visual refresh — 15 November 2026
+
+Local Routine Summary now uses a lavender completion Hero with native green/gold medal illustration, responsive icon stats, published exercise covers and compact mode/status chips, plus a gold truthful rewards empty-state card. Partial completion, calculated values/visibility, expansion, navigation, save/sync and reward policy remain unchanged.43 affected tests, six-file analysis,15 actual Flutter page renders and arm64 Debug build pass; independent review is clear. APK not installed. Details: docs/superpowers/plans/2026-11-15-workout-completion-visuals.md (from docs pages: superpowers/plans/2026-11-15-workout-completion-visuals.md).
 
 ## AI coach voice V1 —15 November2026
 
 77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](integration/module2-ai-coach-voice-v1-implementation.md).
-
 
 ## Exercise completion handoff —16 November2026
 
@@ -726,4 +736,4 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 
 ## Admin Reports analytics — 16 November 2026
 
-Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. Backend60, Emulator13, Admin58 and Domain198 checks pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).

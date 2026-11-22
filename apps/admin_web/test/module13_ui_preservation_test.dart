@@ -21,13 +21,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('desktop hub offers monitoring tabs and preserves Insights',
+  testWidgets('desktop hub leaves monitoring navigation to the sidebar',
       (tester) async {
     await show(tester, const RiskLeaderboardScreen(), 1400);
-    expect(find.text('Overview'), findsOneWidget);
-    expect(find.text('History'), findsOneWidget);
-    expect(find.text('Delivery Issues'), findsOneWidget);
-    expect(find.text('Exercise Guidance Insights'), findsOneWidget);
+    expect(find.text('Overview'), findsNothing);
+    expect(find.text('History'), findsNothing);
+    expect(find.text('Delivery Issues'), findsNothing);
+    expect(find.text('Exercise Guidance Insights'), findsNothing);
   });
 
   for (final width in [1400.0, 600.0]) {

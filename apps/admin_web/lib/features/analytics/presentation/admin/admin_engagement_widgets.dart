@@ -14,9 +14,16 @@ Widget _stats(Map<String, int> values) =>
 Widget _table(List<String> headings, List<List<String>> rows) =>
     SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: DataTable(columns: [
-          for (final h in headings) DataColumn(label: Text(h))
-        ], rows: [
+        child: DataTable(
+            border: const TableBorder(
+              horizontalInside:
+                  BorderSide(color: AppColors.hairline, width: 0.8),
+            ),
+            headingRowColor:
+                WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+            columns: [
+              for (final h in headings) DataColumn(label: Text(h))
+            ], rows: [
           for (final row in rows)
             DataRow(cells: [for (final cell in row) DataCell(Text(cell))])
         ]));

@@ -36,7 +36,7 @@ void main() {
         });
     debugNetworkImageHttpClientProvider = () => _RenderImageClient(artwork!);
     addTearDown(() => debugNetworkImageHttpClientProvider = null);
-    final dir = Directory('../../build/module13-ai/evidence')
+    final dir = Directory('../../build/module13-discovery-ux')
       ..createSync(recursive: true);
     final scope = SessionScope(userId: 'm1', organizationId: 'gym1');
     final measurements = <Map<String, Object>>[];
@@ -96,8 +96,11 @@ void main() {
       for (final scale in [1.0, 2.0]) {
         for (final stage in [
           'routines',
+          'home',
+          'for-you',
           'tutorials',
           'coaches',
+          'coach-empty',
           'details',
           'general',
           'fallback',
@@ -125,8 +128,9 @@ void main() {
                 padding: const EdgeInsets.all(16),
                 child: MemberRecommendationsView(
                     repository: repository,
+                    compact: stage == 'home',
+                    onViewAll: () {},
                     isCurrent: () => true,
-                    onSettings: () {},
                     onOpenTarget: (_, __) async {},
                     photoBuilder: (_, __) => Image.asset(
                         'assets/images/workout_hub_fallback.png',
@@ -162,7 +166,9 @@ void main() {
                                           'gym1',
                                           'r1')
                                     ]
-                                  : details);
+                                  : stage == 'coach-empty'
+                                      ? []
+                                      : details);
                     }));
           }
           final loadWatch = Stopwatch()..start();
@@ -179,8 +185,10 @@ void main() {
                   home: stage == 'preview'
                       ? body
                       : Scaffold(
-                          appBar:
-                              AppBar(title: const Text('Recommended for You')),
+                          appBar: AppBar(
+                              title: Text(stage == 'home'
+                                  ? 'GainPath'
+                                  : 'Recommended for You')),
                           body: SafeArea(child: body)))));
           if (stage == 'loading') {
             await t.pump(const Duration(milliseconds: 200));
@@ -207,10 +215,11 @@ void main() {
           final filter = switch (stage) {
             'routines' => 'Routines',
             'tutorials' => 'Tutorials',
-            'coaches' => 'Coaches',
+            'coaches' || 'coach-empty' => 'Coaches',
             _ => null
           };
           if (filter != null) {
+            await t.ensureVisible(find.text(filter));
             await t.tap(find.text(filter));
             await t.pumpAndSettle();
           }

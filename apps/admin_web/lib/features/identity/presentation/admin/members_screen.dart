@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'add_member_dialog.dart';
+import 'member_provision_page.dart';
 import 'member_details_dialog.dart';
 import 'user_action_dialogs.dart';
 
@@ -73,12 +73,22 @@ class MembersScreen extends StatefulWidget {
       this.live = false,
       this.branchId,
       this.branchRequest,
-      this.memberSetup});
+      this.memberSetup,
+      this.addingMember = false,
+      this.provisionBranchId,
+      this.onOpenAddMember,
+      this.onCloseAddMember,
+      this.onProvisionLeaveCheckChanged});
 
   final bool live;
   final String? branchId;
   final BranchRequest? branchRequest;
   final MemberSetupRequest? memberSetup;
+  final bool addingMember;
+  final String? provisionBranchId;
+  final VoidCallback? onOpenAddMember;
+  final Future<void> Function()? onCloseAddMember;
+  final ValueChanged<Future<bool> Function()?>? onProvisionLeaveCheckChanged;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -92,6 +102,7 @@ class _MembersScreenState extends State<MembersScreen> {
   Map<String, Map<String, dynamic>> _memberDescriptions = {};
   List<MemberBranch> _branches = [];
   final _resending = <String>{};
+  bool _standaloneProvisioning = false;
   int _page = 0;
 
   // Live state
@@ -272,20 +283,22 @@ class _MembersScreenState extends State<MembersScreen> {
     );
   }
 
-  Future<void> _addMember() async {
-    final created = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AddMemberDialog(
-        request: widget.memberSetup!,
-        loadBranches: _loadBranches,
-        homeBranchId: widget.branchId,
-        onCreated: () {
-          if (mounted) _reloadFirstPage();
-        },
-      ),
-    );
-    if (mounted && created != null) await _viewMember(created);
+  void _addMember() {
+    final open = widget.onOpenAddMember;
+    if (open != null) {
+      open();
+    } else {
+      setState(() => _standaloneProvisioning = true);
+    }
+  }
+
+  Future<void> _closeProvisioning(String? memberId) async {
+    if (widget.onCloseAddMember case final close?) {
+      await close();
+    } else {
+      setState(() => _standaloneProvisioning = false);
+    }
+    if (mounted && memberId != null) await _viewMember(memberId);
   }
 
   Future<void> _resendSetup(String id) async {
@@ -377,6 +390,17 @@ class _MembersScreenState extends State<MembersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_canProvision && (widget.addingMember || _standaloneProvisioning)) {
+      return MemberProvisionPage(
+        key: ValueKey(widget.provisionBranchId ?? widget.branchId),
+        request: widget.memberSetup!,
+        homeBranchId: widget.provisionBranchId ?? widget.branchId,
+        loadBranches: _loadBranches,
+        onCreated: _reloadFirstPage,
+        onClose: _closeProvisioning,
+        onLeaveCheckChanged: widget.onProvisionLeaveCheckChanged,
+      );
+    }
     final all = widget.live ? const <UserAccount>[] : _members;
     final activeCount = widget.live
         ? _liveItems
@@ -463,47 +487,6 @@ class _MembersScreenState extends State<MembersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Breadcrumb Trail
-        Row(
-          children: [
-            Text(
-              'Home',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF807895),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Icon(Icons.chevron_right_rounded,
-                  size: 15, color: Color(0xFF807895)),
-            ),
-            Text(
-              'Users & Coaches',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF807895),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Icon(Icons.chevron_right_rounded,
-                  size: 15, color: Color(0xFF807895)),
-            ),
-            Text(
-              'Members',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF6737CA),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
         // Main Title & Read-Only Badge
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -521,6 +504,7 @@ class _MembersScreenState extends State<MembersScreen> {
             ),
             if (_canProvision)
               FilledButton.icon(
+                  key: const ValueKey('add-member'),
                   onPressed: _addMember,
                   icon: const Icon(Icons.add),
                   label: const Text('Add Member'))

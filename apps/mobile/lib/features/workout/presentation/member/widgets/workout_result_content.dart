@@ -4,6 +4,8 @@ import '../../../domain/routine_attempt.dart';
 import '../../../domain/workout_contracts.dart';
 import '../../workout_presentation.dart';
 import 'workout_save_indicator.dart';
+import 'workout_completion_visuals.dart';
+import 'workout_exercise_image.dart';
 
 const supportedFormRules = {
   'bodyweight-squat-side-v1', 'single-arm-curl-side-v1',
@@ -73,61 +75,52 @@ class WorkoutCompletionHeader extends StatelessWidget {
       tween: Tween(begin: 0, end: 1),
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
-          : const Duration(milliseconds: 220),
+          : const Duration(milliseconds: 280),
       builder: (context, value, child) => Opacity(opacity: value, child: child),
-      child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-              color: AppColors.primaryTint,
-              borderRadius: BorderRadius.circular(24)),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(
-                  complete
-                      ? Icons.task_alt_rounded
-                      : Icons.fitness_center_rounded,
-                  color: AppColors.primary,
-                  size: 28),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text(status,
-                      style: const TextStyle(
-                          color: AppColors.primaryDark,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700)))
-            ]),
-            const SizedBox(height: 14),
-            Text(title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppColors.ink, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(detail, style: const TextStyle(color: AppColors.inkSoft)),
-          ])));
+      child: WorkoutCompletionHero(
+          title: title, status: status, detail: detail, complete: complete));
 }
 
 class WorkoutFact extends StatelessWidget {
-  const WorkoutFact(this.value, this.label, {super.key});
+  const WorkoutFact(this.value, this.label,
+      {super.key,
+      this.icon = Icons.fitness_center_rounded,
+      this.color = AppColors.primaryDark,
+      this.tint = AppColors.primaryTint});
   final String value, label;
+  final IconData icon;
+  final Color color, tint;
   @override
   Widget build(BuildContext context) => Semantics(
       label: '$label: $value',
       excludeSemantics: true,
       child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           constraints: const BoxConstraints(minWidth: 110),
           decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(18)),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.hairline)),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: tint, borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, size: 21, color: color)),
+            const SizedBox(height: 12),
             Text(value,
-                style: const TextStyle(
-                    fontSize: 24,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontSize: 32,
+                    height: 1.05,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark)),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: AppColors.inkSoft)),
+                    color: color)),
+            const SizedBox(height: 6),
+            Text(label,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.inkSoft)),
           ])));
 }
 
@@ -161,15 +154,25 @@ class RoutineCompletionContent extends StatelessWidget {
               '${a.finishedAtMicros == null ? '' : '\n${workoutSavedDate(a.finishedAtMicros!)}'}'),
       saveStatus ?? const WorkoutSaveIndicator(),
       const SizedBox(height: 12),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        WorkoutFact('${a.completedExercises}/${a.entries.length}', 'Exercises'),
+      CompletionStatGrid(children: [
+        WorkoutFact('${a.completedExercises}/${a.entries.length}', 'Exercises',
+            icon: Icons.task_alt_rounded,
+            color: const Color(0xFF166534),
+            tint: AppColors.successTint),
         if (a.entries.any((r) => r.sessionIds.isNotEmpty))
-          WorkoutFact('${a.fullRepetitions}', 'AI full reps'),
+          WorkoutFact('${a.fullRepetitions}', 'AI full reps',
+              icon: Icons.sensors_rounded),
         if (a.guidedDurationMicros > 0)
-          WorkoutFact(workoutDurationLabel(a.guidedDurationMicros),
-              'Video active time'),
+          WorkoutFact(
+              workoutDurationLabel(a.guidedDurationMicros), 'Video active time',
+              icon: Icons.timer_outlined,
+              color: AppColors.accentDark,
+              tint: AppColors.accentTint),
         if (a.timerCompletedSets > 0)
-          WorkoutFact('${a.timerCompletedSets}', 'Timed sets'),
+          WorkoutFact('${a.timerCompletedSets}', 'Timed sets',
+              icon: Icons.play_circle_outline_rounded,
+              color: AppColors.info,
+              tint: AppColors.infoTint),
         if (a.selfReportedSets > 0)
           WorkoutFact('${a.selfReportedSets}', 'self-reported sets'),
       ]),
@@ -184,20 +187,31 @@ class RoutineCompletionContent extends StatelessWidget {
             onOpenSession: onOpenSession,
             availableSessionIds: availableSessionIds),
       const SizedBox(height: 12),
-      ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: const Text('Workout timing'),
-          children: [
-            if (a.startedAtMicros != null)
-              Text('Started ${workoutSavedDate(a.startedAtMicros!)}'),
-            if (a.finishedAtMicros != null)
-              Text('Ended ${workoutSavedDate(a.finishedAtMicros!)}'),
-            if (a.elapsedDurationMicros != null)
-              Text(
-                  '${workoutDurationLabel(a.elapsedDurationMicros!)} elapsed · includes breaks and time away'),
-            if (a.finished && a.finishedAtMicros == null)
-              const Text('Completion time unavailable for this older workout.'),
-          ]),
+      Card(
+          elevation: 0,
+          color: AppColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: AppColors.hairline)),
+          child: ExpansionTile(
+              leading:
+                  const Icon(Icons.schedule_rounded, color: AppColors.primary),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              title: const Text('Workout timing'),
+              children: [
+                if (a.startedAtMicros != null)
+                  Text('Started ${workoutSavedDate(a.startedAtMicros!)}'),
+                if (a.finishedAtMicros != null)
+                  Text('Ended ${workoutSavedDate(a.finishedAtMicros!)}'),
+                if (a.elapsedDurationMicros != null)
+                  Text(
+                      '${workoutDurationLabel(a.elapsedDurationMicros!)} elapsed · includes breaks and time away'),
+                if (a.finished && a.finishedAtMicros == null)
+                  const Text(
+                      'Completion time unavailable for this older workout.'),
+              ])),
     ]);
   }
 }
@@ -227,24 +241,91 @@ class WorkoutExerciseResultCard extends StatelessWidget {
     return Card(
         elevation: 0,
         color: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: AppColors.hairline)),
         child: ExpansionTile(
             tilePadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            leading: Icon(mode.icon, color: AppColors.primary),
-            title: Text(exercise.name,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(mode.label),
-              Text(exerciseStatusLabel(result.status)),
-              Text(result.isTimed
-                  ? '${result.guided?.completedSets ?? 0} timed sets · ${workoutDurationLabel(result.guided?.totalActiveMicroseconds ?? 0)} active'
-                  : result.sessionIds.isNotEmpty
-                      ? '${result.fullRepetitions} full reps · ${result.partialRepetitions} partial reps'
-                      : '${result.manualSets} sets · Self-reported'),
-            ]),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: LayoutBuilder(builder: (context, bounds) {
+              final completed = result.completed;
+              final details = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(exercise.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2)),
+                    const SizedBox(height: 9),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      CompletionChip(mode.label,
+                          icon: mode.icon,
+                          color: result.isTimed
+                              ? AppColors.info
+                              : AppColors.primaryDark,
+                          background: result.isTimed
+                              ? AppColors.infoTint
+                              : AppColors.primaryTint),
+                      CompletionChip(
+                          completed
+                              ? 'Completed'
+                              : exerciseStatusLabel(result.status),
+                          icon: completed
+                              ? Icons.check_rounded
+                              : Icons.more_horiz_rounded,
+                          color: completed
+                              ? const Color(0xFF166534)
+                              : AppColors.inkSoft,
+                          background: completed
+                              ? AppColors.successTint
+                              : AppColors.surfaceAlt),
+                    ]),
+                    const SizedBox(height: 9),
+                    Text(
+                        result.isTimed
+                            ? '${result.guided?.completedSets ?? 0} timed sets · ${workoutDurationLabel(result.guided?.totalActiveMicroseconds ?? 0)} active'
+                            : result.sessionIds.isNotEmpty
+                                ? '${result.fullRepetitions} full reps · ${result.partialRepetitions} partial reps'
+                                : '${result.manualSets} sets · Self-reported',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.inkSoft, height: 1.4)),
+                  ]);
+              final stacked = bounds.maxWidth < 245 ||
+                  MediaQuery.textScalerOf(context).scale(14) > 21;
+              final cover = ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                      width: stacked ? double.infinity : 76,
+                      height: stacked ? 132 : 112,
+                      child: WorkoutExerciseImage(
+                          url: exercise.imageUrl, fit: BoxFit.cover)));
+              return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: stacked
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                              cover,
+                              const SizedBox(height: 12),
+                              details
+                            ])
+                      : Row(children: [
+                          cover,
+                          const SizedBox(width: 12),
+                          Expanded(child: details)
+                        ]));
+            }),
             children: [
               Align(alignment: Alignment.centerLeft, child: Text(mode.label)),
               Align(

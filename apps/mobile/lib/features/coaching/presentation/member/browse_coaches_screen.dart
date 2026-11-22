@@ -22,7 +22,7 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.isCurrent,
       this.onOpenPublished,
       this.bookingsBuilder, this.onMessages, this.enforceMembership = false, this.membershipAccessRepository,
-      this.loadSelectedBranch});
+      this.loadSelectedBranch, this.loadBranches});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
@@ -32,6 +32,7 @@ class BrowseCoachesScreen extends StatefulWidget {
   final MembershipAccessRepository? membershipAccessRepository;
   final VoidCallback? onMessages;
   final Future<String?> Function()? loadSelectedBranch;
+  final Future<Map<String, String>> Function()? loadBranches;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
 }
@@ -42,6 +43,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   final _searchController = TextEditingController();
   String _query = '';
   String? _selectedBranch;
+  Map<String, String> _branchNames = {};
   bool _filterBranch = false;
   int _branchRead = 0;
   CoachDirectoryCubit? _directory;
@@ -55,6 +57,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
 
   void _bind() {
     final read = ++_branchRead;
+    _loadBranches(read);
     final loader = widget.loadSelectedBranch;
     if (loader != null) {
       _loadBranch(loader, read);
@@ -62,9 +65,19 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
     if (widget.liveRepository != null) {
       _directory = CoachDirectoryCubit(
           repository: widget.liveRepository!,
+          loadAllPages: widget.loadBranches != null,
           isCurrent: () => widget.isCurrent?.call() == true)
         ..refresh();
     }
+  }
+
+  Future<void> _loadBranches(int read) async {
+    try {
+      final names = await widget.loadBranches?.call();
+      if (names != null && mounted && read == _branchRead && widget.isCurrent?.call() == true) {
+        setState(() => _branchNames = names);
+      }
+    } catch (_) { /* Keep the directory usable. */ }
   }
 
   Future<void> _loadBranch(Future<String?> Function() loader, int read) async {
@@ -94,6 +107,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       _searchController.clear();
       _query = '';
       _selectedBranch = null;
+      _branchNames = {};
       _filterBranch = false;
       _specialtyFilter = 'All';
       _tab = 0;
@@ -900,13 +914,23 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                                 icon: const Icon(Icons.tune_rounded, size: 22))),
                                       ]),
                                   const SizedBox(height: 12),
-                                  if (_selectedBranch != null)
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: FilterChip(
-                                        label: const Text('Selected branch'),
-                                        selected: _filterBranch,
-                                        onSelected: (value) => setState(() => _filterBranch = value),
+                                  if (_branchNames.isNotEmpty)
+                                    InputDecorator(
+                                      decoration: const InputDecoration(labelText: 'Training location'),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          isExpanded: true,
+                                          value: _filterBranch && _branchNames.containsKey(_selectedBranch) ? _selectedBranch : '',
+                                          items: [
+                                            const DropdownMenuItem(value: '', child: Text('All branches')),
+                                            for (final branch in _branchNames.entries)
+                                              DropdownMenuItem(value: branch.key, child: Text(branch.value)),
+                                          ],
+                                          onChanged: (value) => setState(() {
+                                            _selectedBranch = value;
+                                            _filterBranch = value != null && value.isNotEmpty;
+                                          }),
+                                        ),
                                       ),
                                     ),
                                   SingleChildScrollView(
@@ -989,6 +1013,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                                 'member-coach-${c.id}'),
                                             coach: c,
                                             published: p,
+                                            branchNames: _branchNames,
                                             photo: p == null
                                                 ? null
                                                 : PublishedCoachPhoto(

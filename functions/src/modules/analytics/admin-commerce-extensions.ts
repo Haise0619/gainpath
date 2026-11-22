@@ -1,3 +1,4 @@
+import {forEachReportBatch} from './report-read-batches';
 import {DomainError} from '../../platform/errors';
 import {readAll,type DocumentStore,type DocumentData} from '../../platform/firestore/store';
 import {readVerifiedTargetMembershipEntitlement} from '../commerce/membership-entitlement';
@@ -19,17 +20,17 @@ export async function commerceExtensions(store:DocumentStore,auth:Auth,org:strin
  const candidates=members.filter(r=>r.data.status==='active'&&r.data.role==='member');
  if(candidates.length>200||bookings.length>1000)throw new DomainError('resource-exhausted','Coach and membership reporting exceeds its bounded source limit.');
  for(const m of members.filter(r=>r.data.role==='coach')){await store.transact(async tx=>{await authorizeAdminReport(tx,auth,org);const profile=await tx.get(`orgs/${org}/coaches/${m.id}`);coach(m.id,profile?.name??profile?.displayName);});}
- for(const m of candidates){
+ await forEachReportBatch(candidates, async m => {
   const canonical=await store.transact(async tx=>{await authorizeAdminReport(tx,auth,org);return tx.get('users/'+m.id);});
-  if(canonical?.organizationId!==org||(canonical.role!==undefined&&canonical.role!=='member')||(m.data.userId!==undefined&&m.data.userId!==m.id))continue;
-  const lifecycle=canonical.accountLifecycle as DocumentData|undefined;if(lifecycle&&(lifecycle.state!=='active'||lifecycle.revocationPending!==false))continue;
-  if(!identity){current.unknown++;continue;}
+  if(canonical?.organizationId!==org||(canonical.role!==undefined&&canonical.role!=='member')||(m.data.userId!==undefined&&m.data.userId!==m.id))return;
+  const lifecycle=canonical.accountLifecycle as DocumentData|undefined;if(lifecycle&&(lifecycle.state!=='active'||lifecycle.revocationPending!==false))return;
+  if(!identity){current.unknown++;return;}
   const facts=await identity(m.id);
-  if(!facts.exists||facts.disabled||!facts.emailVerified){current.unknown++;continue;}
+  if(!facts.exists||facts.disabled||!facts.emailVerified){current.unknown++;return;}
   const e=await store.transact(async tx=>{await authorizeAdminReport(tx,auth,org);return readVerifiedTargetMembershipEntitlement(tx,m.id,org,now,facts);});
   if(e.status==='resolved'&&['free','basic','premium'].includes(String(e.effectiveTier)))current[e.effectiveTier as 'free'|'basic'|'premium']++;else current.unknown++;
- }
- for(const {id:bookingId,data:b} of bookings){
+ });
+ await forEachReportBatch(bookings, async ({id:bookingId,data:b}) => {
   if(!id(b.coachId)||!id(b.memberId))throw fail();const c=coach(b.coachId);
   const d=(t:number)=>{const key=date(t);let row=c.daily.find(v=>v.date===key);if(!row){row={date:key,bookings:0,consultations:0};c.daily.push(row);}return row;};
   if(inside(b.createdAtMillis)){c.bookings++;const key=b.status==='pending_hold'?'pendingHold':String(b.status);if(key in c)(c as unknown as Record<string,number>)[key]++;d(b.createdAtMillis).bookings++;}
@@ -38,7 +39,7 @@ export async function commerceExtensions(store:DocumentStore,auth:Auth,org:strin
   if(note){if(note.schemaVersion!==1||note.organizationId!==org||note.bookingId!==bookingId||note.coachId!==b.coachId||note.memberId!==b.memberId||b.status!=='completed'||!integer(note.publishedAtMillis)||!integer(b.endAtMillis)||note.publishedAtMillis<b.endAtMillis||note.publishedAtMillis>now||typeof note.text!=='string'||!note.text.trim())throw fail();if(inside(note.publishedAtMillis)){c.consultations++;d(note.publishedAtMillis).consultations++;}}
   else if(b.status==='completed'&&inside(b.createdAtMillis))c.missingConsultations++;
   if(review){if(!note||review.schemaVersion!==1||review.bookingId!==bookingId||review.coachId!==b.coachId||review.memberId!==b.memberId||!integer(review.stars)||review.stars<1||review.stars>5||!integer(review.reviewedAtMillis)||review.reviewedAtMillis<Number(note.publishedAtMillis)||review.reviewedAtMillis>now)throw fail();if(inside(review.reviewedAtMillis)){c.reviewCount++;c.ratingSum+=review.stars;}}
- }
+ });
  const plans=new Map<string,ReturnType<typeof metric>>(),coaching=metric();
  for(const {data:p} of payments){
   if(p.organizationId!==org)throw fail();const membership=['MembershipPurchase','MembershipRenewal'].includes(String(p.kind));if(!membership&&p.type!=='CoachingBooking')throw fail();

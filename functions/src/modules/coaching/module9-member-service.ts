@@ -39,6 +39,8 @@ export async function module9MemberCommand(store: DocumentStore, auth: Auth, raw
     if (rows.length > 31) throw new DomainError('failed-precondition', 'Notification list requires review.');
     const records=[];
     for(const {id,data} of rows.slice(0,30)) {
+      if(data.recipientId!==uid)throw new DomainError('failed-precondition','Notification requires review.');
+      try {
       if (data.schemaVersion !== 1 || data.recipientId !== uid || typeof data.title !== 'string' || typeof data.message !== 'string'
         || !Number.isSafeInteger(data.createdAtMillis) || typeof data.read !== 'boolean') throw new DomainError('failed-precondition', 'Notification requires review.');
       const record={ id, title: data.title, message: data.message, bookingId: data.bookingId ?? null, createdAtMillis: data.createdAtMillis, read: data.read };
@@ -50,6 +52,10 @@ export async function module9MemberCommand(store: DocumentStore, auth: Auth, raw
       if(Object.keys(p).length!==3||Object.keys(p).some(k=>!['title','message','recommendation'].includes(k))||typeof p.title!=='string'||!p.title.trim()||p.title.length>200||typeof p.message!=='string'||p.message.length>500||Object.keys(r).length!==6||Object.keys(r).some(k=>!['schemaVersion','recommendationId','kind','state','expiresAtMillis','target'].includes(k))||r.schemaVersion!==1||r.recommendationId!==data.recommendationId||typeof r.recommendationId!=='string'||!/^[a-f0-9]{64}$/.test(r.recommendationId)||r.kind!==data.recommendationKind||(r.kind!=='trainer'&&r.kind!=='content'&&r.kind!=='routine')||!['available','not_delivered','expired','withdrawn','dismissed','unavailable'].includes(r.state as string)||!Number.isSafeInteger(r.expiresAtMillis)||Number(r.expiresAtMillis)<=0||(r.state==='available')!==(r.target!==null))throw new DomainError('failed-precondition','Recommendation projection requires review.');
       const target=r.target===null?null:parseCanonicalTarget(r.target,org);if(target&&target.kind!==r.kind)throw new DomainError('failed-precondition','Recommendation kind mismatch.');
       records.push({...record,title:p.title,message:p.message,bookingId:null,recommendation:{schemaVersion:1,recommendationId:r.recommendationId,kind:r.kind,state:r.state,expiresAtMillis:r.expiresAtMillis,target}});
+      } catch(error) {
+        if(error instanceof DomainError && ['permission-denied','unauthenticated'].includes(error.code))throw error;
+        console.warn('module9_notification_skipped',{reason:'invalid_record_or_projection'});
+      }
     }
     await store.transact(authorize);
     return { schemaVersion: 1, records, nextAfterId: rows.length > 30 ? rows[29].id : null };

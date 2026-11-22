@@ -78,11 +78,13 @@ void main() {
     await repo.createWithSelectedPaymentMethod('booking',
         selectedPaymentMethodCode: 'grabpay', quoteToken: 'a' * 64);
     expect(sent?['selectedPaymentMethodCode'], 'grabpay');
+    expect(sent?['supportsXendit'], true);
     expect(sent!.containsKey('gatewayCode'), isFalse);
     expect(sent!.containsKey('selectedAt'), isFalse);
     await repo.loadPaymentSelections('booking');
     expect(endpoint, 'getBookingPaymentCommand');
     expect(sent?['includeSelectionMethods'], true);
+    expect(sent?['supportsXendit'], true);
   });
   test('method discovery rejects stale account responses', () async {
     var current = true;

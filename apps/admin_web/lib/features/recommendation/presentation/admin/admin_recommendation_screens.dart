@@ -1,7 +1,6 @@
 import '../../application/canonical_admin_recommendation_repository.dart';
 import 'canonical_admin_recommendation_panel.dart';
 import 'package:flutter/material.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/exercise_insights_repository.dart';
 import '../../application/recommendation_queue_repository.dart';
 import 'exercise_insights_panel.dart';
@@ -18,8 +17,10 @@ class RiskLeaderboardScreen extends StatefulWidget {
       this.queueRepository,
       this.queueClock,
       this.canonicalRepository,
+      this.relatedLinks = const {},
       this.initialInsights = false,
       this.initialTab = RecommendationMonitorTab.overview});
+  final Map<String, VoidCallback> relatedLinks;
   final bool initialInsights;
   final RecommendationMonitorTab initialTab;
   final CanonicalAdminRecommendationRepository? canonicalRepository;
@@ -32,63 +33,24 @@ class RiskLeaderboardScreen extends StatefulWidget {
 }
 
 class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
-  late var _tab = widget.initialTab;
-  late bool _insights = widget.initialInsights;
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  Text('Recommendations',
-                      style: Theme.of(context).textTheme.headlineMedium),
-                  TextButton.icon(
-                      onPressed: () => setState(() => _insights = !_insights),
-                      icon: Icon(_insights
-                          ? Icons.arrow_back
-                          : Icons.insights_outlined),
-                      label: Text(_insights
-                          ? 'Back to recommendations'
-                          : 'Exercise Guidance Insights')),
-                ])),
-        if (!_insights)
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final (tab, label) in [
-                  (RecommendationMonitorTab.overview, 'Overview'),
-                  if (widget.canonicalRepository == null)
-                    (RecommendationMonitorTab.history, 'History'),
-                  (RecommendationMonitorTab.attention, 'Delivery Issues'),
-                ])
-                  ChoiceChip(
-                    selectedColor: AppColors.primaryTint,
-                    checkmarkColor: AppColors.primary,
-                    labelStyle: const TextStyle(color: AppColors.primary),
-                    label: Text(label),
-                    selected: _tab == tab,
-                    onSelected: (_) => setState(() => _tab = tab),
-                  ),
-              ])),
         Expanded(
-            child: _insights
+            child: widget.initialInsights
                 ? ExerciseInsightsPanel(
                     repository: widget.insightsRepository,
                     clock: widget.insightsClock)
                 : widget.canonicalRepository != null
                     ? CanonicalAdminRecommendationPanel(
                         repository: widget.canonicalRepository!,
-                        tab: _tab,
-                        clock: widget.queueClock)
+                        tab: widget.initialTab,
+                        clock: widget.queueClock,
+                        relatedLinks: widget.relatedLinks)
                     : RecommendationQueuePanel(
                         readOnly: true,
-                        tab: _tab,
+                        tab: widget.initialTab,
                         repository: widget.queueRepository,
                         clock: widget.queueClock)),
       ]));

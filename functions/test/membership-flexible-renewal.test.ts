@@ -1,3 +1,4 @@
+import { resolveMembershipEntitlement } from '../src/modules/commerce/membership-entitlement';
 import { expect, it } from 'vitest';
 import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billplz-sandbox';
 import { createMembershipPayment, membershipQuote, readMembershipPayment, settleMembershipPayment } from '../src/modules/commerce/membership-payment-service';
@@ -101,12 +102,52 @@ it('concurrent early renewal requests recover one bill and clearance extends it 
   expect(store.documents.get(accountPath)?.expiresAtMillis).toBe(expiry + 2 * term);
 });
 
-it.each([['basic', 'premium'], ['premium', 'basic']] as const)('rejects an active %s to %s conversion before billing', async (current, target) => {
-  const { store, bills, reserve, activate } = fixture();
-  await activate(current);
-  const at = expiry - 13 * day;
-  await expect(reserve(target, 'purchase', 'switch-purchase', at)).rejects.toMatchObject({ code: 'failed-precondition' });
-  await expect(reserve(target, 'renewal', 'switch-renewal', at)).rejects.toMatchObject({ code: 'failed-precondition' });
+it('upgrades active Basic for the prorated price only after verified payment', async () => {
+  const { store, reserve, clear, activate } = fixture();
+  await activate('basic');
+  const at = expiry - 15 * day;
+  const upgrade = await reserve('premium', 'purchase', 'upgrade', at);
+  expect(upgrade).toMatchObject({ amountMinor: 2000, upgradeExpiresAtMillis: expiry, paymentStatus: 'pending' });
+  expect(store.documents.get(accountPath)).toMatchObject({ planId: 'basic', expiresAtMillis: expiry });
+  await clear(upgrade, at + 1000);
+  await clear(upgrade, at + 2000);
+  expect(store.documents.get(accountPath)).toMatchObject({ planId: 'premium', expiresAtMillis: expiry });
+  const entitlement = await store.transact(tx => resolveMembershipEntitlement(tx, auth, organizationId, at + 2000));
+  expect(entitlement).toMatchObject({ effectiveTier: 'premium', paidExpiresAtMillis: expiry });
+});
+
+it('sends a cleared upgrade for review if the original Basic term expired', async () => {
+  const { store, reserve, clear, activate } = fixture();
+  await activate('basic');
+  const upgrade = await reserve('premium', 'purchase', 'upgrade', expiry - 1000);
+  await expect(clear(upgrade, expiry + 1000)).resolves.toMatchObject({
+    paymentStatus: 'cleared', fulfilmentStatus: 'reconciliation_required',
+  });
+  expect(store.documents.get(accountPath)).toMatchObject({ planId: 'basic', expiresAtMillis: expiry });
+});
+
+it('rejects Premium to Basic changes before billing', async () => {
+  const { bills, reserve, activate } = fixture();
+  await activate('premium');
+  await expect(reserve('basic', 'purchase', 'downgrade', expiry - day))
+    .rejects.toMatchObject({ code: 'failed-precondition' });
   expect(bills.size).toBe(1);
-  expect(store.documents.get(accountPath)).toMatchObject({ planId: current, expiresAtMillis: expiry });
+});
+it('requires the reviewed upgrade price, refuses promo codes and does not open a second bill', async () => {
+  const { store, bills, gateway, reserve, activate } = fixture();
+  await activate('basic');
+  const at = expiry - 15 * day;
+  const input = { ...scope, planId: 'premium', requestId: 'upgrade', intent: 'purchase' };
+  await expect(membershipQuote(store, auth, { ...scope, planId: 'premium', promoCode: 'PROMO' }, () => at))
+    .rejects.toMatchObject({ reason: 'promo_invalid' });
+  await expect(createMembershipPayment(store, auth, input, gateway, () => at))
+    .rejects.toMatchObject({ reason: 'quote_changed' });
+  const oldQuote = await membershipQuote(store, auth, { ...scope, planId: 'premium' }, () => at);
+  await expect(createMembershipPayment(store, auth, { ...input, quoteId: oldQuote.quoteId }, gateway, () => at + day))
+    .rejects.toMatchObject({ reason: 'quote_changed' });
+  const renewal = await reserve('basic', 'renewal', 'renewal', at);
+  expect(renewal.paymentStatus).toBe('pending');
+  await expect(createMembershipPayment(store, auth, { ...input, quoteId: oldQuote.quoteId }, gateway, () => at))
+    .rejects.toMatchObject({ code: 'failed-precondition' });
+  expect(bills.size).toBe(2);
 });

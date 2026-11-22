@@ -72,13 +72,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RiskLeaderboardScreen()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Overview'));
-    await tester.pumpAndSettle();
+    expect(find.text('Overview'), findsNothing);
     expect(find.text('Recommendation queue is unavailable in this release.'),
         findsOneWidget);
     expect(find.text('Export CSV'), findsNothing);
-    await tester.tap(find.text('History'));
-    await tester.pumpAndSettle();
+    expect(find.text('History'), findsNothing);
     expect(find.text('Recommendation queue is unavailable in this release.'),
         findsOneWidget);
   });
