@@ -99,7 +99,8 @@ void main() {
     );
   }
 
-  testWidgets('every home page section title matches recommendation section titleLarge style',
+  testWidgets(
+      'every home page section title matches recommendation section titleLarge style',
       (tester) async {
     final restore = await installFypOfflineFonts();
     addTearDown(restore);
@@ -110,7 +111,8 @@ void main() {
 
     final captureKey = GlobalKey();
     final theme = AppTheme.build();
-    await tester.pumpWidget(createTestWidget(theme: theme, captureKey: captureKey));
+    await tester
+        .pumpWidget(createTestWidget(theme: theme, captureKey: captureKey));
     await tester.pumpAndSettle();
 
     final expectedTitleLarge = theme.textTheme.titleLarge!;
@@ -128,29 +130,37 @@ void main() {
 
     for (final title in sectionTitles) {
       final finder = find.text(title);
-      expect(finder, findsAtLeastNWidgets(1), reason: 'Section title "$title" must be present');
+      expect(finder, findsAtLeastNWidgets(1),
+          reason: 'Section title "$title" must be present');
       final textWidget = tester.widget<Text>(finder.first);
       expect(textWidget.style?.fontSize, equals(expectedTitleLarge.fontSize),
-          reason: 'Section "$title" fontSize must match recommendation section titleLarge');
-      expect(textWidget.style?.fontWeight, equals(expectedTitleLarge.fontWeight),
-          reason: 'Section "$title" fontWeight must match recommendation section titleLarge');
+          reason:
+              'Section "$title" fontSize must match recommendation section titleLarge');
+      expect(
+          textWidget.style?.fontWeight, equals(expectedTitleLarge.fontWeight),
+          reason:
+              'Section "$title" fontWeight must match recommendation section titleLarge');
       expect(textWidget.style?.color, equals(expectedTitleLarge.color),
-          reason: 'Section "$title" color must match recommendation section titleLarge');
+          reason:
+              'Section "$title" color must match recommendation section titleLarge');
     }
 
     // Capture screenshot of the full home view
-    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
+    final boundary =
+        tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
     await tester.runAsync(() async {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       final file = File(
-          'C:/Users/Ngzhe/.gemini/antigravity/brain/2e9bce9b-03ec-4533-aa97-83c6a91f9314/home_page_consistent_section_titles.png');
+          'build/member-ui-renders/home_page_consistent_section_titles.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
     });
   });
 
-  testWidgets('every section title under buildMemberTypographyTheme matches recommendation style',
+  testWidgets(
+      'every section title under buildMemberTypographyTheme matches recommendation style',
       (tester) async {
     final restore = await installFypOfflineFonts();
     addTearDown(restore);
@@ -161,7 +171,8 @@ void main() {
 
     final captureKey = GlobalKey();
     final memberTheme = buildMemberTypographyTheme();
-    await tester.pumpWidget(createTestWidget(theme: memberTheme, captureKey: captureKey));
+    await tester.pumpWidget(
+        createTestWidget(theme: memberTheme, captureKey: captureKey));
     await tester.pumpAndSettle();
 
     final expectedTitleLarge = memberTheme.textTheme.titleLarge!;
@@ -178,23 +189,31 @@ void main() {
 
     for (final title in sectionTitles) {
       final finder = find.text(title);
-      expect(finder, findsAtLeastNWidgets(1), reason: 'Section title "$title" must be present');
+      expect(finder, findsAtLeastNWidgets(1),
+          reason: 'Section title "$title" must be present');
       final textWidget = tester.widget<Text>(finder.first);
       expect(textWidget.style?.fontSize, equals(expectedTitleLarge.fontSize),
-          reason: 'Section "$title" fontSize must match recommendation section titleLarge');
-      expect(textWidget.style?.fontWeight, equals(expectedTitleLarge.fontWeight),
-          reason: 'Section "$title" fontWeight must match recommendation section titleLarge');
-      expect(textWidget.style?.fontFamily, equals(expectedTitleLarge.fontFamily),
-          reason: 'Section "$title" fontFamily must match recommendation section titleLarge');
+          reason:
+              'Section "$title" fontSize must match recommendation section titleLarge');
+      expect(
+          textWidget.style?.fontWeight, equals(expectedTitleLarge.fontWeight),
+          reason:
+              'Section "$title" fontWeight must match recommendation section titleLarge');
+      expect(
+          textWidget.style?.fontFamily, equals(expectedTitleLarge.fontFamily),
+          reason:
+              'Section "$title" fontFamily must match recommendation section titleLarge');
     }
 
     // Capture screenshot of the member typography theme view
-    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
+    final boundary =
+        tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
     await tester.runAsync(() async {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       final file = File(
-          'C:/Users/Ngzhe/.gemini/antigravity/brain/2e9bce9b-03ec-4533-aa97-83c6a91f9314/home_page_member_typography_titles.png');
+          'build/member-ui-renders/home_page_member_typography_titles.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
     });

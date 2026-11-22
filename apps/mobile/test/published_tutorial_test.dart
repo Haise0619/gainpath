@@ -11,6 +11,7 @@ import 'package:gainpath_mobile/features/workout/domain/tutorial_player.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/published_exercise_tutorial_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'support/in_memory_member_progress.dart';
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 PublishedRoutineExercise row({String? url}) => PublishedRoutineExercise(
@@ -436,6 +437,7 @@ void main() {
         child: MaterialApp(
           home: WorkoutPrepRoute(
               publishedRoutine: routine,
+              progressRepositoryFactory: inMemoryMemberProgress,
               programStoreFactory: (scope) async => MemoryProgramStore(scope),
               routineStoreFactory: (scope) async => MemoryJourneyStore(scope)),
         )));

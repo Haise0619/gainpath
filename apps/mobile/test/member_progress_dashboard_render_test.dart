@@ -17,6 +17,9 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_mobile/features/analytics/presentation/shared/progress_dashboard_data.dart';
 import 'package:gainpath_mobile/features/analytics/presentation/shared/progress_dashboard_details.dart';
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 class Targets implements NumericFitnessGoalRepository {
   Targets(this.scope, {this.populated = false});
   final bool populated;
@@ -45,8 +48,7 @@ void main() {
     addTearDown(await installFypOfflineFonts());
     await tester.runAsync(() async {
       final loader = FontLoader('MaterialIcons');
-      loader.addFont(File(
-              'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
+      loader.addFont(File(flutterTestFontPath('MaterialIcons-Regular.otf'))
           .readAsBytes()
           .then(ByteData.sublistView));
       await loader.load();

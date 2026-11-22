@@ -172,13 +172,15 @@ void main() {
         ],
       });
 
-  Future<void> saveScreenshot(Key key, WidgetTester tester, String filename) async {
-    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
+  Future<void> saveScreenshot(
+      Key key, WidgetTester tester, String filename) async {
+    final boundary =
+        tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
     await tester.runAsync(() async {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      final file = File(
-          'C:/Users/Ngzhe/.gemini/antigravity/brain/2e9bce9b-03ec-4533-aa97-83c6a91f9314/$filename');
+      final file = File('build/member-ui-renders/$filename');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
     });
@@ -463,12 +465,12 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: '200% text scale must never cause overflow');
+    expect(tester.takeException(), isNull,
+        reason: '200% text scale must never cause overflow');
     await saveScreenshot(key, tester, 'v2_home_200pct_font_scale.png');
   });
 
-  testWidgets('Verify narrow screen (320px) without overflow',
-      (tester) async {
+  testWidgets('Verify narrow screen (320px) without overflow', (tester) async {
     final restore = await installFypOfflineFonts();
     addTearDown(restore);
 
@@ -485,7 +487,8 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: '320px narrow screen must not overflow');
+    expect(tester.takeException(), isNull,
+        reason: '320px narrow screen must not overflow');
     await saveScreenshot(key, tester, 'v2_home_320px_narrow.png');
   });
 }

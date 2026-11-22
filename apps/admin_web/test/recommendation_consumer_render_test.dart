@@ -2,30 +2,19 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import '../../../test_support/fyp_render_support.dart';
+import 'support/module13_demo_render.dart' show loadDemoRenderFonts;
 import 'support/recommendation_queue_transport.dart';
 import 'support/recommendation_queue_fixture.dart';
 
 void main() {
   setUpAll(() async {
     GoogleFonts.config.allowRuntimeFetching = false;
-    for (final font in [
-      ('ReviewArial', 'C:/Windows/Fonts/arial.ttf'),
-      (
-        'MaterialIcons',
-        'C:/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf'
-      )
-    ]) {
-      final loader = FontLoader(font.$1)
-        ..addFont(Future.value(
-            ByteData.sublistView(await File(font.$2).readAsBytes())));
-      await loader.load();
-    }
+    await loadDemoRenderFonts();
   });
   for (final stage in ['monitor']) {
     for (final scenario in [
@@ -44,9 +33,9 @@ void main() {
           ..freshDetail = queueLead(kind: 'content');
         final baseTheme = AppTheme.build();
         final theme = baseTheme.copyWith(
-            textTheme: baseTheme.textTheme.apply(fontFamily: 'ReviewArial'),
+            textTheme: baseTheme.textTheme.apply(fontFamily: 'CReview'),
             primaryTextTheme:
-                baseTheme.primaryTextTheme.apply(fontFamily: 'ReviewArial'));
+                baseTheme.primaryTextTheme.apply(fontFamily: 'CReview'));
         await tester.pumpWidget(RepaintBoundary(
             key: key,
             child: MaterialApp(

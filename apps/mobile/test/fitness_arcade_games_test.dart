@@ -12,6 +12,8 @@ import 'package:gainpath_mobile/features/gamification/presentation/member/mini_g
 import 'package:gainpath_mobile/features/gamification/presentation/member/mini_games_screen.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/reach_tap_challenge_card.dart';
 import 'support/mini_game_participation_fixture.dart';
+import 'support/module13_demo_render.dart' show loadDemoRenderFonts;
+import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_mini_game_participation_repository.dart';
 
 class Reader implements MiniGameContentReader {
@@ -80,7 +82,8 @@ class Participation implements MiniGameParticipationRepository {
       throw StateError('overview only');
 }
 
-Widget host(Widget child, {double scale = 1}) => MaterialApp(
+Widget host(Widget child, {double scale = 1, ThemeData? theme}) => MaterialApp(
+      theme: theme,
       builder: (_, child) => MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(scale)),
           child: child!),
@@ -215,15 +218,18 @@ void main() {
 
   testWidgets('two equal columns show only cover title earning and bottom best',
       (tester) async {
+    await tester.runAsync(loadDemoRenderFonts);
     tester.view.physicalSize = const Size(375, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(host(FitnessArcadeGames(
-        reader: Reader(),
-        bestScoreStore: Best(),
-        reachTapHistory: History(),
-        participation: Participation(),
-        onReturn: () async {})));
+    await tester.pumpWidget(host(
+        FitnessArcadeGames(
+            reader: Reader(),
+            bestScoreStore: Best(),
+            reachTapHistory: History(),
+            participation: Participation(),
+            onReturn: () async {}),
+        theme: buildMemberTypographyTheme()));
     await tester.pumpAndSettle();
     final move =
         tester.getRect(find.byKey(const Key('arcade-move-catch-card')));

@@ -20,6 +20,9 @@ import 'workout_report_ui_test.dart' show ReportExporterFake;
 import 'support/workout_analytics_fixture.dart';
 import 'package:gainpath_mobile/features/analytics/presentation/member/posture_accuracy_screen.dart';
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   testWidgets('render analytics product screens', (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
@@ -28,7 +31,7 @@ void main() {
         final loader = FontLoader(font);
         loader.addFont(File(font == 'Barlow'
                 ? 'assets/fonts/Barlow-Regular.ttf'
-                : 'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
+                : flutterTestFontPath('MaterialIcons-Regular.otf'))
             .readAsBytes()
             .then(ByteData.sublistView));
         await loader.load();

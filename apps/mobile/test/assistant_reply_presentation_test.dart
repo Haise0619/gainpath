@@ -14,6 +14,9 @@ import 'module6_chat_flow_test.dart' show LiveChat;
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 ChatMessage fixtureReply(String kind) {
   const source = 'Presentation fixture · not a real Member record';
   FitnessFactsAttachment facts(String title, List<FitnessFact> rows,
@@ -200,10 +203,7 @@ void main() {
         addTearDown(restore!);
         await tester.runAsync(() async {
           for (final (family, path) in [
-            (
-              'MaterialIcons',
-              'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-            ),
+            ('MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf')),
             ('Barlow', 'assets/fonts/Barlow-Regular.ttf'),
             ('BarlowCondensed', 'assets/fonts/BarlowCondensed-Regular.ttf')
           ]) {

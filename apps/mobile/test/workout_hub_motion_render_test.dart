@@ -114,7 +114,7 @@ void main() {
         await t.tap(find.text('View all 6 exercises'));
         await t.pumpAndSettle();
         await captureHub(t, key, 'free-${width.toInt()}-$scale-expanded');
-        await t.ensureVisible(find.text('Camera setup'));
+        await t.ensureVisible(find.text('AI Camera Setup'));
         await t.pumpAndSettle();
         await captureHub(t, key, 'free-${width.toInt()}-$scale-bottom');
         expect(t.takeException(), isNull);

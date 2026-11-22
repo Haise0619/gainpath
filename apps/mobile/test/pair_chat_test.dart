@@ -125,13 +125,15 @@ void main() {
       await t.ensureVisible(find.text('View details'));
       await t.tap(find.text('View details'));
       await t.pumpAndSettle();
-      await t.scrollUntilVisible(find.text('SESSION ACTIVITY'), 300);
-      await t.pumpAndSettle();
-      expect(
-          find.text('View conversation'),
-          ['confirmed', 'completed'].contains(status)
-              ? findsOneWidget
-              : findsNothing);
+      final hasConversation = ['confirmed', 'completed'].contains(status);
+      if (hasConversation) {
+        await t.scrollUntilVisible(find.text('View conversation'), 300);
+        await t.pumpAndSettle();
+      }
+      expect(find.text('SESSION ACTIVITY'),
+          hasConversation ? findsOneWidget : findsNothing);
+      expect(find.text('View conversation'),
+          hasConversation ? findsOneWidget : findsNothing);
       expect(find.text('Message Jackson'), findsNothing);
     });
   }

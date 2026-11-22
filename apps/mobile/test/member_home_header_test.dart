@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, AppRole, SessionScope;
 import 'package:gainpath_mobile/app/home/member_home_screen.dart';
+import 'package:gainpath_mobile/app/home/member_home_activity.dart';
+import 'support/module13_demo_render.dart' show loadDemoRenderFonts;
 import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/features/gamification/application/app_check_in_cubit.dart';
 import 'package:gainpath_mobile/features/gamification/domain/app_check_in.dart';
@@ -11,6 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  setUpAll(loadDemoRenderFonts);
 
   const testSession = AuthSession(
     userId: 'm1',
@@ -89,11 +92,7 @@ void main() {
     final weeklyTitle = find.text('Weekly progress');
     final recentTitle = find.text('Recent activity');
     final quickTitle = find.text('Quick access');
-    final weeklyCard = find
-        .ancestor(
-            of: find.text('Workout progress is loading.'),
-            matching: find.byType(Panel))
-        .first;
+    final weeklyCard = find.byType(HomeWeeklyActivity);
     final recentCard = find
         .ancestor(
             of: find.text('Loading saved activity…'),

@@ -10,6 +10,9 @@ import 'package:gainpath_mobile/features/workout/domain/published_routine_view.d
 import 'package:gainpath_mobile/features/workout/presentation/member/published_routine_catalog_controls.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   for (final variant in [
     (name: '', size: const Size(390, 844), scale: 1.0, dark: false),
@@ -28,9 +31,8 @@ void main() {
       }
 
       await tester.runAsync(() async {
-        await loadFont('MaterialIcons', [
-          'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-        ]);
+        await loadFont('MaterialIcons',
+            [flutterTestFontPath('MaterialIcons-Regular.otf')]);
         await loadFont('Barlow', [
           'assets/fonts/Barlow-Regular.ttf',
           'assets/fonts/Barlow-SemiBold.ttf',

@@ -9,6 +9,9 @@ import 'package:gainpath_mobile/features/recommendation/application/recommendati
 import 'package:gainpath_mobile/features/recommendation/presentation/member/personalized_recommendation_settings_screen.dart';
 import 'support/recommendation_consent_fixture.dart';
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   setUpAll(() async {
     for (final family in ['Barlow', 'BarlowCondensed']) {
@@ -19,9 +22,9 @@ void main() {
           .load();
     }
     await (FontLoader('MaterialIcons')
-          ..addFont(Future.value(ByteData.sublistView(await File(
-                  'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-              .readAsBytes()))))
+          ..addFont(Future.value(ByteData.sublistView(
+              await File(flutterTestFontPath('MaterialIcons-Regular.otf'))
+                  .readAsBytes()))))
         .load();
   });
   for (final name in [

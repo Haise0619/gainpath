@@ -17,8 +17,7 @@ void main() {
   const render = bool.fromEnvironment('GAINPATH_RENDER_REPORT');
   const stage = String.fromEnvironment('REPORT_STAGE', defaultValue: 'after');
   const directory = String.fromEnvironment('REPORT_RENDER_DIR',
-      defaultValue:
-          'C:/Users/Ngzhe/StudioProjects/gainpath/build/report-rewards-consumer-20261112/renders');
+      defaultValue: '../../build/report-rewards-consumer-20261112/renders');
   setUpAll(loadDemoRenderFonts);
   for (final width in [320.0, 360.0, 390.0]) {
     for (final scale in [1.0, 1.5, 2.0]) {

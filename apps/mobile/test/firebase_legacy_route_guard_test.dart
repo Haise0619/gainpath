@@ -7,6 +7,8 @@ import 'package:gainpath_data/identity.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_domain/membership.dart';
+import 'package:gainpath_mobile/navigation/membership_access_gate.dart';
 import 'package:gainpath_mobile/app/routing/feature_routes.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/browse_plans_screen.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_privacy_settings_screen.dart';
@@ -16,12 +18,47 @@ import 'package:gainpath_mobile/navigation/feature_navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/move_and_catch_view.dart';
 
+class _GameAccess implements MembershipAccessRepository {
+  _GameAccess(this.scope, this.isCurrent);
+
+  final SessionScope scope;
+  final bool Function() isCurrent;
+
+  @override
+  bool get current => isCurrent();
+
+  @override
+  Future<MembershipAccessDecision> check(
+      MembershipAccessFeature feature, String resourceId) async {
+    expect(feature, MembershipAccessFeature.miniGame);
+    expect(resourceId, 'move-catch-v1');
+    return MembershipAccessDecision.fromJson({
+      'schemaVersion': 1,
+      'policyVersion': 'gainpath-membership-access-v1',
+      'organizationId': scope.organizationId,
+      'memberId': scope.userId,
+      'resolvedAtMillis': 1800000000000,
+      'feature': feature.name,
+      'resourceId': resourceId,
+      'effectiveTier': 'basic',
+      'requiredTier': 'basic',
+      'decision': 'allowed',
+      'reason': 'paid_tier_required'
+    },
+        organizationId: scope.organizationId,
+        memberId: scope.userId,
+        feature: feature,
+        resourceId: resourceId);
+  }
+}
+
 void main() {
   setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   Future<void> open(WidgetTester tester, RouteSettings settings,
-      {bool firebase = true}) async {
+      {bool firebase = true,
+      MembershipAccessRepositoryFactory? membershipAccessFactory}) async {
     final repository = InMemoryAuthRepository();
     await repository.signIn(
         email: 'member@example.com', password: 'password123');
@@ -33,8 +70,9 @@ void main() {
     await tester.pumpWidget(BlocProvider.value(
         value: auth,
         child: MaterialApp(
-            onGenerateRoute: (settings) =>
-                buildFeatureRoute(settings, firebase: firebase),
+            onGenerateRoute: (settings) => buildFeatureRoute(settings,
+                firebase: firebase,
+                membershipAccessFactory: membershipAccessFactory),
             home: Builder(
                 builder: (context) => Scaffold(
                     body: TextButton(
@@ -58,7 +96,8 @@ void main() {
   testWidgets('Firebase motion game opens consent without starting camera',
       (tester) async {
     await open(
-        tester, const RouteSettings(name: FeatureNavigation.moveAndCatch));
+        tester, const RouteSettings(name: FeatureNavigation.moveAndCatch),
+        membershipAccessFactory: _GameAccess.new);
     expect(find.byType(MoveAndCatchView), findsOneWidget);
     expect(find.text('Enable camera'), findsOneWidget);
     expect(find.textContaining('No video is saved'), findsOneWidget);

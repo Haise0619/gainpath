@@ -123,11 +123,14 @@ class GamificationDashboardScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
+                        SizedBox(
+                          width: double.infinity,
+                          child: Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('YOUR POINTS',
@@ -138,6 +141,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                                           color: Colors.white70)),
                                   const SizedBox(height: 8),
                                   Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
                                       SvgPicture.asset(
                                         'assets/icons/reward_point.svg',
@@ -145,75 +149,82 @@ class GamificationDashboardScreen extends StatelessWidget {
                                         height: 34,
                                       ),
                                       const SizedBox(width: 10),
-                                      if (live)
-                                        const Text('-',
-                                            style: TextStyle(
-                                                fontSize: 40,
-                                                fontWeight: FontWeight.w800,
-                                                color: Colors.white))
-                                      else
-                                        TweenAnimationBuilder<int>(
-                                          tween: IntTween(
-                                              begin: 0,
-                                              end: context
-                                                  .watch<GamificationBloc>()
-                                                  .state
-                                                  .points),
-                                          duration:
-                                              const Duration(milliseconds: 900),
-                                          curve: Curves.easeOutCubic,
-                                          builder: (context, value, _) => Text(
-                                              '$value',
-                                              style: const TextStyle(
-                                                  fontSize: 40,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Colors.white,
-                                                  height: 1.1,
-                                                  letterSpacing: -1.5)),
-                                        ),
+                                      Flexible(
+                                        child: live
+                                            ? const Text('-',
+                                                style: TextStyle(
+                                                    fontSize: 40,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Colors.white))
+                                            : TweenAnimationBuilder<int>(
+                                                tween: IntTween(
+                                                    begin: 0,
+                                                    end: context
+                                                        .watch<
+                                                            GamificationBloc>()
+                                                        .state
+                                                        .points),
+                                                duration: const Duration(
+                                                    milliseconds: 900),
+                                                curve: Curves.easeOutCubic,
+                                                builder: (context, value, _) =>
+                                                    Text(
+                                                  '$value',
+                                                  style: const TextStyle(
+                                                      fontSize: 40,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: Colors.white,
+                                                      height: 1.1,
+                                                      letterSpacing: -1.5),
+                                                ),
+                                              ),
+                                      ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(999),
-                              onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => live
-                                          ? RewardsFeatureHost(
-                                              builder: (repo) =>
-                                                  LeaderboardScreen(
-                                                      connected: true,
-                                                      repository: repo))
-                                          : const LeaderboardScreen())),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.leaderboard_rounded,
-                                        size: 14, color: Colors.white),
-                                    const SizedBox(width: 5),
-                                    Text('#${rank[0]} this week',
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800)),
-                                  ],
+                              InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => live
+                                            ? RewardsFeatureHost(
+                                                builder: (repo) =>
+                                                    LeaderboardScreen(
+                                                        connected: true,
+                                                        repository: repo))
+                                            : const LeaderboardScreen())),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.leaderboard_rounded,
+                                          size: 14, color: Colors.white),
+                                      const SizedBox(width: 5),
+                                      Flexible(
+                                        child: Text('#${rank[0]} this week',
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800)),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Wrap(

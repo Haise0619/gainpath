@@ -18,6 +18,7 @@ import 'package:gainpath_mobile/features/analytics/presentation/member/activity_
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'support/fitness_profile_fake.dart';
+import 'support/signed_out_firebase.dart';
 
 class EmptyTargets implements NumericFitnessGoalRepository {
   EmptyTargets(this.scope);
@@ -57,6 +58,7 @@ WorkoutSessionRecord record(SessionScope scope, String id) {
 }
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
       'Firebase Home and Profile share measured local history; refresh and account switch remain truthful',

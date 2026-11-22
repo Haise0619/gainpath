@@ -24,7 +24,8 @@ import '../../features/gamification/domain/mini_game_launch.dart';
 
 Route<dynamic>? buildFeatureRoute(RouteSettings settings,
     {bool firebase = false,
-    LocalMemberProgressRepositoryFactory? progressRepositoryFactory}) {
+    LocalMemberProgressRepositoryFactory? progressRepositoryFactory,
+    MembershipAccessRepositoryFactory? membershipAccessFactory}) {
   final args = settings.arguments;
   final legacyOnly = const {
     FeatureNavigation.equipment,
@@ -41,6 +42,7 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
               enabled: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'reach-tap-v1',
+              repositoryFactory: membershipAccessFactory,
               child: ReachTapRoute(
                   playAndEarn:
                       args is MiniGameLaunchArguments && args.playAndEarn,
@@ -53,6 +55,7 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
               enabled: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'move-catch-v1',
+              repositoryFactory: membershipAccessFactory,
               child: MoveAndCatchRoute(
                   content: args is MiniGameLaunchArguments
                       ? args.content

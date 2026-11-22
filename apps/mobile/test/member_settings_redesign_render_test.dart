@@ -222,8 +222,7 @@ void main() {
     expect(find.text('Deactivate account'), findsNWidgets(2)); // Title and Button
 
     // Capture Settings page screenshot
-    final outDir = Directory(
-        r'C:\Users\Ngzhe\.gemini\antigravity\brain\2e9bce9b-03ec-4533-aa97-83c6a91f9314');
+    final outDir = Directory('build/member-ui-renders');
     await tester.runAsync(() async {
       final boundary =
           repaintKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -231,6 +230,7 @@ void main() {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
       final file = File('${outDir.path}/member_settings_screen_redesigned_full.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });
@@ -253,6 +253,7 @@ void main() {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
       final file = File('${outDir.path}/member_settings_edit_profile_screen.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });

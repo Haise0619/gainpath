@@ -227,9 +227,8 @@ void main() {
     expect(find.text('Routine summary'), findsOneWidget);
     expect(find.text('2 full reps · 1 partial reps'), findsOneWidget);
     expect(find.text('self-reported sets'), findsOneWidget);
-    await tester.scrollUntilVisible(
-        find.textContaining('Completed · Self-reported'), 120);
-    expect(find.textContaining('Completed · Self-reported'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('2 sets · Self-reported'), 120);
+    expect(find.text('2 sets · Self-reported'), findsOneWidget);
     expect(c.checkpoint!.finished, true);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

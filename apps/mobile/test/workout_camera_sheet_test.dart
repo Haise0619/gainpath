@@ -16,6 +16,9 @@ import 'package:gainpath_mobile/features/workout/presentation/member/real_workou
 import 'real_squat_session_test.dart' as support;
 import 'squat_processing_controller_test.dart' as poses;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 class _CountingDetector extends support.Detector {
   int resets = 0;
   @override
@@ -39,8 +42,7 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
     if (const bool.fromEnvironment('GAINPATH_CAPTURE_UI')) {
       for (final entry in {
-        'Roboto':
-            'C:/flutter/bin/cache/artifacts/material_fonts/Roboto-Regular.ttf',
+        'Roboto': flutterTestFontPath('Roboto-Regular.ttf'),
         'MaterialIcons':
             'build/unit_test_assets/fonts/MaterialIcons-Regular.otf',
       }.entries) {
@@ -132,7 +134,8 @@ void main() {
         });
       }
 
-      final press = await tester.startGesture(tester.getCenter(find.byTooltip('Expand workout details')));
+      final press = await tester.startGesture(
+          tester.getCenter(find.byTooltip('Expand workout details')));
       c.notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
       await tester.pump(const Duration(milliseconds: 50));
       await press.up();

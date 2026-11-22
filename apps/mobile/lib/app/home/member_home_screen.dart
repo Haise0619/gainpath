@@ -701,12 +701,18 @@ class _HeroHeader extends StatelessWidget {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('GainPath'),
+          const Flexible(
+            flex: 2,
+            child: Text('GainPath', maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
           if (branchName != null || onSelectBranch != null) ...[
             const SizedBox(width: 8),
-            BranchSelectorPill(
-              branchName: branchName ?? 'Find Gym',
-              onTap: onSelectBranch,
+            Flexible(
+              flex: 3,
+              child: BranchSelectorPill(
+                branchName: branchName ?? 'Find Gym',
+                onTap: onSelectBranch,
+              ),
             ),
           ],
         ],
@@ -839,16 +845,18 @@ class BranchSelectorPill extends StatelessWidget {
                 color: Colors.white,
               ),
               const SizedBox(width: 4),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 110),
-                child: Text(
-                  branchName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 110),
+                  child: Text(
+                    branchName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),

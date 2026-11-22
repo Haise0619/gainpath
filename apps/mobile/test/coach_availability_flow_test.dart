@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_mobile/features/coaching/application/coach_availability_cubit.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/coach/live_coach_availability_view.dart';
+import 'package:gainpath_mobile/features/coaching/presentation/coach/coach_specific_date_sheet.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/shared/live_coach_schedule_view.dart';
 import 'package:gainpath_mobile/app/mobile_app.dart';
 import 'package:gainpath_data/gainpath_data.dart';
@@ -21,6 +22,23 @@ import 'workout_program_controller_test.dart' show MemoryProgramStore;
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 import 'support/coach_availability_fake.dart';
+
+Finder get _dateEditor => find.byType(CoachSpecificDateSheet);
+
+Finder _inDateEditor(Finder matching) =>
+    find.descendant(of: _dateEditor, matching: matching);
+
+Future<void> _openWindowEditor(WidgetTester tester) async {
+  final add = _inDateEditor(find.text('Add window'));
+  await tester.ensureVisible(add);
+  await tester.pumpAndSettle();
+  await tester.tap(add);
+  await tester.pumpAndSettle();
+  final confirm = _inDateEditor(find.text('Add Window'));
+  await tester.ensureVisible(confirm);
+  await tester.pumpAndSettle();
+  expect(confirm.hitTestable(), findsOneWidget);
+}
 
 final window = DatedCoachWindow(
     branchId: 'main', startAtMillis: 1792116000000, endAtMillis: 1792117800000);
@@ -85,17 +103,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
-    expect(find.text('Fri, 16 Oct 2026'), findsOneWidget);
-    expect(find.text('Changes to this date only'), findsOneWidget);
-    await tester.ensureVisible(find.text('Add window'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add window'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-        find.widgetWithText(FilledButton, 'Add Window'), 250,
-        scrollable: find.byType(Scrollable).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Add Window'));
+    expect(_inDateEditor(find.text('Fri, 16 Oct 2026')), findsOneWidget);
+    expect(
+        _inDateEditor(find.text('Changes to this date only')), findsOneWidget);
+    await _openWindowEditor(tester);
+    await tester.tap(_inDateEditor(find.text('Add Window')));
     await tester.pumpAndSettle();
     final saveDay = find.widgetWithText(FilledButton, 'Save day');
     await Scrollable.ensureVisible(tester.element(saveDay), alignment: 0.5);
@@ -141,11 +153,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Add window'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add window'));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Add Window'), findsOneWidget);
+    await _openWindowEditor(tester);
     auth.drift(const AuthSession(
         userId: 'coach',
         organizationId: 'org',
@@ -153,7 +161,7 @@ void main() {
         role: AppRole.coach,
         branchIds: ['other']));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Add Window'), findsNothing);
+    expect(_inDateEditor(find.text('Add Window')), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });
@@ -225,8 +233,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('edit-window-1')));
     await tester.pumpAndSettle();
     for (final tooltip in ['Remove window', 'Edit window']) {
-      final controls = find.byWidgetPredicate(
-          (w) => w is IconButton && w.tooltip == tooltip);
+      final controls = find
+          .byWidgetPredicate((w) => w is IconButton && w.tooltip == tooltip);
       expect(controls, findsNWidgets(2));
       for (final button in tester.widgetList<IconButton>(controls)) {
         expect(button.onPressed, isNull);

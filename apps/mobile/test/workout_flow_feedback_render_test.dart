@@ -14,6 +14,9 @@ import 'workout_flow_visual_feedback_test.dart' show nextExercise;
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   testWidgets(
       'render actual rest and tracking pages across sizes and animation phases',
@@ -28,8 +31,8 @@ void main() {
     }
 
     await tester.runAsync(() async {
-      await font('MaterialIcons',
-          'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+      await font(
+          'MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf'));
       await font('Barlow', 'assets/fonts/Barlow-Regular.ttf');
       // Flutter tester uses Ahem for styles that inherit the platform font.
       await font('Ahem', 'assets/fonts/Barlow-Regular.ttf');

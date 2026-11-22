@@ -59,7 +59,11 @@ class SquatProcessingController extends ChangeNotifier {
         _resetLogs < 32 &&
         activeScope() == scope) {
       _resetLogs++;
-      debugPrint('SQUAT_TRACKING_RESET ${jsonEncode(state)}');
+      try {
+        debugPrint('SQUAT_TRACKING_RESET ${jsonEncode(state)}');
+      } catch (_) {
+        // A diagnostic sink failure must not interrupt tracking or cleanup.
+      }
     }
     _lastResetRevision = revision;
     if (squatDecisionDiagnosticsEnabled && activeScope() == scope) {

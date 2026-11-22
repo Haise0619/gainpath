@@ -24,8 +24,7 @@ void main() {
     );
   });
 
-  const artifactDir =
-      'C:/Users/Ngzhe/.gemini/antigravity/brain/2e9bce9b-03ec-4533-aa97-83c6a91f9314';
+  const artifactDir = 'build/member-ui-renders';
 
   final sampleBranches = [
     {
@@ -109,6 +108,7 @@ void main() {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
       final file = File('$artifactDir/$filename');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(byteData.buffer.asUint8List());
       image.dispose();
     });
@@ -188,7 +188,8 @@ void main() {
             'homeBranchId': 'main',
           },
           openDirections: (_) async => true,
-          scanVisit: (_) async => 'gainpath-visit:main:01234567890123456789012345678901',
+          scanVisit: (_) async =>
+              'gainpath-visit:main:01234567890123456789012345678901',
           locate: () async => (latitude: 3.158, longitude: 101.711),
         ),
       ),
@@ -229,8 +230,7 @@ void main() {
     expect(find.byType(BranchMap), findsNothing);
   });
 
-  testWidgets(
-      'Member Home header displays compact BranchSelectorPill',
+  testWidgets('Member Home header displays compact BranchSelectorPill',
       (tester) async {
     final key = GlobalKey();
     tester.view.physicalSize = const Size(390, 844);
@@ -252,7 +252,8 @@ void main() {
             child: RepaintBoundary(
               key: key,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(
                   gradient: AppColors.heroGradient,
                   borderRadius: BorderRadius.all(Radius.circular(16)),

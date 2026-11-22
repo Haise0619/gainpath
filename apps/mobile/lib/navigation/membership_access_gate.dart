@@ -11,6 +11,9 @@ import '../features/membership/presentation/member/browse_plans_screen.dart';
 const membershipAccessEnforcementEnabled =
     bool.fromEnvironment('MEMBERSHIP_ACCESS_ENFORCEMENT', defaultValue: false);
 
+typedef MembershipAccessRepositoryFactory = MembershipAccessRepository Function(
+    SessionScope scope, bool Function() isCurrent);
+
 /// An outer entry gate only. Running workout guidance and stored data stay intact.
 class MembershipAccessGate extends StatelessWidget {
   const MembershipAccessGate(
@@ -24,8 +27,7 @@ class MembershipAccessGate extends StatelessWidget {
       required this.child});
   final bool enabled;
   final MembershipAccessRepository? repository;
-  final MembershipAccessRepository Function(SessionScope, bool Function())?
-      repositoryFactory;
+  final MembershipAccessRepositoryFactory? repositoryFactory;
   final Widget Function(BuildContext, Future<void> Function())?
       freePreviewBuilder;
   final MembershipAccessFeature feature;

@@ -24,6 +24,9 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets('manual tutorial opens the same set logger without awarding work',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1450);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     late AuthBloc auth;
     await tester.runAsync(() async {
       auth = AuthBloc(
@@ -50,7 +53,9 @@ void main() {
     final initialId = store.records.keys.single;
     await tester.tap(find.text('Press').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tutorial'));
+    final tutorial = find.text('Watch exercise tutorial');
+    await tester.scrollUntilVisible(tutorial, 150);
+    await tester.tap(tutorial.hitTestable());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open Set Logger'));
     await tester.pumpAndSettle();
@@ -161,13 +166,14 @@ void main() {
         home: RoutineJourneyScreen(
             controller: c, onTrack: (_) async {}, onTutorial: (_) async {})));
     await tester.pumpAndSettle();
-    expect(find.text('Workout Completed'), findsOneWidget);
+    expect(find.text('Workout complete'), findsOneWidget);
     expect(find.textContaining('full reps'), findsNothing);
     for (final name in ['Mobility', 'Manual movement']) {
       await tester.scrollUntilVisible(find.text(name), 150);
-      final tile = tester.widget<ListTile>(
-          find.ancestor(of: find.text(name), matching: find.byType(ListTile)));
-      expect((tile.leading as Icon).icon, Icons.check_circle_rounded);
+      final card = find.ancestor(
+          of: find.text(name), matching: find.byType(ExpansionTile));
+      expect(find.descendant(of: card, matching: find.text('Completed')),
+          findsOneWidget);
     }
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
@@ -177,6 +183,9 @@ void main() {
   testWidgets(
       'active tutorial returns through consent in the same saved attempt',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1450);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     late AuthBloc auth;
     await tester.runAsync(() async {
       auth = AuthBloc(
@@ -201,10 +210,13 @@ void main() {
                 workoutStoreFactory: (_) async => workouts))));
     await tester.pumpAndSettle();
     final initialId = store.records.keys.single;
-    await tester.tap(find.text('Tutorial'));
+    final tutorial = find.text('Watch exercise tutorial');
+    await tester.scrollUntilVisible(tutorial, 150);
+    await tester.tap(tutorial.hitTestable());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start Exercise'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start Exercise').hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('AI Tracking privacy'), findsOneWidget);
     expect(store.records.keys.single, initialId);
     expect(store.records.values.single.selectedIndex, 0);

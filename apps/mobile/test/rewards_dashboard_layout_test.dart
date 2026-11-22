@@ -11,6 +11,9 @@ import 'package:gainpath_mobile/features/gamification/application/app_check_in_c
 import 'package:gainpath_mobile/features/gamification/presentation/member/app_check_in_dashboard.dart';
 import 'app_check_in_test.dart' show snapshotJson;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   testWidgets('pull refresh remains available without a toolbar refresh button',
       (tester) async {
@@ -72,9 +75,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       for (final entry in {
-        'ArcadePreview': 'C:/Windows/Fonts/segoeui.ttf',
-        'MaterialIcons':
-            'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
+        'ArcadePreview': 'assets/fonts/Barlow-Regular.ttf',
+        'MaterialIcons': flutterTestFontPath('MaterialIcons-Regular.otf')
       }.entries) {
         final loader = FontLoader(entry.key)
           ..addFont(Future.value(

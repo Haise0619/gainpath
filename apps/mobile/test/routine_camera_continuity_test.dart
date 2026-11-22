@@ -11,6 +11,7 @@ import 'package:gainpath_mobile/features/workout/presentation/member/real_workou
 import 'package:gainpath_mobile/features/workout/presentation/member/routine_next_exercise_sheet.dart';
 import 'real_squat_session_test.dart' as support;
 import 'squat_processing_controller_test.dart' as poses;
+import 'package:gainpath_mobile/features/workout/presentation/member/widgets/workout_completion_feedback.dart';
 import 'routine_journey_controller_test.dart' as journey;
 
 void main() {
@@ -94,6 +95,7 @@ void main() {
       for (var i = 0; i < 12; i++) {
         await send(175);
       }
+      await tester.pump(WorkoutCompletionFeedback.minimumPresentation);
       await tester.pumpAndSettle();
       if (failFirst) {
         expect(returned, isNull);
@@ -101,6 +103,8 @@ void main() {
         expect(await store.read(), isEmpty);
         store.fail = false;
         await tester.tap(find.text('Retry save'));
+        await tester.pump();
+        await tester.pump(WorkoutCompletionFeedback.minimumPresentation);
         await tester.pumpAndSettle();
       }
       expect(returned?.repetitions, 1);

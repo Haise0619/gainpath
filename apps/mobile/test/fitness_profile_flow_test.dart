@@ -23,6 +23,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'support/fitness_profile_fake.dart';
 import 'coach_directory_flow_test.dart' show DirectoryFake;
 import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'support/in_memory_member_progress.dart';
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 Future<void> tap(WidgetTester tester, String text) async {
@@ -68,6 +69,7 @@ void main() {
     await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: auth,
       profileRepositoryFactory: profiles.repository,
+      progressRepositoryFactory: inMemoryMemberProgress,
       routineLoaderFactory: (_) async => null,
       programStoreFactory: (scope) async => MemoryProgramStore(scope),
       routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
@@ -263,11 +265,11 @@ void main() {
     await tap(tester, 'Workout');
     expect(find.byType(WorkoutPrepScreen), findsOneWidget);
     expect(find.text('Start workout'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Camera setup'), 200,
+    await tester.scrollUntilVisible(find.text('AI Camera Setup'), 200,
         scrollable: find.descendant(
             of: find.byType(WorkoutPrepScreen),
             matching: find.byType(Scrollable)));
-    expect(find.text('Camera setup'), findsOneWidget);
+    expect(find.text('AI Camera Setup'), findsOneWidget);
     await tap(tester, 'Rewards');
     expect(find.byType(GamificationDashboardScreen), findsOneWidget);
     expect(find.text('YOUR POINTS'), findsOneWidget);

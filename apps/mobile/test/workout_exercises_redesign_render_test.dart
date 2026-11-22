@@ -228,9 +228,9 @@ void main() {
       final image = await boundary.toImage(pixelRatio: 2.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
-      final outDir = Directory(
-          r'C:\Users\Ngzhe\.gemini\antigravity\brain\2e9bce9b-03ec-4533-aa97-83c6a91f9314');
+      final outDir = Directory('build/member-ui-renders');
       final file = File('${outDir.path}/workout_page_exercises_redesigned_full.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });
@@ -251,9 +251,9 @@ void main() {
       final image = await boundary.toImage(pixelRatio: 2.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
-      final outDir = Directory(
-          r'C:\Users\Ngzhe\.gemini\antigravity\brain\2e9bce9b-03ec-4533-aa97-83c6a91f9314');
+      final outDir = Directory('build/member-ui-renders');
       final file = File('${outDir.path}/workout_page_exercises_expanded_full.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });

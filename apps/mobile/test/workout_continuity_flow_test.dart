@@ -347,7 +347,9 @@ void main() {
           store.records.values.single.sessions[0], [launches.first.sessionId]);
       expect(calls.where((call) => call.method == 'play'), hasLength(1));
       final play = calls.singleWhere((call) => call.method == 'play');
-      expect((play.arguments as Map)['text'], contains(next.name));
+      expect(
+          (play.arguments as Map)['text'], 'Next exercise. Get into position.');
+      expect(find.text(next.name), findsWidgets);
       expect(playing.isCompleted, isFalse);
       if (nextTimed) {
         await preferences.withdrawConsent();

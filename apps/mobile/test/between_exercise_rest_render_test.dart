@@ -8,6 +8,9 @@ import 'package:gainpath_mobile/features/workout/application/between_exercise_re
 import 'package:gainpath_mobile/features/workout/presentation/member/between_exercise_rest_screen.dart';
 import 'hybrid_routine_journey_test.dart' show hybridFixture;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   testWidgets('render between exercise rest at normal and large text',
       (tester) async {
@@ -20,8 +23,8 @@ void main() {
     }
 
     await tester.runAsync(() async {
-      await loadFont('MaterialIcons',
-          'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+      await loadFont(
+          'MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf'));
       await loadFont('Barlow', 'assets/fonts/Barlow-Regular.ttf');
     });
     tester.view.devicePixelRatio = 1;

@@ -1,20 +1,13 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'admin_test_fonts.dart';
+
 Future<void> loadDemoRenderFonts() async {
-  const font = 'C:/Windows/Fonts/arial.ttf';
-  await (FontLoader('CReview')
-        ..addFont(
-            Future.value(ByteData.sublistView(await File(font).readAsBytes()))))
-      .load();
-  await (FontLoader('MaterialIcons')
-        ..addFont(Future.value(ByteData.sublistView(await File(
-                'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-            .readAsBytes()))))
-      .load();
+  await loadAdminReviewFont();
+  await loadAdminMaterialIcons();
 }
 
 Future<void> captureDemo(WidgetTester tester, Key key, String name) async {

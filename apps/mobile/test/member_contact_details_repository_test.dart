@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_member_contact_details_repository.dart';
+import 'support/firestore_document_collection_fake.dart';
 
 class _Db extends Fake implements FirebaseFirestore {
   final docs = <String, Map<String, dynamic>>{
@@ -26,6 +27,9 @@ class _Db extends Fake implements FirebaseFirestore {
   int writes = 0;
   @override
   DocumentReference<Map<String, dynamic>> doc(String path) => _Ref(this, path);
+  @override
+  CollectionReference<Map<String, dynamic>> collection(String path) =>
+      FirestoreDocumentCollectionFake(path, doc);
   @override
   Future<T> runTransaction<T>(TransactionHandler<T> handler,
       {Duration timeout = const Duration(seconds: 30),

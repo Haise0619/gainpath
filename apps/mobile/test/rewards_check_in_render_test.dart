@@ -15,6 +15,9 @@ import 'package:gainpath_mobile/app/routing/member_points_progress_route.dart';
 import 'reward_journey_test.dart' as rewards;
 import 'app_check_in_test.dart' as check;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 class RenderReceipts extends rewards.JourneyRewards {
   RenderReceipts(this.mode);
   final String mode;
@@ -59,9 +62,7 @@ void main() {
       for (final family in ['Barlow', 'BarlowCondensed', 'MaterialIcons']) {
         final loader = FontLoader(family);
         for (final name in family == 'MaterialIcons'
-            ? [
-                'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-              ]
+            ? [flutterTestFontPath('MaterialIcons-Regular.otf')]
             : [
                 'assets/fonts/$family-Regular.ttf',
                 'assets/fonts/$family-SemiBold.ttf',

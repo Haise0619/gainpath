@@ -290,13 +290,6 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final errors = <FlutterErrorDetails>[];
-    void Function(FlutterErrorDetails)? oldHandler = FlutterError.onError;
-    FlutterError.onError = (details) {
-      errors.add(details);
-    };
-    addTearDown(() => FlutterError.onError = oldHandler);
-
     await tester.pumpWidget(buildScreen(
       routine: testRoutine,
       progress: testProgress,
@@ -312,6 +305,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(errors, isEmpty, reason: errors.map((e) => e.toString()).join('\n'));
+    expect(tester.takeException(), isNull);
   });
 }

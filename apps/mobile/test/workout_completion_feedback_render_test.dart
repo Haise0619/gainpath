@@ -10,6 +10,9 @@ import 'package:gainpath_mobile/features/workout/presentation/member/widgets/wor
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 void main() {
   testWidgets(
       'render completion motion, long names, landscape and reduced motion',
@@ -19,8 +22,7 @@ void main() {
     addTearDown(restore!);
     await tester.runAsync(() async {
       for (final entry in {
-        'MaterialIcons':
-            'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+        'MaterialIcons': flutterTestFontPath('MaterialIcons-Regular.otf'),
         'Barlow': 'assets/fonts/Barlow-Regular.ttf',
         'Ahem': 'assets/fonts/Barlow-Regular.ttf',
         'BarlowCondensed': 'assets/fonts/BarlowCondensed-Regular.ttf',

@@ -9,6 +9,9 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_mobile/main.dart';
 import '../../../test_support/fyp_render_support.dart';
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 class _TestAssetBundle extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async {
@@ -42,13 +45,12 @@ void main() {
       (tester) async {
     addTearDown(await installFypOfflineFonts());
     final icons = FontLoader('MaterialIcons')
-      ..addFont(Future.value(ByteData.sublistView(File(
-              'C:/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf')
-          .readAsBytesSync())));
+      ..addFont(Future.value(ByteData.sublistView(
+          File(flutterTestFontPath('MaterialIcons-Regular.otf'))
+              .readAsBytesSync())));
     await icons.load();
 
-    const artifactDir =
-        'C:/Users/Ngzhe/.gemini/antigravity/brain/2e9bce9b-03ec-4533-aa97-83c6a91f9314';
+    const artifactDir = 'build/member-ui-renders';
 
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1;
@@ -77,8 +79,7 @@ void main() {
         context,
       );
       await precacheImage(
-        AssetImage('assets/images/google_sign_in_mark.png',
-            bundle: testBundle),
+        AssetImage('assets/images/google_sign_in_mark.png', bundle: testBundle),
         context,
       );
     });
@@ -89,10 +90,10 @@ void main() {
       final renderObject =
           key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await renderObject.toImage();
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
       final file = File('$artifactDir/member_login_page_redesigned.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });
@@ -106,10 +107,10 @@ void main() {
       final renderObject =
           key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await renderObject.toImage();
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData!.buffer.asUint8List();
       final file = File('$artifactDir/member_register_page_redesigned.png');
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       image.dispose();
     });

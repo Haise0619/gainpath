@@ -11,6 +11,9 @@ import 'package:gainpath_mobile/features/chatbot/presentation/member/assistant_r
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 Map<String, dynamic> availabilityFixture(int now) {
   final day = DateTime.fromMillisecondsSinceEpoch(now, isUtc: true)
       .add(const Duration(days: 1, hours: 8));
@@ -182,10 +185,7 @@ void main() {
         addTearDown(restore!);
         await tester.runAsync(() async {
           for (final (family, path) in [
-            (
-              'MaterialIcons',
-              'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-            ),
+            ('MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf')),
             ('Barlow', 'assets/fonts/Barlow-Regular.ttf'),
             ('BarlowCondensed', 'assets/fonts/BarlowCondensed-Regular.ttf')
           ]) {

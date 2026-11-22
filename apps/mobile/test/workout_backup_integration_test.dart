@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,6 +22,7 @@ import 'package:gainpath_mobile/features/workout/application/workout_backup_sche
 import 'support/mock_app_scope.dart';
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
       'direct backup route shows loading, storage failure and successful retry',

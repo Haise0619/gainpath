@@ -21,6 +21,9 @@ import 'routine_journey_controller_test.dart' show MemoryJourneyStore, measured;
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
 
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
+
 const _render = bool.fromEnvironment('GAINPATH_RENDER_COMPLETION');
 const _image = 'assets/images/workout_hub_fallback.png';
 
@@ -169,10 +172,7 @@ void main() {
         addTearDown(restore!);
         await tester.runAsync(() async {
           for (final (family, path) in [
-            (
-              'MaterialIcons',
-              'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-            ),
+            ('MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf')),
             ('Barlow', 'assets/fonts/Barlow-Regular.ttf'),
             ('BarlowCondensed', 'assets/fonts/BarlowCondensed-Regular.ttf'),
           ]) {

@@ -149,10 +149,17 @@ void main() {
     expect(find.text('Session Rescheduled'), findsOneWidget);
     expect(find.text('Form check feedback'), findsNothing);
 
-    // Tap booking notice: marks as read and routes to bookings
+    // Opening the notice marks it as read and shows the booking details.
     await tester.tap(find.text('Session Rescheduled'));
     await tester.pumpAndSettle();
     expect(repo.readCalls, contains('n2'));
+    expect(find.widgetWithText(AlertDialog, 'Coach moved booking to 4pm.'),
+        findsOneWidget);
+    expect(openedBookings, isFalse);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'View My Bookings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     expect(openedBookings, isTrue);
   });
 

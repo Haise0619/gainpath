@@ -6,12 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/chatbot.dart';
-import 'package:gainpath_ui/gainpath_ui.dart' show BranchDirectoryPage;
+import 'package:gainpath_ui/gainpath_ui.dart'
+    show BranchDirectoryPage, GymDetailsScreen;
 import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/features/chatbot/presentation/member/chatbot_screen.dart';
 import 'module6_chat_flow_test.dart' show LiveChat;
 import '../../../test_support/fyp_render_support.dart'
     show installFypOfflineFonts;
+
+import '../../../test_support/member_demo_render_fonts.dart'
+    show flutterTestFontPath;
 
 class LongChat extends LiveChat {
   @override
@@ -61,10 +65,7 @@ void main() {
       addTearDown(restore!);
       await tester.runAsync(() async {
         for (final (family, path) in [
-          (
-            'MaterialIcons',
-            'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'
-          ),
+          ('MaterialIcons', flutterTestFontPath('MaterialIcons-Regular.otf')),
           ('Barlow', 'assets/fonts/Barlow-Regular.ttf'),
           ('BarlowCondensed', 'assets/fonts/BarlowCondensed-Regular.ttf'),
         ]) {
@@ -223,11 +224,14 @@ void main() {
         await tester.ensureVisible(find.text('View branch'));
         await tester.tap(find.text('View branch'));
         await tester.pumpAndSettle();
-        final page = find.byType(BranchDirectoryPage);
+        expect(find.byType(BranchDirectoryPage, skipOffstage: false),
+            findsOneWidget);
+        final page = find.byType(GymDetailsScreen);
         expect(page, findsOneWidget);
         expect(find.descendant(of: page, matching: find.text('North Gym')),
             findsWidgets);
-        expect(find.descendant(of: page, matching: find.text('Fixture address')),
+        expect(
+            find.descendant(of: page, matching: find.text('Fixture address')),
             findsOneWidget);
       }
     });

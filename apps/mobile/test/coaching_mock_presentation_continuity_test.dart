@@ -64,7 +64,11 @@ void main() {
         home: LiveBookingListView(repository: Lists(), isCurrent: () => true)));
     await tester.pumpAndSettle();
     expect(find.byType(BookingScheduleScreen), findsOneWidget);
-    expect(find.text('Reservation time elapsed'), findsOneWidget);
+    await tester.tap(find.text('Past & Cancelled'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('RESERVATION TIME ELAPSED'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('RESERVATION TIME ELAPSED'), findsOneWidget);
     expect(find.text('Hold time elapsed'), findsOneWidget);
     await tester.tap(find.text('Upcoming'));
     await tester.pumpAndSettle();

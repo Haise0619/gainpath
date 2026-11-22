@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -8,16 +7,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_admin_web/features/analytics/presentation/admin/admin_report_presentation.dart';
 import 'package:gainpath_admin_web/features/analytics/presentation/admin/reports_screen.dart';
 import 'admin_original_reporting_layout_test.dart' as fixture;
+import 'support/admin_test_fonts.dart';
 
 void main() {
   setUpAll(() async {
     GoogleFonts.config.allowRuntimeFetching = false;
-    final font = File('C:/Windows/Fonts/arial.ttf');
-    if (await font.exists()) {
-      final loader = FontLoader('ReviewArial')
-        ..addFont(Future.value(ByteData.sublistView(await font.readAsBytes())));
-      await loader.load();
-    }
+    await loadAdminReviewFont();
   });
   testWidgets('report methodology is collapsed and accessible at enlarged text',
       (tester) async {
@@ -59,7 +54,7 @@ void main() {
             color: const Color(0xFFF7F6FB),
             child: fixture.originalLayoutApp(
                 Theme(
-                    data: ThemeData(fontFamily: 'ReviewArial'),
+                    data: ThemeData(fontFamily: 'CReview'),
                     child: const ReportsScreen(live: true)),
                 fixture.OriginalLayoutGateway()))));
     await tester.pumpAndSettle();
@@ -71,8 +66,9 @@ void main() {
               as RenderRepaintBoundary)
           .toImage();
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      await File('../../build/module12-batch-d/reports-fixture.png')
-          .writeAsBytes(bytes!.buffer.asUint8List());
+      final file = File('../../build/module12-batch-d/reports-fixture.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
     });
   });

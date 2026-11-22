@@ -15,6 +15,9 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets('attempt exposes only available saved session identities',
       (tester) async {
+    tester.view.physicalSize = const Size(640, 1440);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final opened = <String>[];
     Widget screen(Set<String> ids) => MaterialApp(
         home: RoutineAttemptDetailScreen(
@@ -22,10 +25,11 @@ void main() {
             availableSessionIds: ids,
             onOpenSession: opened.add));
     await tester.pumpWidget(screen({}));
+    await tester.scrollUntilVisible(find.text('Squat'), 180);
+    await tester.tap(find.text('Squat').hitTestable());
+    await tester.pumpAndSettle();
     expect(find.text('View exercise details'), findsNothing);
     await tester.pumpWidget(screen({'camera', 'unrelated'}));
-    await tester.scrollUntilVisible(find.text('Squat'), 180);
-    await tester.tap(find.text('Squat'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('View exercise details'), 180);
     expect(find.text('View exercise details'), findsOneWidget);

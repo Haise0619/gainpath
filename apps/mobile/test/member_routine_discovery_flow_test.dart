@@ -1,5 +1,7 @@
 import 'support/signed_out_firebase.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_data/gainpath_data.dart';
@@ -66,6 +68,24 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    // Refresh also requests branches. Let the native boundary respond inside
+    // the widget test zone while the real catalog refresh completes.
+    const functionsChannel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.cloud_functions_platform_interface.CloudFunctionsHostApi.call',
+        StandardMessageCodec());
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockDecodedMessageHandler<Object?>(functionsChannel,
+        (Object? message) {
+      final arguments = (message as List<Object?>).single as Map;
+      return SynchronousFuture<Object?>(
+          arguments['functionName'] == 'branchManagementCommand'
+              ? <Object?>[
+                  {'records': <Object?>[]}
+                ]
+              : <Object?>['unavailable', null, null]);
+    });
+    addTearDown(() => messenger.setMockDecodedMessageHandler<Object?>(
+        functionsChannel, null));
     final auth = InMemoryAuthRepository(), profiles = FakeProfileGateway();
     final session = await auth.signIn(
         email: 'member@example.test', password: 'password123');

@@ -17,7 +17,13 @@ void main() {
     'estimatedMinutes': 10,
     'exercises': [
       {'exerciseId': 'first-id', 'name': 'Same name', 'sets': 2, 'reps': 7},
-      {'exerciseId': 'second-id', 'name': 'Same name', 'sets': 3, 'reps': 8},
+      {
+        'exerciseId': 'second-id',
+        'name': 'Same name',
+        'sets': 3,
+        'reps': 8,
+        'dayNumber': 2
+      },
     ],
   });
   testWidgets('Watch tutorial and routine rows use injected exact row identity',
@@ -46,7 +52,7 @@ void main() {
     expect(find.text('first-id'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View routine'));
+    await tester.tap(find.text('Routine preview'));
     await tester.pumpAndSettle();
     expect(find.byType(RoutineScreen), findsOneWidget);
     await tester.tap(find.text('Same name').last);

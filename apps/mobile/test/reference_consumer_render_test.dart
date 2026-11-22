@@ -26,28 +26,41 @@ void main() {
       final screen = name == 'history'
           ? RoutineHistoryScreen(attempts: [f.attempt], onOpenAttempt: (_) {})
           : ProgressDashboardScreen(
-              localProgress: calculateLocalMemberProgress(scope: f.scope, records: f.snapshot.records, asOf: f.now),
-              routineProgress: RoutineProgress(scope: f.scope, attempts: [f.attempt], asOf: f.now),
-              onOpenReport: () {}, onOpenPoints: () {}, onOpenHistory: () {}, onStartWorkout: () {});
+              localProgress: calculateLocalMemberProgress(
+                  scope: f.scope, records: f.snapshot.records, asOf: f.now),
+              routineProgress: RoutineProgress(
+                  scope: f.scope, attempts: [f.attempt], asOf: f.now),
+              onOpenReport: () {},
+              onOpenPoints: () {},
+              onOpenHistory: () {},
+              onStartWorkout: () {});
       final key = GlobalKey();
-      await t.pumpWidget(MaterialApp(theme: buildMemberTypographyTheme(),
-        builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
-        home: RepaintBoundary(key: key, child: screen)));
+      await t.pumpWidget(MaterialApp(
+          theme: buildMemberTypographyTheme(),
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!),
+          home: RepaintBoundary(key: key, child: screen)));
       await t.pumpAndSettle();
       Future<void> capture(String section) async {
         expect(t.takeException(), isNull);
         await t.runAsync(() async {
-          final image = await (key.currentContext!.findRenderObject()! as RenderRepaintBoundary).toImage();
+          final image = await (key.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
           final data = await image.toByteData(format: ui.ImageByteFormat.png);
-          final file = File('C:/Users/Ngzhe/StudioProjects/gainpath/build/report-rewards-consumer-20261112/references/$name-$section-390-100.png');
+          final file = File(
+              '../../build/report-rewards-consumer-20261112/references/$name-$section-390-100.png');
           await file.parent.create(recursive: true);
           await file.writeAsBytes(data!.buffer.asUint8List());
           image.dispose();
         });
       }
+
       await capture('top');
       if (name == 'progress') {
-        await t.scrollUntilVisible(find.text('Explore more'), 300, scrollable: find.byType(Scrollable).first);
+        await t.scrollUntilVisible(find.text('Explore more'), 300,
+            scrollable: find.byType(Scrollable).first);
         await t.pumpAndSettle();
         await capture('lower');
       }

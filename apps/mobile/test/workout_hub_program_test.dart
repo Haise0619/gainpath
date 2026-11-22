@@ -12,6 +12,7 @@ import 'package:gainpath_mobile/features/workout/presentation/member/published_r
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_mobile/features/workout/application/workout_program_controller.dart';
 import 'package:gainpath_mobile/features/workout/application/workout_hub_program.dart';
+import 'support/in_memory_member_progress.dart';
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'workout_program_controller_test.dart'
     show MemoryProgramStore, programFixture;
@@ -33,6 +34,7 @@ void main() {
         value: auth,
         child: MaterialApp(
             home: WorkoutPrepRoute(
+                progressRepositoryFactory: inMemoryMemberProgress,
                 publishedRoutine: PublishedRoutine.fromDocument('free', {
                   'schemaVersion': 1,
                   'kind': 'routine',
@@ -184,6 +186,7 @@ void main() {
         child: MaterialApp(
           home: WorkoutPrepRoute(
               publishedRoutine: free,
+              progressRepositoryFactory: inMemoryMemberProgress,
               programStoreFactory: (_) async => store,
               routineStoreFactory: (_) async => routineStore,
               routineCatalogControls: PublishedRoutineCatalogControls(
