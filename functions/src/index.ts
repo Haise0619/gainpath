@@ -77,3 +77,4 @@ export { workoutProgramCommand } from './modules/content/workout-program-callabl
 export {exerciseCatalogCommand} from './modules/content/exercise-catalog-callable';
 export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
 export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';
+export { adminMemberProvisioning } from './modules/identity/admin-member-provisioning-callable';

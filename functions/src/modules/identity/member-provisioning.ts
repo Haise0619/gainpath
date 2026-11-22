@@ -19,7 +19,7 @@ export interface ProvisionedMemberScope {
   readonly status: 'active';
 }
 
-function validatedInput(input: ProvisionMemberInput): ProvisionMemberInput {
+export function validatedInput(input: ProvisionMemberInput): ProvisionMemberInput {
   const userId = requiredIdentifier(input.userId, 'userId');
   const email = input.email.trim().toLowerCase();
   const displayName = input.displayName.trim();
@@ -30,6 +30,18 @@ function validatedInput(input: ProvisionMemberInput): ProvisionMemberInput {
     throw new DomainError('invalid-argument', 'displayName must use 1-120 characters.');
   }
   return { userId, email, displayName };
+}
+
+/** Shared canonical user and organization member records. Free is derived when no paid account exists. */
+export function canonicalMemberRecords(input: ProvisionMemberInput, organizationId: string,
+  primaryBranchId: string, now: number) {
+  const common = { schemaVersion: 1, organizationId, email: input.email,
+    displayName: input.displayName, createdAtMillis: now, updatedAtMillis: now };
+  return {
+    user: {...common, primaryBranchId},
+    member: {...common, userId: input.userId, role: 'member' as const,
+      status: 'active' as const, branchIds: [primaryBranchId]},
+  };
 }
 
 function validExistingUser(data: DocumentData | undefined): boolean {
@@ -101,31 +113,9 @@ export async function provisionMember(
         updatedAtMillis: now,
       });
     }
-    if (!user) {
-      transaction.create(userPath, {
-        schemaVersion: 1,
-        organizationId: INITIAL_ORGANIZATION_ID,
-        primaryBranchId: INITIAL_BRANCH_ID,
-        email: input.email,
-        displayName: input.displayName,
-        createdAtMillis: now,
-        updatedAtMillis: now,
-      });
-    }
-    if (!member) {
-      transaction.create(memberPath, {
-        schemaVersion: 1,
-        userId: input.userId,
-        organizationId: INITIAL_ORGANIZATION_ID,
-        email: input.email,
-        displayName: input.displayName,
-        role: 'member',
-        status: 'active',
-        branchIds: [INITIAL_BRANCH_ID],
-        createdAtMillis: now,
-        updatedAtMillis: now,
-      });
-    }
+    const records = canonicalMemberRecords(input, INITIAL_ORGANIZATION_ID, INITIAL_BRANCH_ID, now);
+    if (!user) transaction.create(userPath, records.user);
+    if (!member) transaction.create(memberPath, records.member);
 
     return {
       schemaVersion: 1,
