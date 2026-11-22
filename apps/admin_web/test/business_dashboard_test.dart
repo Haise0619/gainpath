@@ -190,9 +190,10 @@ void main() {
           .renderObject<RenderRepaintBoundary>(find.byKey(key))
           .toImage();
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
-      await File(
-              '../../build/admin-business-dashboard-20261105/fixture-dashboard.png')
-          .writeAsBytes(data!.buffer.asUint8List());
+      final screenshot = File(
+          '../../build/admin-business-dashboard-20261105/fixture-dashboard.png');
+      await screenshot.parent.create(recursive: true);
+      await screenshot.writeAsBytes(data!.buffer.asUint8List());
       image.dispose();
     });
     expect(t.takeException(), isNull);

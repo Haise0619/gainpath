@@ -15,15 +15,9 @@ import '../../../test_support/member_demo_render_fonts.dart'
 class _TestAssetBundle extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async {
-    if (key == 'assets/images/gainpath_logo_sticker.png') {
-      return ByteData.sublistView(File(
-              'c:/Users/Ngzhe/StudioProjects/gainpath/apps/mobile/assets/images/gainpath_logo_sticker.png')
-          .readAsBytesSync());
-    }
-    if (key == 'assets/images/google_sign_in_mark.png') {
-      return ByteData.sublistView(File(
-              'c:/Users/Ngzhe/StudioProjects/gainpath/apps/mobile/assets/images/google_sign_in_mark.png')
-          .readAsBytesSync());
+    if (key == 'assets/images/gainpath_logo_sticker.png' ||
+        key == 'assets/images/google_sign_in_mark.png') {
+      return ByteData.sublistView(File(key).readAsBytesSync());
     }
     return rootBundle.load(key);
   }

@@ -108,6 +108,7 @@ void main() {
               defaultValue: 'after');
           final file = File(
               '../../build/home-activity-redesign/$stage/weekly-card-320-2x.png');
+          await file.parent.create(recursive: true);
           await file.writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         });
