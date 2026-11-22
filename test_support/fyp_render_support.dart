@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:syncfusion_flutter_core/theme.dart';
 import 'package:google_fonts/src/google_fonts_base.dart' as google_fonts_test;
 
+import 'workspace_root.dart';
+
 /// Offline test rendering only. Poppins/Inter and chart fonts use the
 /// repository's existing Barlow font files. Screenshot evidence must disclose
 /// this substitute typography; production theme/assets are never modified.
@@ -16,15 +18,8 @@ Future<void Function()> installFypOfflineFonts() async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final previousManifest = google_fonts_test.assetManifest;
   final previousFetching = GoogleFonts.config.allowRuntimeFetching;
-  var root = Directory.current;
-  var fonts = Directory.fromUri(root.uri.resolve('apps/mobile/assets/fonts/'));
-  while (!fonts.existsSync() && root.path != root.parent.path) {
-    root = root.parent;
-    fonts = Directory.fromUri(root.uri.resolve('apps/mobile/assets/fonts/'));
-  }
-  if (!fonts.existsSync()) {
-    throw StateError('Run the render test from the GainPath workspace.');
-  }
+  final fonts = Directory.fromUri(
+      findGainPathWorkspace().uri.resolve('apps/mobile/assets/fonts/'));
   final bytes = <String, ByteData>{};
   for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
     bytes[weight] = ByteData.sublistView(

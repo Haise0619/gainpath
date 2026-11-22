@@ -9,7 +9,7 @@ import '../../application/rewards_feature_host.dart';
 import 'my_rewards_screen.dart';
 import 'reward_details.dart';
 import 'voucher_screen.dart';
-import '../../../membership/presentation/shared/membership_dashboard_screen.dart';
+import '../../../../navigation/feature_navigation.dart';
 
 class VerifiedRewardShopView extends StatefulWidget {
   const VerifiedRewardShopView(
@@ -66,10 +66,7 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
 
   Future<void> _membership() async {
     if (!mounted || !widget.repository.current) return;
-    await Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-            builder: (_) => const MembershipDashboardScreen(connected: true)));
+    await Navigator.pushNamed<void>(context, FeatureNavigation.membership);
     if (mounted && widget.repository.current) _refresh();
   }
 

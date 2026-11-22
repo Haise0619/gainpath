@@ -1,5 +1,5 @@
 import 'dart:async';
-import '../../../../app/di/workout_preferences_factory.dart';
+import '../../../../infrastructure/local/workout_preferences_factory.dart';
 import '../../application/workout_preferences_controller.dart';
 import 'workout_privacy_settings_screen.dart';
 import 'workout_ai_consent_guard.dart';

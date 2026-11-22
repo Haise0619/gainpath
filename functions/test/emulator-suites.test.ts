@@ -5,6 +5,11 @@ import {expect, it} from 'vitest';
 
 const {suites, configFor, standaloneTests} = createRequire(resolve('package.json'))('./emulator/run-suites.cjs');
 
+it('provides a loopback Auth emulator for the Coach provisioning integration', () => {
+  expect(suites.core.tests).toContain('emulator/coach-provisioning.test.ts');
+  expect(configFor('core').emulators.auth).toEqual({host: '127.0.0.1', port: 19198});
+});
+
 it('runs every emulator test in exactly one suite without dropping dedicated tests', () => {
   const files = readdirSync('emulator').filter(file => file.endsWith('.test.ts')).sort();
   const selected = [...Object.values(suites).flatMap((suite: any) => suite.tests), ...standaloneTests].sort();

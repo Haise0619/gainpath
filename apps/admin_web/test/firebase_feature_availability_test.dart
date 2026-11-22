@@ -201,12 +201,15 @@ void main() {
     expect(find.text('Connected Member'), findsOneWidget);
     expect(find.text('Members unavailable'), findsNothing);
     expect(find.text('Suspend account'), findsNothing);
-    for (final feature in ['Refunds', 'Reports']) {
-      await tester.tap(find.text(feature).first);
-      await tester.pumpAndSettle();
-      expect(find.text('$feature unavailable'), findsNothing);
-      expect(find.text('Approve'), findsNothing);
-    }
+    await tester.tap(find.text('Refund Requests').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Refund Requests'), findsWidgets);
+    expect(find.text('Approve refund'), findsNothing);
+
+    await tester.tap(find.text('Reports').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Overview Analytics'), findsOneWidget);
+    expect(find.text('Reports unavailable'), findsNothing);
     await tester.tap(find.text('Governance'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reward Catalog').first);

@@ -18,7 +18,7 @@ import 'package:gainpath_mobile/features/workout/domain/published_routine_view.d
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_fyp_progress_repository.dart';
 import 'package:gainpath_mobile/app/routing/exercise_tutorial_route.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/shared/live_coach_directory_views.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
+import 'package:gainpath_mobile/presentation/shared/coach_profile_screen.dart';
 import '../../../../test_support/fyp_emulator_gateway.dart';
 import '../../../../test_support/fyp_render_support.dart';
 import '../../../../test_support/fyp_widget_waits.dart';

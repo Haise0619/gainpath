@@ -18,7 +18,7 @@ import '../../infrastructure/pose/blazepose_detector.dart';
 import '../../infrastructure/pose/pose_render_diagnostics.dart';
 import '../../infrastructure/pose/pose_quality_diagnostics.dart';
 import '../../infrastructure/pose/pose_joint_lag_diagnostics.dart';
-import '../di/workout_preferences_factory.dart';
+import '../../infrastructure/local/workout_preferences_factory.dart';
 import '../../features/workout/application/workout_preferences_controller.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
 import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';

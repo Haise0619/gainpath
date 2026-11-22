@@ -1,5 +1,4 @@
 import 'exercise_catalog_list.dart';
-import '../../../recommendation/application/admin_ai_drafts.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -38,8 +37,8 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// instead, the way an AWS Console "Create" flow does.
 class ExerciseTutorialsScreen extends StatefulWidget {
   const ExerciseTutorialsScreen(
-      {super.key, this.allowRemoval = true, this.initialAiDraft});
-  final Map<String, dynamic>? initialAiDraft;
+      {super.key, this.allowRemoval = true, this.initialDraft});
+  final TutorialVideo? initialDraft;
   final bool allowRemoval;
 
   @override
@@ -58,7 +57,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   @override
   void initState() {
     super.initState();
-    _creating = widget.initialAiDraft != null;
+    _creating = widget.initialDraft != null;
     _tutorialsFuture = context.read<TutorialRepository>().load();
   }
 
@@ -197,7 +196,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
     if (_creating || _editing != null) {
       return _TutorialFormPage(
           existing: _editing,
-          aiDraft: widget.initialAiDraft,
+          initialDraft: widget.initialDraft,
           onDone: _closeForm);
     }
 
@@ -245,18 +244,17 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
 }
 
 class _TutorialFormPage extends StatefulWidget {
-  final Map<String, dynamic>? aiDraft;
+  final TutorialVideo? initialDraft;
   final TutorialVideo? existing;
   final VoidCallback onDone;
-  const _TutorialFormPage({this.existing, this.aiDraft, required this.onDone});
+  const _TutorialFormPage({this.existing, this.initialDraft, required this.onDone});
 
   @override
   State<_TutorialFormPage> createState() => _TutorialFormPageState();
 }
 
 class _TutorialFormPageState extends State<_TutorialFormPage> {
-  late final TutorialVideo? _seed = widget.existing ??
-      (widget.aiDraft == null ? null : aiExerciseSeed(widget.aiDraft!));
+  late final TutorialVideo? _seed = widget.existing ?? widget.initialDraft;
   static const _categories = [
     'Compound Lower-Body',
     'Compound Upper-Body',

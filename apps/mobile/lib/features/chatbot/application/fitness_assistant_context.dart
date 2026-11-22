@@ -5,7 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/membership.dart';
 import '../../analytics/domain/local_member_progress_repository.dart';
 import '../../analytics/domain/member_workout_report.dart';
-import '../../recommendation/application/member_recommendation_repository.dart';
+import '../../recommendation/domain/member_recommendation.dart';
 import '../../workout/domain/published_routine_view.dart';
 import '../../workout/domain/workout_contracts.dart';
 import 'package:gainpath_domain/workout.dart' show exerciseImageUri;

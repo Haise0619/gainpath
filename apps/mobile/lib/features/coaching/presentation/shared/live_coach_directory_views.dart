@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/browse_coaches_screen.dart';
-import 'coach_profile_screen.dart';
-import 'published_coach_presentation.dart';
+import '../../../../presentation/shared/coach_profile_screen.dart';
+import '../../../../presentation/shared/published_coach_presentation.dart';
 
 /// Compatibility entry point; the original directory owns the presentation.
 class LiveCoachDirectoryView extends StatelessWidget {

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/identity/application/coach_account_gateway.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_public_profile_preview.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
+import 'package:gainpath_mobile/presentation/shared/coach_profile_screen.dart';
 import 'support/coach_account_gateway_fake.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'coach_shared_account_test.dart' show draft, frame;

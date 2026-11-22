@@ -6,7 +6,7 @@ const {spawnSync} = require('node:child_process');
 // Newer integration suites intentionally use separate ports and demo projects.
 // Keep those guards intact rather than running them against the core emulator.
 const suites = {
-  core: {project: 'demo-gainpath', port: 18080, storage: 19199, tests: []},
+  core: {project: 'demo-gainpath', port: 18080, auth: 19198, storage: 19199, tests: []},
   backup: {project: 'demo-gainpath-backup', port: 18086, tests: ['workout-backup']},
   checkin: {project: 'demo-gainpath-checkin', port: 18087, tests: ['app-check-in']},
   reporting: {project: 'demo-gainpath-reporting', port: 18088, storage: 19200,
@@ -38,6 +38,7 @@ function configFor(name) {
     ...(suite.storage ? {storage: {rules: 'storage.rules'}} : {}),
     emulators: {
       firestore: {host: '127.0.0.1', port: suite.port},
+      ...(suite.auth ? {auth: {host: '127.0.0.1', port: suite.auth}} : {}),
       ...(suite.storage ? {storage: {host: '127.0.0.1', port: suite.storage}} : {}),
       hub: {host: '127.0.0.1', port: 14400},
       logging: {host: '127.0.0.1', port: 14500},
@@ -49,7 +50,7 @@ function configFor(name) {
 function main() {
   const names = process.argv.slice(2);
   for (const name of names.length ? names : Object.keys(suites)) {
-    configFor(name); // Reject unknown suite names before creating temporary files.
+    const config = configFor(name); // Reject unknown suite names before creating temporary files.
     const suite = suites[name];
     const directory = mkdtempSync(join(tmpdir(), 'gainpath-emulator-'));
     try {
@@ -59,12 +60,13 @@ function main() {
       for (const name of ['firestore.rules', 'firestore.indexes.json', 'storage.rules']) {
         copyFileSync(resolve(__dirname, '../../firebase', name), join(directory, name));
       }
-      writeFileSync(file, JSON.stringify(configFor(name)));
+      writeFileSync(file, JSON.stringify(config));
+      const services = ['firestore', 'auth', 'storage'].filter(service => Object.hasOwn(config.emulators, service));
       console.log(`Running ${name}: ${suite.tests.length} files on ${suite.project}`);
       const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH';
       const result = spawnSync(process.execPath, [require.resolve('firebase-tools/lib/bin/firebase.js'),
         'emulators:exec', '--project', suite.project, '--config', file,
-        '--only', suite.storage ? 'firestore,storage' : 'firestore',
+        '--only', services.join(','),
         'vitest run --config vitest.emulator.config.ts'], {
         cwd: resolve(__dirname, '..'), stdio: 'inherit',
         env: {...process.env, GAINPATH_EMULATOR_SUITE: name,

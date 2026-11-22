@@ -4,10 +4,11 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import 'support/admin_test_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/recommendation/application/admin_ai_repository.dart';
+import 'package:gainpath_admin_web/app/routing/admin_ai_draft_route.dart';
 import 'package:gainpath_admin_web/features/recommendation/application/admin_ai_drafts.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_ai_pages.dart';
 import 'package:gainpath_admin_web/features/workout/domain/admin_workout_program_repository.dart';
@@ -212,11 +213,7 @@ void main() {
       double width = 1400,
       double scale = 1}) async {
     addTearDown(await installFypOfflineFonts());
-    await (FontLoader('MaterialIcons')
-          ..addFont(Future.value(ByteData.sublistView(File(
-                  'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-              .readAsBytesSync()))))
-        .load();
+    await loadAdminMaterialIcons();
     t.view.physicalSize = Size(width, 1100);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
@@ -308,7 +305,7 @@ void main() {
           };
         });
     final c = Catalog(), key = GlobalKey();
-    await open(t, AiContentPlannerPage(repository: repo), catalog: c, key: key);
+    await open(t, AiContentPlannerPage(repository: repo, onApply: openAdminAiDraft), catalog: c, key: key);
     expect(calls, 0);
     await tap(t, 'Generate suggestions');
     expect(calls, 1);
@@ -333,7 +330,7 @@ void main() {
       'Routine Apply retains catalog ID and supports manual cover and Save',
       (t) async {
     final r = Routines(), key = GlobalKey();
-    await open(t, AiContentPlannerPage(repository: planner()),
+    await open(t, AiContentPlannerPage(repository: planner(), onApply: openAdminAiDraft),
         routines: r, key: key);
     await tap(t, 'Routine');
     await tap(t, 'Generate suggestions');
@@ -366,7 +363,7 @@ void main() {
   testWidgets('Program Apply uses existing Program editor without saving',
       (t) async {
     final p = Programs(), key = GlobalKey();
-    await open(t, AiContentPlannerPage(repository: planner()),
+    await open(t, AiContentPlannerPage(repository: planner(), onApply: openAdminAiDraft),
         programs: p, key: key);
     await tap(t, 'Program');
     await tap(t, 'Generate suggestions');
@@ -505,7 +502,7 @@ void main() {
   testWidgets('narrow layout and large text retain controls and empty state',
       (t) async {
     final key = GlobalKey();
-    await open(t, AiContentPlannerPage(repository: planner()),
+    await open(t, AiContentPlannerPage(repository: planner(), onApply: openAdminAiDraft),
         key: key, width: 420, scale: 1.5);
     await tap(t, 'Generate suggestions');
     expect(t.takeException(), isNull);
@@ -521,7 +518,7 @@ void main() {
       'Exercise grid is two columns and hides routine metadata, with ordered instructions',
       (t) async {
     final key = GlobalKey();
-    await open(t, AiContentPlannerPage(repository: planner()), key: key);
+    await open(t, AiContentPlannerPage(repository: planner(), onApply: openAdminAiDraft), key: key);
     await tap(t, 'Generate suggestions');
     expect(t.getTopLeft(find.text('Glute Bridge')).dy,
         t.getTopLeft(find.text('Dead Bug')).dy);
@@ -650,7 +647,7 @@ void main() {
         organizationId: 'gainpath',
         isCurrent: () => true,
         invoke: (op, q) async => throw StateError('offline'));
-    await open(t, AiContentPlannerPage(repository: repo));
+    await open(t, AiContentPlannerPage(repository: repo, onApply: openAdminAiDraft));
     await tap(t, 'Generate suggestions');
     expect(find.textContaining('could not be generated'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);

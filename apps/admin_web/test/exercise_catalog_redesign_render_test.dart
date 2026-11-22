@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import 'support/admin_test_fonts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/workout/presentation/admin/exercise_catalog_list.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -13,11 +13,7 @@ void main() {
   testWidgets('render redesigned exercise catalog at 1440, 1280, 1024',
       (tester) async {
     addTearDown(await installFypOfflineFonts());
-    final icons = FontLoader('MaterialIcons')
-      ..addFont(Future.value(ByteData.sublistView(File(
-              'C:/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf')
-          .readAsBytesSync())));
-    await icons.load();
+    await loadAdminMaterialIcons();
 
     final exercises = [
       TutorialVideo(
@@ -303,7 +299,7 @@ void main() {
     }
 
     final artifactDir = Directory('../../build/exercise-catalog-redesign');
-    await artifactDir.create(recursive: true);
+    artifactDir.createSync(recursive: true);
 
     for (final width in [1440.0, 1280.0, 1024.0]) {
       tester.view.physicalSize = Size(width, 920);
@@ -346,7 +342,7 @@ void main() {
             await image.toByteData(format: ui.ImageByteFormat.png);
         final bytes = byteData!.buffer.asUint8List();
         final file =
-            File('\${artifactDir.path}/admin_exercise_catalog_${width.toInt()}.png');
+            File('${artifactDir.path}/admin_exercise_catalog_${width.toInt()}.png');
         await file.writeAsBytes(bytes);
         image.dispose();
       });

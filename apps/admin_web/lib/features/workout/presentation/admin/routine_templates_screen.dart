@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import '../../../recommendation/application/admin_ai_drafts.dart';
 import 'confirm_content_removal.dart';
 import 'routine_cover_field.dart';
 import 'package:flutter/material.dart';
@@ -202,8 +201,8 @@ Widget _buildTrackingModeBadge(ExerciseExecutionMode? mode) {
 /// Notion Gallery, TeamBuildr Training Library, and Shopify Polaris.
 class RoutineTemplatesScreen extends StatefulWidget {
   const RoutineTemplatesScreen(
-      {super.key, this.allowRemoval = true, this.initialAiDraft});
-  final Map<String, dynamic>? initialAiDraft;
+      {super.key, this.allowRemoval = true, this.initialDraft});
+  final RoutineBlueprint? initialDraft;
   final bool allowRemoval;
 
   @override
@@ -229,7 +228,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
   @override
   void initState() {
     super.initState();
-    _creating = widget.initialAiDraft != null;
+    _creating = widget.initialDraft != null;
     _templatesFuture = context.read<RoutineTemplateRepository>().load();
   }
 
@@ -352,7 +351,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
     if (_creating || _editing != null) {
       return _TemplateFormPage(
           existing: _editing,
-          aiDraft: widget.initialAiDraft,
+          initialDraft: widget.initialDraft,
           onDone: _closeForm);
     }
 
@@ -2200,18 +2199,17 @@ class _DayDraft {
 }
 
 class _TemplateFormPage extends StatefulWidget {
-  final Map<String, dynamic>? aiDraft;
+  final RoutineBlueprint? initialDraft;
   final RoutineBlueprint? existing;
   final VoidCallback onDone;
-  const _TemplateFormPage({this.existing, this.aiDraft, required this.onDone});
+  const _TemplateFormPage({this.existing, this.initialDraft, required this.onDone});
 
   @override
   State<_TemplateFormPage> createState() => _TemplateFormPageState();
 }
 
 class _TemplateFormPageState extends State<_TemplateFormPage> {
-  late final RoutineBlueprint? _seed = widget.existing ??
-      (widget.aiDraft == null ? null : aiRoutineSeed(widget.aiDraft!));
+  late final RoutineBlueprint? _seed = widget.existing ?? widget.initialDraft;
   static const _levels = ['Beginner', 'Intermediate', 'Advanced'];
   static const _tagOptions = [
     'Fat loss',

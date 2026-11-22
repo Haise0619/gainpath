@@ -5,7 +5,7 @@ import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/reward_goal.dart';
 import 'locked_rewards_preview.dart';
-import '../../../membership/presentation/member/browse_plans_screen.dart';
+import '../../../../navigation/feature_navigation.dart';
 
 class RewardGoalCard extends StatefulWidget {
   const RewardGoalCard(
@@ -150,10 +150,7 @@ class _RewardGoalCardState extends State<RewardGoalCard> {
     if (widget.onViewPlans != null) {
       await widget.onViewPlans!();
     } else {
-      await Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-              builder: (_) => const BrowsePlansScreen(connected: true)));
+      await Navigator.pushNamed<void>(context, FeatureNavigation.membershipPlans);
     }
     if (mounted && widget.repository.current) await _load();
   }

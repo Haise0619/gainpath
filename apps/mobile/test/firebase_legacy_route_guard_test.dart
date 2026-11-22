@@ -5,8 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_data/identity.dart';
 import 'package:gainpath_data/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_mobile/app/routing/feature_routes.dart';
+import 'package:gainpath_mobile/features/membership/presentation/member/browse_plans_screen.dart';
+import 'package:gainpath_mobile/features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/shared/billplz_checkout_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/shared/membership_dashboard_screen.dart';
 import 'package:gainpath_mobile/navigation/feature_navigation.dart';
@@ -91,6 +94,34 @@ void main() {
     expect(find.text('Upgrade'), findsNothing);
     expect(find.byType(Switch), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('membership plans route keeps connected membership behavior',
+      (tester) async {
+    await open(
+        tester, const RouteSettings(name: FeatureNavigation.membershipPlans));
+    final plans =
+        tester.widget<BrowsePlansScreen>(find.byType(BrowsePlansScreen));
+    expect(plans.connected, isTrue);
+    expect(find.text('Membership plans'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('workout privacy route retains the supplied scope and guard',
+      (tester) async {
+    final scope = SessionScope(userId: 'old-member', organizationId: 'gym');
+    await open(
+        tester,
+        RouteSettings(
+            name: FeatureNavigation.workoutPrivacy,
+            arguments:
+                WorkoutPrivacyArguments(scope: scope, isCurrent: () => false)));
+    final settings = tester.widget<WorkoutPrivacySettingsScreen>(
+        find.byType(WorkoutPrivacySettingsScreen));
+    expect(settings.scope, scope);
+    expect(
+        find.text('Sign in to manage your workout settings.'), findsOneWidget);
+    expect(find.text('Workout settings'), findsNothing);
   });
 
   testWidgets('Firebase checkout retains the shared UI with payment disabled',

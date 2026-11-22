@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/published_coach_presentation.dart';
+import 'package:gainpath_mobile/presentation/shared/coach_profile_screen.dart';
+import 'package:gainpath_mobile/presentation/shared/published_coach_presentation.dart';
 import 'member_coach_ux_test.dart' show coachProfile, shell;
 
 Map<String, dynamic> statistics({int sessions = 23, int count = 1}) => {

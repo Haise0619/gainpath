@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sources=(tool test)
+          sources=(tool test test_support)
           for package in packages/* apps/*; do
             for folder in lib bin test integration_test tool; do
               if [ -d "$package/$folder" ]; then

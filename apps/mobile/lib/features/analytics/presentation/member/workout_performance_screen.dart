@@ -9,7 +9,7 @@ import '../../../workout/domain/routine_attempt.dart';
 import 'widgets/contextual_progress_filter.dart';
 import 'widgets/workout_measurement_scope.dart';
 import '../../domain/local_member_progress_repository.dart';
-import '../../../workout/presentation/member/widgets/workout_result_content.dart';
+import '../../../../presentation/shared/workout_fact.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column

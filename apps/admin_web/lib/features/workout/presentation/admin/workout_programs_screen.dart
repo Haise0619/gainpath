@@ -5,7 +5,6 @@ import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/admin_workout_program_repository.dart';
 import 'routine_templates_screen.dart';
-import '../../../recommendation/application/admin_ai_drafts.dart';
 import '../../../../navigation/admin_breadcrumb.dart';
 
 String _requestId() => List.generate(
@@ -77,10 +76,10 @@ class WorkoutProgramsScreen extends StatefulWidget {
     super.key,
     this.repository,
     this.onOpenRoutineBuilder,
-    this.initialAiDraft,
+    this.buildInitialDraft,
   });
 
-  final Map<String, dynamic>? initialAiDraft;
+  final WorkoutProgram Function(String id)? buildInitialDraft;
   final AdminWorkoutProgramRepository? repository;
   final VoidCallback? onOpenRoutineBuilder;
 
@@ -95,7 +94,7 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
   final _title = TextEditingController();
   int _revision = 0, _week = 1, _generation = 0;
   bool _busy = false, _dirty = false;
-  bool _aiApplied = false;
+  bool _initialDraftApplied = false;
   String? _error, _notice, _saveRequest, _publishRequest;
   int _stage = 0;
 
@@ -218,10 +217,10 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
         _configuringDayIndex = null;
         _selectedPublishedProgram = null;
       });
-      if (widget.initialAiDraft != null && !_aiApplied) {
-        _aiApplied = true;
+      if (widget.buildInitialDraft != null && !_initialDraftApplied) {
+        _initialDraftApplied = true;
         _edit(
-            aiProgramSeed(widget.initialAiDraft!, 'program_${_requestId()}'), 0);
+            widget.buildInitialDraft!('program_${_requestId()}'), 0);
       }
     } catch (_) {
       if (mounted && generation == _generation) {

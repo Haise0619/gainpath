@@ -1,6 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:gainpath_data/gainpath_data.dart';
-
 import 'recommendation_queue.dart';
 
 typedef CanonicalAdminInvoke = Future<Object?> Function(
@@ -295,12 +292,15 @@ class CanonicalAdminRecommendationRepository {
   CanonicalAdminRecommendationRepository(
       {required this.organizationId,
       required bool Function() isCurrent,
-      required CanonicalAdminInvoke invoke})
+      required CanonicalAdminInvoke invoke,
+      bool Function(Object error)? canRetryLegacyList})
       : _current = isCurrent,
-        _invoke = invoke;
+        _invoke = invoke,
+        _canRetryLegacyList = canRetryLegacyList;
   final String organizationId;
   final bool Function() _current;
   final CanonicalAdminInvoke _invoke;
+  final bool Function(Object error)? _canRetryLegacyList;
   bool _enabled = false;
   bool _accessDenied = false;
   bool get enabled => _enabled && isCurrent;
@@ -362,10 +362,8 @@ class CanonicalAdminRecommendationRepository {
         'afterId': afterId,
         'includeRoutine': true,
       });
-    } on FirebaseFunctionsException catch (error) {
-      if (error.code != 'invalid-argument') rethrow;
-      r = await _call('admin.queue.list', {'afterId': afterId});
-    } on Module13DemoUnavailable {
+    } catch (error) {
+      if (_canRetryLegacyList?.call(error) != true) rethrow;
       r = await _call('admin.queue.list', {'afterId': afterId});
     }
     if (r['schemaVersion'] != 1 ||

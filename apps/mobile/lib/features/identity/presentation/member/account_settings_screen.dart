@@ -8,7 +8,7 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../infrastructure/firebase/firebase_member_contact_details_repository.dart';
-import '../../../workout/presentation/member/workout_privacy_settings_screen.dart';
+import '../../../../navigation/feature_navigation.dart';
 import 'member_contact_details_edit_screen.dart';
 import 'member_deactivation_dialog.dart';
 import 'privacy_and_data_settings_screen.dart';
@@ -405,20 +405,16 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                 size: 20,
                                 color: Color(0xFF9CA3AF),
                               ),
-                              onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) =>
-                                          WorkoutPrivacySettingsScreen(
-                                              scope: widget
-                                                      .contactSession?.scope ??
-                                                  widget.repository!.scope,
-                                              isCurrent: () =>
-                                                  _workoutSettingsCurrent(
-                                                      widget.contactSession
-                                                              ?.scope ??
-                                                          widget.repository!
-                                                              .scope)))),
+                              onTap: () {
+                                final scope = widget.contactSession?.scope ??
+                                    widget.repository!.scope;
+                                Navigator.pushNamed<void>(
+                                    context, FeatureNavigation.workoutPrivacy,
+                                    arguments: WorkoutPrivacyArguments(
+                                        scope: scope,
+                                        isCurrent: () => mounted &&
+                                            _workoutSettingsCurrent(scope)));
+                              },
                             ),
                             const _GroupDivider(),
                           ],

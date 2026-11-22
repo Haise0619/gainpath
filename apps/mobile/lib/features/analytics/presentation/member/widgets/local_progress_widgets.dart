@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../domain/member_workout_report.dart';
 import '../../../domain/workout_activity_overview.dart';
-import '../../../../workout/presentation/member/widgets/workout_save_indicator.dart';
+import '../../../../../presentation/shared/workout_save_indicator.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';

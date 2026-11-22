@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/identity.dart';
-import '../member/book_session_screen.dart';
-import 'member_coach_presentation.dart';
+import '../../features/coaching/presentation/member/book_session_screen.dart';
+import '../../features/coaching/presentation/shared/member_coach_presentation.dart';
 
 class CoachProfileScreen extends StatelessWidget {
   const CoachProfileScreen(

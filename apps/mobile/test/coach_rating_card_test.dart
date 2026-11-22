@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/widgets/coach_card.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/published_coach_presentation.dart';
+import 'package:gainpath_mobile/presentation/shared/published_coach_presentation.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);

@@ -2,11 +2,10 @@ export const now = Date.parse('2026-10-01T00:00:00Z');
 export const start = Date.parse('2026-10-02T02:00:00Z');
 export const command = { schemaVersion: 1 as const, requestId: 'request-1', organizationId: 'org-1',
   branchId: 'branch-1', coachId: 'coach-1', memberId: 'member-1', startAtMillis: start, durationMinutes: 60 as const };
-export const seeds = {
+export const bookingContextSeeds = {
   'orgs/org-1': { status: 'active' },
   'users/member-1': { organizationId: 'org-1' },
-  'orgs/org-1/membershipAccounts/member-1': {organizationId:'org-1',memberId:'member-1',planId:'basic',expiresAtMillis:now+60*86400000,lastTransactionId:'paid'},
-  'orgs/org-1/transactions/paid': {schemaVersion:1,organizationId:'org-1',memberId:'member-1',transactionId:'paid',kind:'MembershipPurchase',planId:'basic',planName:'Synthetic Basic',benefits:[],environment:'sandbox',provider:'billplz',currency:'MYR',paymentStatus:'cleared',fulfilmentStatus:'confirmed',billId:'bill',collectionId:'collection',amountMinor:8900,durationDays:30,clearedAtMillis:now-1,expiresAtMillis:now+60*86400000},
+
   'users/coach-1': { organizationId: 'org-1' },
   'users/staff-1': { organizationId: 'org-1' },
   'orgs/org-1/members/member-1': { organizationId: 'org-1', role: 'member', status: 'active', branchIds: ['branch-1', 'branch-2'] },
@@ -18,6 +17,11 @@ export const seeds = {
     maxActiveBookingsPerMemberPerDay: 1, holdMinutes: 15 },
   'orgs/org-1/coachAvailability/coach-1/days/2026-10-02': { schemaVersion: 1, revision: 1, timeZone: 'Asia/Kuala_Lumpur', policyVersion: 'booking-v1', createdAtMillis: now, updatedAtMillis: now,
     windows: [{ branchId: 'branch-1', startAtMillis: start, endAtMillis: start + 4 * 3600000 }] },
+};
+export const seeds = {
+  ...bookingContextSeeds,
+  'orgs/org-1/membershipAccounts/member-1': {organizationId:'org-1',memberId:'member-1',planId:'basic',expiresAtMillis:now+60*86400000,lastTransactionId:'paid'},
+  'orgs/org-1/transactions/paid': {schemaVersion:1,organizationId:'org-1',memberId:'member-1',transactionId:'paid',kind:'MembershipPurchase',planId:'basic',planName:'Synthetic Basic',benefits:[],environment:'sandbox',provider:'billplz',currency:'MYR',paymentStatus:'cleared',fulfilmentStatus:'confirmed',billId:'bill',collectionId:'collection',amountMinor:8900,durationDays:30,clearedAtMillis:now-1,expiresAtMillis:now+60*86400000},
 };
 // Explicit synthetic Auth fixture; production always injects the B1 Auth reader.
 export const eligibleCoach = async (_uid: string) => ({ exists: true, disabled: false, emailVerified: true });

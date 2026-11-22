@@ -17,7 +17,7 @@ import 'package:gainpath_admin_web/infrastructure/firebase/firebase_admin_report
 import '../../../../test_support/fyp_emulator_gateway.dart';
 import '../../../../test_support/fyp_render_support.dart';
 import '../../../../test_support/fyp_widget_waits.dart';
-import '../../../mobile/test/support/signed_out_firebase.dart';
+import '../../../../test_support/signed_out_firebase.dart';
 import '../support/module13_demo_render.dart' show loadDemoRenderFonts;
 
 class _CanonicalMembers implements AdminMemberDirectoryRepository {

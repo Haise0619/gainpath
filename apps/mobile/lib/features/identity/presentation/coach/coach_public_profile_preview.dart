@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
-import '../../../coaching/presentation/shared/coach_profile_screen.dart';
-import '../../../coaching/presentation/shared/published_coach_presentation.dart';
+import '../../../../presentation/shared/coach_profile_screen.dart';
+import '../../../../presentation/shared/published_coach_presentation.dart';
 import 'coach_account_presentation.dart' show CoachAccountData;
 
-export '../../../coaching/presentation/shared/coach_profile_screen.dart'
+export '../../../../presentation/shared/coach_profile_screen.dart'
     show CoachProfileStat;
 
 /// Coach profile layout, backed by the selected owner/public snapshot.

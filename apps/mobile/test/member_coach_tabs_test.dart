@@ -5,7 +5,7 @@ import 'package:gainpath_mobile/features/coaching/presentation/shared/live_booki
 import 'live_booking_composition_test.dart' show Lists;
 import 'package:gainpath_mobile/features/coaching/presentation/member/browse_coaches_screen.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/widgets/coach_card.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/published_coach_presentation.dart';
+import 'package:gainpath_mobile/presentation/shared/published_coach_presentation.dart';
 import 'member_coach_ux_test.dart'
     show MemberDirectoryFake, coachProfile, shell;
 

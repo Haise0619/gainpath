@@ -1,6 +1,6 @@
 import 'dart:async';
 import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
-import '../di/workout_preferences_factory.dart';
+import '../../infrastructure/local/workout_preferences_factory.dart';
 import '../../features/workout/domain/program_enrollment.dart';
 import '../../features/workout/application/workout_preferences_controller.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';

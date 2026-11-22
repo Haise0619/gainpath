@@ -9,8 +9,10 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../navigation/feature_navigation.dart';
 import '../../features/workout/presentation/shared/equipment_detail_screen.dart';
-import '../../features/coaching/presentation/shared/coach_profile_screen.dart';
+import '../../presentation/shared/coach_profile_screen.dart';
 import '../../features/membership/presentation/shared/membership_dashboard_screen.dart';
+import '../../features/membership/presentation/member/browse_plans_screen.dart';
+import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../../features/membership/presentation/shared/billplz_checkout_screen.dart';
 import '../../features/analytics/presentation/shared/progress_dashboard_screen.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
@@ -65,6 +67,12 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
             CoachProfileScreen(coach: args),
           FeatureNavigation.membership =>
             MembershipDashboardScreen(connected: firebase),
+          FeatureNavigation.membershipPlans =>
+            BrowsePlansScreen(connected: firebase),
+          FeatureNavigation.workoutPrivacy
+              when args is WorkoutPrivacyArguments =>
+            WorkoutPrivacySettingsScreen(
+                scope: args.scope, isCurrent: args.isCurrent),
           FeatureNavigation.progress => firebase
               ? Builder(builder: (context) {
                   final session = context.read<AuthBloc>().state.session;

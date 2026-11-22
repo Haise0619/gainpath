@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import 'dart:convert';
-import '../../../../infrastructure/firebase/firebase_function_transport.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/admin_ai_repository.dart';
-import '../../../workout/presentation/admin/exercise_tutorials_screen.dart';
-import '../../../workout/presentation/admin/routine_templates_screen.dart';
-import '../../../workout/presentation/admin/workout_programs_screen.dart';
 
 String _failure(Object error, String fallback) =>
     error is FirebaseFunctionsException &&
@@ -23,9 +18,13 @@ String _failure(Object error, String fallback) =>
         : fallback;
 
 class AiContentPlannerPage extends StatefulWidget {
-  const AiContentPlannerPage({super.key, this.repository, this.onApply});
+  const AiContentPlannerPage({
+    super.key,
+    this.repository,
+    required this.onApply,
+  });
   final AdminAiRepository? repository;
-  final Future<void> Function(BuildContext, Map<String, dynamic>)? onApply;
+  final Future<void> Function(BuildContext, Map<String, dynamic>) onApply;
   @override
   State<AiContentPlannerPage> createState() => _AiContentPlannerPageState();
 }
@@ -68,21 +67,6 @@ class _AiContentPlannerPageState extends State<AiContentPlannerPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _apply(Map<String, dynamic> draft) async {
-    if (widget.onApply != null) {
-      await widget.onApply!(context, draft);
-      return;
-    }
-    final Widget form = switch (draft['type']) {
-      'exercise' => ExerciseTutorialsScreen(initialAiDraft: draft),
-      'routine' => RoutineTemplatesScreen(initialAiDraft: draft),
-      _ => WorkoutProgramsScreen(initialAiDraft: draft),
-    };
-    await Navigator.of(context).push<void>(MaterialPageRoute(
-        builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('Review AI draft')), body: form)));
   }
 
   @override
@@ -183,7 +167,7 @@ class _AiContentPlannerPageState extends State<AiContentPlannerPage> {
                   width: width,
                   child: _PlannerCard(
                       draft: draft,
-                      onApply: () => _apply(draft),
+                      onApply: () => widget.onApply(context, draft),
                       onDismiss: () => setState(() => _dismissed.add(index)))),
         ]);
       }),
@@ -743,8 +727,7 @@ class _AiMemberOutreachPageState extends State<AiMemberOutreachPage> {
                       key: ValueKey(
                           '${_preview!['previewId']}:$index:${r['target']?['photoPath']}'),
                       target: aiMap(r['target']),
-                      organizationId: widget.repository!.organizationId,
-                      isCurrent: () => widget.repository?.current == true),
+                      repository: widget.repository!),
                   TextField(
                       controller: _messages[index],
                       enabled: !_busy,
@@ -948,11 +931,9 @@ class _OutreachImage extends StatefulWidget {
   const _OutreachImage(
       {super.key,
       required this.target,
-      required this.organizationId,
-      required this.isCurrent});
+      required this.repository});
   final Map<String, dynamic> target;
-  final String organizationId;
-  final bool Function() isCurrent;
+  final AdminAiRepository repository;
   @override
   State<_OutreachImage> createState() => _OutreachImageState();
 }
@@ -961,33 +942,13 @@ class _OutreachImageState extends State<_OutreachImage> {
   late final Future<Uint8List?>? _photo =
       widget.target['photoPath'] is String ? _load() : null;
   Future<Uint8List?> _load() async {
-    try {
-      if (!widget.isCurrent()) return null;
-      final coachId =
-          widget.target['target']?['coachId'] ?? widget.target['coachId'];
-      if (coachId is! String || coachId.isEmpty) return null;
-      final result =
-          await firebaseCallable('getCoachPublishedPhotoCommand').call({
-        'schemaVersion': 1,
-        'organizationId': widget.organizationId,
-        'coachId': coachId,
-      });
-      if (!widget.isCurrent()) return null;
-      final data = aiMap(result.data);
-      final encoded = data['bytesBase64'];
-      if (data['schemaVersion'] != 1 ||
-          data['photoPath'] != widget.target['photoPath'] ||
-          encoded is! String ||
-          encoded.length > 7 * 1024 * 1024 ||
-          !['image/jpeg', 'image/png', 'image/webp']
-              .contains(data['contentType'])) {
-        return null;
-      }
-      final bytes = base64Decode(encoded);
-      return bytes.length <= 5 * 1024 * 1024 ? bytes : null;
-    } catch (_) {
-      return null;
-    }
+    final nestedTarget = widget.target['target'];
+    if (nestedTarget != null && nestedTarget is! Map) return null;
+    final coachId =
+        (nestedTarget as Map?)?['coachId'] ?? widget.target['coachId'];
+    if (coachId is! String) return null;
+    return widget.repository
+        .loadCoachPhoto(coachId, widget.target['photoPath'] as String);
   }
 
   Widget get _placeholder => SizedBox(

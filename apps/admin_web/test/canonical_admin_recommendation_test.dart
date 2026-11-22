@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import 'support/admin_test_fonts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../test_support/fyp_render_support.dart';
 import 'package:flutter/material.dart';
@@ -34,11 +34,7 @@ void main() {
       'Overview source filter and Details stay visible without duplicate navigation',
       (t) async {
     addTearDown(await installFypOfflineFonts());
-    await (FontLoader('MaterialIcons')
-          ..addFont(Future.value(ByteData.sublistView(File(
-                  'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-              .readAsBytesSync()))))
-        .load();
+    await loadAdminMaterialIcons();
     final h = CanonicalAdminHarness(), key = GlobalKey();
     t.view.physicalSize = const Size(1280, 1000);
     t.view.devicePixelRatio = 1;

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { FirestoreStore } from '../src/platform/firestore/firestore-store';
 import { receivePaymentEvent } from '../src/modules/commerce/payment-ingress';
-import { command, now, start, seeds, eligibleCoach } from '../test/booking-fixture';
+import { command, now, start, seeds, eligibleCoach, paidMemberFixture } from '../test/booking-fixture';
 import { getMemberBookingOptionsService } from '../src/modules/coaching/member-booking-options-service';
 
 let app: App;
@@ -22,6 +22,16 @@ beforeEach(async () => {
 });
 const hold = (input = command, time = now) => createBookingHoldService(new FirestoreStore(db), 'member-1', input, eligibleCoach, () => time);
 
+async function seedSecondMember(branchIds: string[]) {
+  const batch = db.batch();
+  batch.set(db.doc('users/member-2'), { organizationId: 'org-1' });
+  batch.set(db.doc('orgs/org-1/members/member-2'), { organizationId: 'org-1', role: 'member', status: 'active', branchIds });
+  for (const [path, data] of Object.entries(paidMemberFixture('orgs/org-1', 'org-1', 'member-2', now))) {
+    batch.set(db.doc(path), data);
+  }
+  await batch.commit();
+}
+
 it('replaces existing expired locks using the real Firestore adapter', async () => {
   const first = await hold();
   const second = await hold({ ...command, requestId: 'request-2' }, first.holdExpiresAtMillis);
@@ -30,11 +40,11 @@ it('replaces existing expired locks using the real Firestore adapter', async () 
   expect(locks.docs.every(d => d.data().bookingId === second.bookingId)).toBe(true);
 });
 it('serializes competing overlapping holds from different members', async () => {
-  await db.doc('orgs/org-1/members/member-2').set({ organizationId: 'org-1', role: 'member', status: 'active', branchIds: ['branch-1'] });
-  await db.doc('users/member-2').set({ organizationId: 'org-1' });
+  await seedSecondMember(['branch-1']);
   const results = await Promise.allSettled([hold(), createBookingHoldService(new FirestoreStore(db), 'member-2',
     { ...command, memberId: 'member-2', requestId: 'request-2', startAtMillis: start + 1800000 }, eligibleCoach, () => now)]);
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+  expect(results.find(r => r.status === 'rejected')).toMatchObject({ reason: { code: 'aborted' } });
   expect((await db.collection('orgs/org-1/bookings').get()).size).toBe(1);
 });
 it('serializes the daily cap across disjoint slots', async () => {
@@ -49,8 +59,7 @@ it('deduplicates concurrent retries with one receipt and booking', async () => {
   expect((await db.collection('orgs/org-1/commandReceipts').get()).size).toBe(1);
 });
 it('serializes same-slot members, rejects a different-branch request, and persists options from those exact locks', async () => {
-  await db.doc('users/member-2').set({ organizationId: 'org-1' });
-  await db.doc('orgs/org-1/members/member-2').set({ organizationId: 'org-1', role: 'member', status: 'active', branchIds: ['branch-1', 'branch-2'] });
+  await seedSecondMember(['branch-1', 'branch-2']);
   await db.doc('orgs/org-1/branches/branch-2').set({ status: 'active' });
   await db.doc('orgs/org-1/coaches/coach-1').update({ branchIds: ['branch-1', 'branch-2'] });
   await db.doc('orgs/org-1/members/coach-1').update({ branchIds: ['branch-1', 'branch-2'] });
@@ -61,7 +70,7 @@ it('serializes same-slot members, rejects a different-branch request, and persis
     createBookingHoldService(store, 'member-2', { ...command, memberId: 'member-2', branchId: 'branch-2', requestId: 'cross-branch' }, eligibleCoach, () => now),
   ]);
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
-  expect(results[2].status).toBe('rejected');
+  expect(results[2]).toMatchObject({ status: 'rejected', reason: { code: 'failed-precondition' } });
   expect((await db.collection('orgs/org-1/bookings').get()).size).toBe(1);
   expect((await db.collection('orgs/org-1/jobs').get()).size).toBe(1);
   const losingMember = results[0].status === 'fulfilled' ? 'member-2' : 'member-1';

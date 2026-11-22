@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, afterAll, expect, it } from 'vitest';
 import { FirestoreStore } from '../src/platform/firestore/firestore-store';
 import { getCoachRosterService, saveCoachRosterService, getCoachAvailabilityService } from '../src/modules/coaching/coach-availability-service';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
-import { eligibleCoach } from '../test/booking-fixture';
+import { eligibleCoach, paidMemberFixture } from '../test/booking-fixture';
 import { root, org, now, date, start, auth, seeds, read } from '../test/coach-availability.fixture';
 import { weekly, rosterSave } from '../test/coach-roster.fixture';
 
@@ -20,7 +20,11 @@ beforeAll(async () => {
   rules = await initializeTestEnvironment({ projectId: 'demo-gainpath', firestore: { rules: readFileSync(process.env.MODULE10_RULES_FILE ?? '../firebase/firestore.rules', 'utf8') } });
 });
 beforeEach(async () => {
-  await rules.clearFirestore(); const batch = db.batch(); Object.entries(seeds()).forEach(([p, v]) => batch.set(db.doc(p), v));
+  await rules.clearFirestore();
+  const batch = db.batch();
+  for (const [path, data] of Object.entries({ ...seeds(), ...paidMemberFixture(root, org, 'member2', now) })) {
+    batch.set(db.doc(path), data);
+  }
   batch.set(db.doc('users/member2'), { organizationId: org });
   batch.set(db.doc(`${root}/members/member2`), { organizationId: org, status: 'active', role: 'member', branchIds: ['main'] });
   await batch.commit();

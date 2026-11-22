@@ -1,5 +1,7 @@
 import '../routing/admin_console_navigation.dart';
+import '../di/admin_ai_factory.dart';
 import '../di/canonical_admin_recommendation_factory.dart';
+import '../routing/admin_ai_draft_route.dart';
 import 'package:gainpath_data/gainpath_data.dart'
     show FypDatasetTransportFactory;
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
@@ -208,7 +210,7 @@ class _AdminShellState extends State<AdminShell> {
   String? _coachDrillDownBranch;
   late final AdminAiRepository? _adminAi = widget.liveSession == null
       ? null
-      : AdminAiRepository(
+      : createFirebaseAdminAi(
           organizationId: widget.liveSession!.scope.organizationId,
           isCurrent: () =>
               mounted &&
@@ -484,7 +486,7 @@ class _AdminShellState extends State<AdminShell> {
           Icons.auto_awesome,
           'AI Content Planner',
           'Discover and draft new fitness content',
-          AiContentPlannerPage(repository: _adminAi)),
+          AiContentPlannerPage(repository: _adminAi, onApply: openAdminAiDraft)),
       _NavPage(
           Icons.people_alt_outlined,
           Icons.people_alt,

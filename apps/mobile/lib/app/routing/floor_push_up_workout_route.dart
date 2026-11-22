@@ -14,6 +14,7 @@ import '../../infrastructure/pose/android_pose_camera.dart';
 import '../../infrastructure/pose/blazepose_detector.dart';
 import '../../infrastructure/pose/blazepose_contract.dart';
 import '../../navigation/workout_navigation.dart';
+import '../../infrastructure/local/workout_preferences_factory.dart';
 import '../di/workout_store_factory.dart';
 import 'pose_preview_route.dart' show PoseCameraViewport;
 import 'real_squat_route.dart' show ScopedSquatResult;

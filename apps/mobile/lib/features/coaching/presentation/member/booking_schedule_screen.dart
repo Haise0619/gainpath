@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../application/booking_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../shared/coach_profile_screen.dart';
+import '../../../../presentation/shared/coach_profile_screen.dart';
 import 'message_coach_screen.dart';
 import 'reschedule_screen.dart';
 import 'widgets/booking_card.dart';

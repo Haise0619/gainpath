@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
-import '../../../gamification/presentation/member/locked_rewards_preview.dart';
+import '../../../../presentation/shared/locked_membership_preview.dart';
 import '../shared/live_coach_directory_views.dart';
-import '../shared/published_coach_presentation.dart';
+import '../../../../presentation/shared/published_coach_presentation.dart';
 import 'widgets/coach_card.dart';
 
 /// Informational published directory; membership actions remain in the foreground.

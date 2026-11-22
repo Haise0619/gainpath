@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../../../app/di/workout_preferences_factory.dart';
-import '../../../../app/di/workout_store_factory.dart';
+import '../../../../infrastructure/local/workout_preferences_factory.dart';
 import '../../application/workout_preferences_controller.dart';
 import '../../domain/workout_audio_port.dart';
 

@@ -7,7 +7,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
     show PersistedBookingRecord;
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../shared/coach_profile_screen.dart';
+import '../../../../presentation/shared/coach_profile_screen.dart';
 import '../shared/booking_coach_info.dart';
 import '../shared/persisted_booking_presentation.dart';
 

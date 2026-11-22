@@ -7,7 +7,7 @@ import { membershipOverview } from '../src/modules/commerce/membership-payment-s
 import { getCoachAvailabilityService } from '../src/modules/coaching/coach-availability-service';
 import { getCoachRatingsCommand } from '../src/modules/coaching/coach-rating-callable';
 import { getCoachRatingsPilotCommand } from '../src/modules/coaching/coach-rating-pilot-callable';
-import { seeds, now } from '../test/booking-fixture';
+import { bookingContextSeeds, now } from '../test/booking-fixture';
 import { localFirestoreEmulator } from './loopback-emulator';
 
 const emulator = localFirestoreEmulator();
@@ -18,7 +18,7 @@ beforeAll(() => { app = initializeApp({ projectId }); db = getFirestore(app); })
 beforeEach(async () => {
   await fetch(`http://${emulator.authority}/emulator/v1/projects/${projectId}/databases/(default)/documents`, { method: 'DELETE' });
   const batch = db.batch();
-  for (const [path, data] of Object.entries(seeds)) batch.set(db.doc(path), data);
+  for (const [path, data] of Object.entries(bookingContextSeeds)) batch.set(db.doc(path), data);
   batch.set(db.doc('users/admin'), { organizationId: 'org-1' });
   batch.set(db.doc('orgs/org-1/members/admin'), { organizationId: 'org-1', role: 'admin', status: 'active', branchIds: [] });
   await batch.commit();
