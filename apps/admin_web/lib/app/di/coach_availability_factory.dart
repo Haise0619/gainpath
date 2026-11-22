@@ -12,10 +12,13 @@ class AdminCoachScheduleRoute extends StatefulWidget {
       {super.key,
       required this.session,
       required this.repository,
-      required this.coachId});
+      required this.coachId,
+      this.initialBranchId,
+      this.initialLocalDate});
   final AuthSession session;
   final CoachAvailabilityRepository repository;
   final String coachId;
+  final String? initialBranchId, initialLocalDate;
   @override
   State<AdminCoachScheduleRoute> createState() =>
       _AdminCoachScheduleRouteState();
@@ -46,13 +49,21 @@ class _AdminCoachScheduleRouteState extends State<AdminCoachScheduleRoute> {
           ? AdminCoachScheduleView(
               repository: widget.repository,
               coachId: widget.coachId,
+              initialBranchId: widget.initialBranchId,
+              initialLocalDate: widget.initialLocalDate,
               isCurrent: guard!.isCurrent,
               branchRequest: (input) async {
-                if (!guard!.isCurrent()) throw StateError('Admin session changed.');
-                final response = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                if (!guard!.isCurrent())
+                  throw StateError('Admin session changed.');
+                final response = await FirebaseFunctions.instanceFor(
+                        region: 'asia-southeast1')
                     .httpsCallable('branchManagementCommand')
-                    .call({...input, 'organizationId': widget.session.scope.organizationId});
-                if (!guard!.isCurrent()) throw StateError('Admin session changed.');
+                    .call({
+                  ...input,
+                  'organizationId': widget.session.scope.organizationId
+                });
+                if (!guard!.isCurrent())
+                  throw StateError('Admin session changed.');
                 return Map<String, dynamic>.from(response.data as Map);
               })
           : const Scaffold(

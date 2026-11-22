@@ -6,7 +6,7 @@ import { readOperationsCalendar } from '../src/modules/analytics/operations-cale
 import { command as bookingFixture } from '../test/booking-fixture';
 
 it('projects real indexed Firestore records and reconciles Malaysia Time metric buckets with Branch Reports', async () => {
-  if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:18080') {
+  if (!/^127\.0\.0\.1:[0-9]{1,5}$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? '')) {
     throw new Error('Dedicated loopback emulator required.');
   }
   const app = initializeApp({ projectId: 'demo-gainpath' }, 'operations-calendar');
@@ -69,7 +69,8 @@ it('projects real indexed Firestore records and reconciles Malaysia Time metric 
     expect(timeline).toMatchObject({
       unavailable: [],
       events: [
-        { type: 'announcement', sourceId: 'calendar-announcement', status: 'expired', allDay: true },
+        { type: 'announcement', sourceId: 'calendar-announcement', status: 'expired', allDay: false,
+          startAtMillis: startAtMillis - hour, endAtMillis: startAtMillis + 2 * hour },
         { type: 'availability', coachId: command.coachId, title: 'Fixture coach' },
         { type: 'booking', sourceId: 'calendar-session', title: 'Fixture coach', paymentStatus: 'cleared' },
       ],
