@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'add_member_dialog.dart';
 import 'member_details_dialog.dart';
 import 'user_action_dialogs.dart';
 
@@ -67,11 +68,17 @@ class _InitialsAvatar extends StatelessWidget {
 /// card with clean search, segmented status filters, SaaS data table,
 /// and smooth pagination while maintaining complete backward compatibility.
 class MembersScreen extends StatefulWidget {
-  const MembersScreen({super.key, this.live = false, this.branchId, this.branchRequest});
+  const MembersScreen(
+      {super.key,
+      this.live = false,
+      this.branchId,
+      this.branchRequest,
+      this.memberSetup});
 
   final bool live;
   final String? branchId;
   final BranchRequest? branchRequest;
+  final MemberSetupRequest? memberSetup;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -81,6 +88,10 @@ class _MembersScreenState extends State<MembersScreen> {
   final _searchController = TextEditingController();
   String _status = 'All';
   String _query = '';
+  String? _homeFilter, _membershipFilter;
+  Map<String, Map<String, dynamic>> _memberDescriptions = {};
+  List<MemberBranch> _branches = [];
+  final _resending = <String>{};
   int _page = 0;
 
   // Live state
@@ -97,6 +108,9 @@ class _MembersScreenState extends State<MembersScreen> {
     super.initState();
     if (widget.live) {
       _loadLive();
+      if (_canProvision) {
+        unawaited(_loadBranches().then<void>((_) {}, onError: (Object _) {}));
+      }
     }
   }
 
@@ -119,19 +133,70 @@ class _MembersScreenState extends State<MembersScreen> {
     });
     try {
       final request = widget.branchRequest;
-      final result = widget.branchId != null && request != null
-          ? await _loadBranch(request)
-          : await context.read<AdminMemberDirectoryRepository>().loadPage(
-                query: _query,
-                status: _status,
-                afterId: _liveCursors.last,
-              );
-      if (!mounted || generation != _liveGeneration) return;
-      setState(() {
-        _liveItems = result.items;
-        _liveNext = result.nextCursor;
-        _liveLoading = false;
-      });
+      final directory = context.read<AdminMemberDirectoryRepository>();
+      final setup = widget.memberSetup;
+      final rawStatus =
+          _status == 'Pending setup' || (_status == 'Active' && setup != null)
+              ? 'All'
+              : _status;
+      var cursor = _liveCursors.last;
+      while (true) {
+        final result = widget.branchId != null && request != null
+            ? await _loadBranch(request, cursor, rawStatus)
+            : await directory.loadPage(
+                query: _query, status: rawStatus, afterId: cursor);
+        if (!mounted || generation != _liveGeneration) return;
+        final ids = result.items
+            .where((member) => member.source == 'existing')
+            .map((member) => member.id)
+            .toList();
+        var descriptions = <String, Map<String, dynamic>>{};
+        if (setup != null && ids.isNotEmpty) {
+          try {
+            final response = await setup({
+              'schemaVersion': 1,
+              'action': 'describe',
+              'memberIds': ids,
+            });
+            descriptions = {
+              for (final row in response['members'] as List)
+                row['memberId'] as String:
+                    Map<String, dynamic>.from(row as Map),
+            };
+          } catch (_) {
+            // The existing directory stays usable during a scoped callable outage.
+            if (_homeFilter != null ||
+                _membershipFilter != null ||
+                _status == 'Pending setup') {
+              rethrow;
+            }
+          }
+        }
+        if (!mounted || generation != _liveGeneration) return;
+        final items = result.items.where((member) {
+          final meta = descriptions[member.id];
+          final account = meta?['accountStatus'] ?? member.status;
+          return (_homeFilter == null ||
+                  meta?['homeBranchId'] == _homeFilter) &&
+              (_membershipFilter == null ||
+                  meta?['membership'] == _membershipFilter) &&
+              (_status != 'Pending setup' || account == 'pendingSetup') &&
+              (_status != 'Active' || account == 'active');
+        }).toList();
+        if (items.isNotEmpty || result.nextCursor == null) {
+          setState(() {
+            _liveItems = items;
+            _memberDescriptions = descriptions;
+            _liveNext = result.nextCursor;
+            _liveLoading = false;
+          });
+          break;
+        }
+        if (cursor == result.nextCursor) {
+          throw StateError('Invalid directory cursor.');
+        }
+        cursor = result.nextCursor;
+      }
     } catch (_) {
       if (!mounted || generation != _liveGeneration) return;
       setState(() {
@@ -142,21 +207,115 @@ class _MembersScreenState extends State<MembersScreen> {
     }
   }
 
-  Future<AdminMemberPage> _loadBranch(BranchRequest request) async {
+  Future<AdminMemberPage> _loadBranch(
+      BranchRequest request, String? cursor, String status) async {
     final response = await request({
       'action': 'branchMembers',
       'branchId': widget.branchId,
       'query': _query,
-      'status': _status,
-      if (_liveCursors.last != null) 'afterId': _liveCursors.last,
+      'status': status,
+      if (cursor != null) 'afterId': cursor,
     });
     return AdminMemberPage(
-      (response['records'] as List).map((row) => AdminMemberRecord(
-        id: row['id'] as String, name: row['name'] as String,
-        email: row['email'] as String, status: row['status'] as String,
-      )).toList(),
+      (response['records'] as List)
+          .map((row) => AdminMemberRecord(
+                id: row['id'] as String,
+                name: row['name'] as String,
+                email: row['email'] as String,
+                status: row['status'] as String,
+              ))
+          .toList(),
       nextCursor: response['nextAfterId'] as String?,
     );
+  }
+
+  bool get _canProvision =>
+      widget.live && widget.memberSetup != null && widget.branchRequest != null;
+
+  Future<List<MemberBranch>> _loadBranches() async {
+    final request = widget.branchRequest!;
+    final choices = <MemberBranch>[];
+    String? cursor;
+    do {
+      final response = await request(
+          {'action': 'list', if (cursor != null) 'afterId': cursor});
+      for (final row in response['records'] as List) {
+        final id = row['branchId'];
+        final label = row['displayName'];
+        if (id is String && label is String && label.trim().isNotEmpty) {
+          choices.add((id: id, name: label, active: row['status'] == 'active'));
+        }
+      }
+      final next = response['nextAfterId'] as String?;
+      if (next != null && next == cursor) {
+        throw StateError('Invalid branch cursor.');
+      }
+      cursor = next;
+    } while (cursor != null);
+    if (mounted) setState(() => _branches = choices);
+    return choices;
+  }
+
+  void _reloadFirstPage() {
+    _liveCursors
+      ..clear()
+      ..add(null);
+    unawaited(_loadLive());
+  }
+
+  Future<void> _viewMember(String memberId) {
+    final repository = context.read<AdminMemberDirectoryRepository>();
+    return showDialog<void>(
+      context: context,
+      builder: (_) =>
+          MemberDetailsDialog(memberId: memberId, repository: repository),
+    );
+  }
+
+  Future<void> _addMember() async {
+    final created = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AddMemberDialog(
+        request: widget.memberSetup!,
+        loadBranches: _loadBranches,
+        homeBranchId: widget.branchId,
+        onCreated: () {
+          if (mounted) _reloadFirstPage();
+        },
+      ),
+    );
+    if (mounted && created != null) await _viewMember(created);
+  }
+
+  Future<void> _resendSetup(String id) async {
+    if (!_resending.add(id)) return;
+    setState(() {});
+    String message;
+    try {
+      final result = await widget.memberSetup!({
+        'schemaVersion': 1,
+        'action': 'resend',
+        'memberId': id,
+      });
+      message = switch (result['delivery']) {
+        'sent' => 'Brevo accepted the setup email for delivery.',
+        'rate_limited' => 'Wait before sending another setup email.',
+        'failed' => 'The setup email could not be sent.',
+        _ => 'No new setup email was submitted.',
+      };
+      if (result['accountStatus'] == 'complete') {
+        message = 'Account setup is already complete.';
+      }
+    } catch (_) {
+      message = 'Could not confirm the setup email. Try again later.';
+    } finally {
+      if (mounted) setState(() => _resending.remove(id));
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   void _onSearch(String value) {
@@ -204,6 +363,8 @@ class _MembersScreenState extends State<MembersScreen> {
 
   void _clearFilters() {
     _searchController.clear();
+    _homeFilter = null;
+    _membershipFilter = null;
     _onSearch('');
     _onStatus('All');
   }
@@ -218,7 +379,11 @@ class _MembersScreenState extends State<MembersScreen> {
   Widget build(BuildContext context) {
     final all = widget.live ? const <UserAccount>[] : _members;
     final activeCount = widget.live
-        ? _liveItems.where((u) => u.status == 'active').length
+        ? _liveItems
+            .where((u) =>
+                (_memberDescriptions[u.id]?['accountStatus'] ?? u.status) ==
+                'active')
+            .length
         : all.where((u) => u.status == AccountStatus.active).length;
     final suspendedCount = widget.live
         ? _liveItems.where((u) => u.status == 'suspended').length
@@ -354,7 +519,12 @@ class _MembersScreenState extends State<MembersScreen> {
                 letterSpacing: -0.4,
               ),
             ),
-            if (widget.live)
+            if (_canProvision)
+              FilledButton.icon(
+                  onPressed: _addMember,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Member'))
+            else if (widget.live)
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -578,6 +748,16 @@ class _MembersScreenState extends State<MembersScreen> {
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Search members by name or email...',
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchController.clear();
+                    _onSearch('');
+                  },
+                ),
           hintStyle: GoogleFonts.inter(
             fontSize: 13.5,
             color: const Color(0xFF807895),
@@ -605,7 +785,12 @@ class _MembersScreenState extends State<MembersScreen> {
 
     final statusFilters = Row(
       mainAxisSize: MainAxisSize.min,
-      children: ['All', 'Active', 'Suspended'].map((s) {
+      children: [
+        'All',
+        'Active',
+        'Suspended',
+        if (_canProvision) 'Pending setup'
+      ].map((s) {
         final selected = s == _status;
         return Padding(
           padding: const EdgeInsets.only(left: 6),
@@ -664,6 +849,7 @@ class _MembersScreenState extends State<MembersScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           searchInput,
+          if (_canProvision) _directoryFilters(),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -681,18 +867,52 @@ class _MembersScreenState extends State<MembersScreen> {
       );
     }
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: searchInput),
-        const SizedBox(width: 12),
-        statusFilters,
-        if (widget.live) ...[
-          const SizedBox(width: 8),
-          refreshButton,
-        ],
+        Row(children: [
+          Expanded(child: searchInput),
+          const SizedBox(width: 12),
+          statusFilters,
+          if (widget.live) ...[const SizedBox(width: 8), refreshButton],
+        ]),
+        if (_canProvision) _directoryFilters(),
       ],
     );
   }
+
+  Widget _directoryFilters() => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Wrap(spacing: 12, runSpacing: 8, children: [
+          if (widget.branchId == null && _branches.isNotEmpty)
+            DropdownButton<String>(
+              value: _homeFilter ?? '',
+              items: [
+                const DropdownMenuItem(
+                    value: '', child: Text('All home branches')),
+                for (final branch in _branches)
+                  DropdownMenuItem(value: branch.id, child: Text(branch.name)),
+              ],
+              onChanged: (value) {
+                setState(() => _homeFilter = value == '' ? null : value);
+                _reloadFirstPage();
+              },
+            ),
+          DropdownButton<String>(
+            value: _membershipFilter ?? '',
+            items: const [
+              DropdownMenuItem(value: '', child: Text('All memberships')),
+              DropdownMenuItem(value: 'free', child: Text('Free')),
+              DropdownMenuItem(value: 'basic', child: Text('Basic')),
+              DropdownMenuItem(value: 'premium', child: Text('Premium')),
+            ],
+            onChanged: (value) {
+              setState(() => _membershipFilter = value == '' ? null : value);
+              _reloadFirstPage();
+            },
+          ),
+        ]),
+      );
 
   Widget _buildMemberTable(BuildContext context, List<UserAccount> pageItems) {
     return Column(
@@ -751,13 +971,13 @@ class _MembersScreenState extends State<MembersScreen> {
             if (i > 0) const Divider(height: 1, color: Color(0xFFEEEAF4)),
             _MemberTableRow.member(
               _liveItems[i],
-              onManage: () => showDialog<void>(
-                context: context,
-                builder: (_) => MemberDetailsDialog(
-                  memberId: _liveItems[i].id,
-                  repository: context.read<AdminMemberDirectoryRepository>(),
-                ),
-              ),
+              description: _memberDescriptions[_liveItems[i].id],
+              onManage: () => _viewMember(_liveItems[i].id),
+              onResend:
+                  _memberDescriptions[_liveItems[i].id]?['canResend'] == true &&
+                          !_resending.contains(_liveItems[i].id)
+                      ? () => _resendSetup(_liveItems[i].id)
+                      : null,
             ),
           ]
         else
@@ -1092,21 +1312,30 @@ class _SummaryCard extends StatelessWidget {
 /// Polished SaaS Member Table Row.
 class _MemberTableRow extends StatelessWidget {
   _MemberTableRow({required UserAccount user, this.onManage})
-      : name = user.name,
+      : description = null,
+        onResend = null,
+        name = user.name,
         email = user.email,
         statusLabel = user.status.label,
         readOnly = false;
 
-  _MemberTableRow.member(AdminMemberRecord member, {this.onManage})
+  _MemberTableRow.member(AdminMemberRecord member,
+      {this.onManage, this.onResend, this.description})
       : name = member.name,
         email = member.email,
-        statusLabel = member.statusLabel,
+        statusLabel = switch (description?['accountStatus']) {
+          'pendingSetup' => 'Pending setup',
+          'disabled' => 'Disabled',
+          'unknown' => 'Unknown',
+          _ => member.statusLabel,
+        },
         readOnly = true;
 
   final String name;
   final String email;
   final String statusLabel;
-  final VoidCallback? onManage;
+  final VoidCallback? onManage, onResend;
+  final Map<String, dynamic>? description;
   final bool readOnly;
 
   @override
@@ -1149,6 +1378,24 @@ class _MemberTableRow extends StatelessWidget {
                               color: const Color(0xFF807895),
                             ),
                           ),
+                          if (description != null)
+                            Text(
+                              [
+                                if (description!['branchName']
+                                    case final String name)
+                                  name,
+                                if (description!['membership']
+                                    case final String tier)
+                                  '${tier[0].toUpperCase()}${tier.substring(1)} membership',
+                              ].join(' · '),
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          if (onResend != null)
+                            TextButton(
+                              onPressed: onResend,
+                              child: const Text('Resend Setup Email'),
+                            ),
                         ],
                       ),
                     ),
@@ -1200,11 +1447,15 @@ class _MemberTableRow extends StatelessWidget {
   }
 
   Widget _buildSemanticStatusBadge(String status) {
-    final isSuspended = status.toLowerCase() == 'suspended';
-    final Color textColor =
-        isSuspended ? const Color(0xFFC44343) : const Color(0xFF15854C);
-    final Color bgColor =
-        isSuspended ? const Color(0xFFFDECEC) : const Color(0xFFE4F7EB);
+    final (textColor, bgColor) = switch (status.toLowerCase()) {
+      'active' => (const Color(0xFF15854C), const Color(0xFFE4F7EB)),
+      'suspended' || 'disabled' => (
+          const Color(0xFFC44343),
+          const Color(0xFFFDECEC)
+        ),
+      'pending setup' => (const Color(0xFF8B410A), const Color(0xFFFFE9D3)),
+      _ => (AppColors.inkSoft, AppColors.surfaceAlt),
+    };
 
     return Align(
       alignment: Alignment.centerLeft,

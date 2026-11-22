@@ -233,7 +233,10 @@ class _AdminShellState extends State<AdminShell> {
           Icons.groups_rounded,
           'Members',
           'Search, filter, and view member accounts',
-          MembersScreen(live: widget.liveSession != null)),
+          MembersScreen(
+              live: widget.liveSession != null,
+              branchRequest: _memberSetupEnabled ? _requestBranch : null,
+              memberSetup: _memberSetupEnabled ? _requestMemberSetup : null)),
       _NavPage(
           Icons.sports_outlined,
           Icons.sports_rounded,
@@ -272,6 +275,7 @@ class _AdminShellState extends State<AdminShell> {
                 body: MembersScreen(
                   live: true,
                   branchId: branchId,
+                  memberSetup: _memberSetupEnabled ? _requestMemberSetup : null,
                   branchRequest: (input) async {
                     if (context.read<AuthBloc>().state.session?.scope != session.scope) {
                       throw StateError('Admin session changed.');
@@ -490,6 +494,41 @@ class _AdminShellState extends State<AdminShell> {
       if (d is _NavGroup) pages.addAll(d.children);
     }
     return pages;
+  }
+
+  bool get _memberSetupEnabled =>
+      widget.liveSession != null && widget.liveSession!.datasetScope == null;
+
+  Future<Map<String, dynamic>> _requestMemberSetup(
+      Map<String, Object?> input) async {
+    final session = widget.liveSession!;
+    final auth = context.read<AuthBloc>();
+    if (auth.state.session?.scope != session.scope) {
+      throw StateError('Admin session changed.');
+    }
+    final reply = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+        .httpsCallable('adminMemberProvisioning')
+        .call({...input, 'organizationId': session.scope.organizationId});
+    if (!mounted || auth.state.session?.scope != session.scope) {
+      throw StateError('Admin session changed.');
+    }
+    return Map<String, dynamic>.from(reply.data as Map);
+  }
+
+
+  Future<Map<String, dynamic>> _requestBranch(Map<String, Object?> input) async {
+    final session = widget.liveSession!;
+    final auth = context.read<AuthBloc>();
+    if (auth.state.session?.scope != session.scope) {
+      throw StateError('Admin session changed.');
+    }
+    final reply = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+        .httpsCallable('branchManagementCommand')
+        .call({...input, 'organizationId': session.scope.organizationId});
+    if (!mounted || auth.state.session?.scope != session.scope) {
+      throw StateError('Admin session changed.');
+    }
+    return Map<String, dynamic>.from(reply.data as Map);
   }
 
   void _navigateToPaymentMode(PaymentsMode mode) {
