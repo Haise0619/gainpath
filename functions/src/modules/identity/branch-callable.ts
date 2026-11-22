@@ -9,6 +9,7 @@ import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { coachCommandError } from '../coaching/coach-profile-callables';
 import { branchManagement } from './branch-management';
 import { branchOperations, branchOperationsActions } from './branch-operations';
+import { readOperationsCalendar } from '../analytics/operations-calendar';
 import { readBranchReport } from '../analytics/branch-report';
 import { authorizeAdminReport } from '../analytics/admin-reporting';
 
@@ -16,6 +17,9 @@ export const branchManagementCommand = onCall({ region: 'asia-southeast1', enfor
   try {
     const db = getFirestore();
     const input = request.data;
+    if (input?.action === 'calendarEvents' || input?.action === 'calendarInsights') {
+      return await readOperationsCalendar(db, request.auth, input);
+    }
     if (input?.action === 'branchReport') {
       requireVerifiedEmail(request.auth);
       const org = requiredIdentifier(input.organizationId, 'organizationId');

@@ -1,10 +1,13 @@
 import type { Firestore, Query } from 'firebase-admin/firestore';
 import { DomainError } from '../../platform/errors';
 import { requiredIdentifier } from '../../platform/validation';
+import {
+  branchReportDate, clockNumber, confirmedCoachingReceipt, inBranchReportRange,
+  MALAYSIA_UTC_OFFSET, successfulBranchVisit,
+} from './branch-report-activity';
 
 const cap = 1500;
 const unassigned = 'unassigned';
-const clockNumber = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 
 type Daily = { date: string; bookings: number; completed: number; cancelled: number;
   coachingMinor: number; workouts: number; visits: number | null };
@@ -22,7 +25,7 @@ function reportBucket(branchId: string, branchName: string, status: string | nul
 type Bucket = ReturnType<typeof reportBucket>;
 
 function increment(bucket: Bucket, instant: number, metric: Exclude<keyof Daily, 'date'>, amount = 1) {
-  const date = new Date(instant + 8 * 3600000).toISOString().slice(0, 10);
+  const date = branchReportDate(instant);
   const row = bucket.daily.get(date) ?? { date, bookings: 0, completed: 0, cancelled: 0,
     coachingMinor: 0, workouts: 0, visits: bucket.visitsAvailable ? 0 : null };
   row[metric] = (row[metric] ?? 0) + amount;
@@ -78,7 +81,7 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
     if (all) update(combined);
   }
 
-  const inRange = (value: unknown): value is number => clockNumber(value) && value >= from && value < to;
+  const inRange = (value: unknown): value is number => inBranchReportRange(value, from, to);
   const byBranch = (collection: string) => {
     const query = db.collection(`${root}/${collection}`);
     return branchId ? query.where('branchId', '==', branchId) : query;
@@ -138,20 +141,9 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
   }
   const bills = new Set<string>();
   for (const payment of payments) {
-    if (payment.type !== 'CoachingBooking' || payment.paymentStatus !== 'cleared'
-      || payment.fulfilmentStatus !== 'confirmed' || ![undefined, 'none', 'rejected'].includes(payment.refundStatus as string | undefined)) continue;
-    if (!clockNumber(payment.paymentVerifiedAtMillis)) {
-      throw new DomainError('failed-precondition', 'Coaching receipt dates require review.');
-    }
-    if (!inRange(payment.paymentVerifiedAtMillis) || payment.paymentVerifiedAtMillis > now) continue;
-    const { amountMinor, paymentVerifiedAtMillis, billId } = payment;
-    if (payment.organizationId !== org || payment.bookingId !== payment.id || payment.schemaVersion !== 1
-      || payment.environment !== 'sandbox' || !['xendit', 'billplz'].includes(String(payment.provider))
-      || payment.currency !== 'MYR' || !clockNumber(amountMinor) || amountMinor === 0 || typeof billId !== 'string' || !billId) {
-      throw new DomainError('failed-precondition', 'Coaching receipts require review.');
-    }
-    if (bills.has(billId)) throw new DomainError('failed-precondition', 'Coaching receipts contain duplicate provider bills.');
-    bills.add(billId);
+    const receipt = confirmedCoachingReceipt(payment, org, from, to, now, bills);
+    if (!receipt) continue;
+    const { amountMinor, paymentVerifiedAtMillis } = receipt;
     forScope(payment.branchId, bucket => {
       bucket.coachingMinor += amountMinor;
       if (!Number.isSafeInteger(bucket.coachingMinor)) {
@@ -160,21 +152,21 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
       increment(bucket, paymentVerifiedAtMillis, 'coachingMinor', amountMinor);
     });
   }
-  async function countVisits(bucket: Bucket) {
+  const countVisits = async (bucket: Bucket) => {
     const visits = await rows(db.collection(`${root}/branches/${bucket.branchId}/gymVisits`)
       .where('checkedInAtMillis', '>=', from).where('checkedInAtMillis', '<', to));
     for (const visit of visits) {
-      const { memberId, checkedInAtMillis } = visit;
-      if (visit.source !== 'branch_qr' || visit.branchId !== bucket.branchId
-        || typeof memberId !== 'string' || !memberId || !inRange(checkedInAtMillis)) continue;
-      const hour = new Date(checkedInAtMillis + 8 * 3600000).getUTCHours();
+      const successful = successfulBranchVisit(visit, bucket.branchId, from, to);
+      if (!successful) continue;
+      const { memberId, checkedInAtMillis } = successful;
+      const hour = new Date(checkedInAtMillis + MALAYSIA_UTC_OFFSET).getUTCHours();
       forScope(bucket.branchId, result => {
         result.visitorCounts.set(memberId, (result.visitorCounts.get(memberId) ?? 0) + 1);
         result.hours[hour]++;
         increment(result, checkedInAtMillis, 'visits');
       });
     }
-  }
+  };
   if (all || branchId) {
     const branches = [...buckets.values()];
     for (let offset = 0; offset < branches.length; offset += 10) {

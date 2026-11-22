@@ -57,9 +57,9 @@ export function bookingPolicy(data: DocumentData | undefined) {
   catch { throw new DomainError('failed-precondition', 'Organization timezone needs review.'); }
   return { timeZone: data.timeZone, policyVersion: data.policyVersion };
 }
-export function normalizeWindows(raw: unknown, date: string, zone: string, permitted: readonly string[], max = 16): AvailabilityWindow[] {
+export function normalizeWindows(raw: unknown, date: string, zone: string, permitted: readonly string[], max = 16, daySlots?: readonly number[]): AvailabilityWindow[] {
   if (!Array.isArray(raw) || raw.length > max) throw new InputValidationError('Too many scheduling windows.');
-  const slots = new Set(dateGrid(date, zone).slots);
+  const slots = new Set(daySlots ?? dateGrid(date, zone).slots);
   const list = raw.map(value => {
     const w = object(value); allowed(w, ['branchId', 'startAtMillis', 'endAtMillis']);
     const branchId = requiredIdentifier(w.branchId, 'branchId'), startAtMillis = integer(w.startAtMillis, 1), endAtMillis = integer(w.endAtMillis, 1);
@@ -76,12 +76,12 @@ export function normalizeWindows(raw: unknown, date: string, zone: string, permi
   }
   return result;
 }
-export function storedDay(data: DocumentData | undefined, date: string, zone: string, permitted: readonly string[]) {
+export function storedDay(data: DocumentData | undefined, date: string, zone: string, permitted: readonly string[], daySlots?: readonly number[]) {
   if (!data) return { revision: 0, windows: [] as AvailabilityWindow[], reviewRequired: false };
   try {
     allowed(data, ['schemaVersion', 'windows', 'revision', 'timeZone', 'policyVersion', 'createdAtMillis', 'updatedAtMillis']);
     if (data.schemaVersion !== 1) throw Error();
-    const windows = normalizeWindows(data.windows, date, zone, permitted, 96);
+    const windows = normalizeWindows(data.windows, date, zone, permitted, 96, daySlots);
     const metadata = ['revision', 'timeZone', 'policyVersion', 'createdAtMillis', 'updatedAtMillis'];
     if (metadata.every(k => !Object.hasOwn(data, k))) return { revision: 0, windows, reviewRequired: true };
     const revision = integer(data.revision, 1, Number.MAX_SAFE_INTEGER - 1);

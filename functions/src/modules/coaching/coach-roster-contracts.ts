@@ -46,16 +46,17 @@ export function storedRoster(data: DocumentData | undefined, zone: string, assig
     return { revision, weeklyAvailability: weeklyAvailability(data.weeklyAvailability, assigned), exceptions: rosterExceptions(data.exceptions) };
   } catch { throw rosterReview(); }
 }
-export function weeklyWindows(date: string, zone: string, weekly: WeeklyAvailability | null): AvailabilityWindow[] {
+export function weeklyWindows(date: string, zone: string, weekly: WeeklyAvailability | null, daySlots?: readonly number[]): AvailabilityWindow[] {
   if (!weekly) return [];
   const dayOfWeek = ((new Date(dateEpoch(date)).getUTCDay() + 6) % 7) + 1, day = weekly.schedule.find(d => d.dayOfWeek === dayOfWeek)!;
   if (!day.isActive) return [];
   const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  const windows = dateGrid(date, zone).slots.filter(slot => {
+  const slots = daySlots ?? dateGrid(date, zone).slots;
+  const windows = slots.filter(slot => {
     const parts = formatter.formatToParts(slot), minute = Number(parts.find(p => p.type === 'hour')!.value) * 60 + Number(parts.find(p => p.type === 'minute')!.value);
     return minute >= day.startMinute && minute < day.endMinute;
   }).map(slot => ({ branchId: day.branchId, startAtMillis: slot, endAtMillis: slot + SLOT }));
-  return normalizeWindows(windows, date, zone, [day.branchId], 52);
+  return normalizeWindows(windows, date, zone, [day.branchId], 52, slots);
 }
 export function maskWindows(windows: AvailabilityWindow[], exceptions: readonly RosterException[]): AvailabilityWindow[] {
   const result: AvailabilityWindow[] = [];
@@ -69,9 +70,9 @@ export function maskWindows(windows: AvailabilityWindow[], exceptions: readonly 
   }
   return result;
 }
-export function resolveRosterDay(data: DocumentData | undefined, date: string, zone: string, assigned: readonly string[], roster: CoachRoster) {
-  const day = storedDay(data, date, zone, assigned);
-  const baseWindows = data ? day.windows : weeklyWindows(date, zone, roster.weeklyAvailability);
+export function resolveRosterDay(data: DocumentData | undefined, date: string, zone: string, assigned: readonly string[], roster: CoachRoster, daySlots?: readonly number[]) {
+  const day = storedDay(data, date, zone, assigned, daySlots);
+  const baseWindows = data ? day.windows : weeklyWindows(date, zone, roster.weeklyAvailability, daySlots);
   return { ...day, baseWindows, windows: maskWindows(baseWindows, roster.exceptions) };
 }
 export function coverage(windows: readonly AvailabilityWindow[], slot: number) { return windows.find(w => w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT)?.branchId; }
