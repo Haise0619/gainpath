@@ -22,11 +22,19 @@ Use the existing Billplz Sandbox and status reconciliation. An immediate-upgrade
 
 **Release sequence**
 
-Use the current 20 November Functions deployments as packaging baselines. Stage and verify every effective-tier reader, Coach directory Rules, and both Billplz webhook regions before allowing the new payment-create flow. `getMembershipPaymentCommand` and `manageAdminBookingPaymentCommand` must also use the new settlement code before `createMembershipPaymentCommand` accepts the new modes. Old settlement code can classify a valid upgrade as a final cleared payment requiring review. Deploy the quote callable and upgrade-capable overview after the supporting readers and promote the compatible Member APK once all endpoints agree. The read-only FYP overview excludes the upgrade capability flag.
+Use the active Functions deployments as packaging baselines. Verify effective-tier readers, live Coach directory Rules and both Billplz webhook regions before allowing the new payment-create flow. `getMembershipPaymentCommand` and `manageAdminBookingPaymentCommand` must also use the new settlement code before `createMembershipPaymentCommand` accepts the new modes. Old settlement code can classify a valid upgrade as a final cleared payment requiring review. Release the upgrade-capable overview after the quote and create callables. The read-only FYP overview excludes the upgrade capability flag.
 
 **Local verification**
 
 - 153 Functions tests, 10 Firestore emulator tests, 74 Flutter tests, and 11 Domain tests passed. Functions source and test type checks and scoped Flutter analysis passed.
 - Reviewed the upgrade options, immediate quote, scheduled membership, and 320 dp checkout at 200% text. The render suite generated 48 upgrade images across 12 viewport and text-scale combinations.
 - The arm64 Android Debug APK built successfully. SHA-256 `465e7e4525f9c88b3f313babb9dc6bf3bfceefa7e58f9ddb5d435826ed6f8414`.
-- Independent review covered lost Basic receipt evidence, legacy orders, recovery replay, quote errors and coordinated settlement rollout. Firebase release, physical-device acceptance and external Billplz acceptance are pending.
+- Independent review covered lost Basic receipt evidence, legacy orders, recovery replay, quote errors and coordinated settlement rollout.
+
+## Live deployment
+
+The source-only rollout completed on 23 November 2026 at 15:11 MYT. Exact downloaded source matched all 25 packages loaded and tested before release. Verification confirmed 57 other Functions, IAM, and runtime configuration were preserved. Live Rules already blocked direct reads and writes of the new quote and recovery records; the release remained on its existing ruleset. Existing product and provider configuration were preserved.
+
+Authenticated overview and membership access returned HTTP 200. The ordinary overview returned `upgradeSupported: true`. The four anonymous membership calls returned HTTP 401. The invalid upgrade mode returned HTTP 400 before checkout. The smoke checks created no payment orders and ran no provider payments.
+
+The canonical Android Studio project `C:/Users/Ngzhe/StudioProjects/gainpath` uses `apps/mobile/lib/main.dart` through **GainPath Member — Android**. The matching Debug build from `9c0ee5c` passed. The previous APK and unrelated working changes were preserved. Physical-device checkout remains pending. Prior source archives and source hashes are retained in the isolated worktree under `build/membership-upgrade-live-20261123/`.

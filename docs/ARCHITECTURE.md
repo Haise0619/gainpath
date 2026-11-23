@@ -594,3 +594,7 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 ## Admin Reports analytics — 16 November 2026
 
 Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+
+## Member Premium upgrade and extension — 23 November 2026
+
+Trusted checkout binds the selected mode, price, and original Basic receipt. Verified payment activates an immediate upgrade or records a paid future term. Effective-tier readers select the committed term at the server-time boundary. Order recovery binds the request to the original transaction. [Design and release evidence](superpowers/plans/2026-11-23-membership-upgrade.md).

@@ -737,3 +737,7 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 ## Admin Reports analytics — 16 November 2026
 
 Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+
+## Member Premium upgrade and extension — 23 November 2026
+
+Immediate upgrade with a 30-day extension and prepaid Premium at Basic expiry are active for the ordinary Member app. The signed-in overview exposes both upgrade choices and the Android Studio Debug build passed. [Verification and remaining device acceptance](superpowers/plans/2026-11-23-membership-upgrade.md).

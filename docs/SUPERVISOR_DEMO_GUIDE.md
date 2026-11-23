@@ -742,3 +742,7 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 ## Admin Reports analytics — 16 November 2026
 
 Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+
+## Ordinary Member Premium upgrade — 23 November 2026
+
+Open the canonical GainPath checkout in Android Studio and run **GainPath Member — Android**. A verified active Basic Member can open **Membership → Upgrade to Premium** and review immediate or next-term pricing. Checkout uses Billplz Sandbox. The read-only FYP membership flow retains its existing scope. [Live verification](superpowers/plans/2026-11-23-membership-upgrade.md#live-deployment).
