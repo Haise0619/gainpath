@@ -65,6 +65,21 @@ it('blocks new acknowledgment and read after revocation without persisting comma
     data: {...f.memberRequest.data, action, commandId: action, expectedRevision: 1}})).rejects.toMatchObject({code: 'failed-precondition'});
   expect(JSON.stringify([...f.store.documents])).toBe(before);
 });
+it('records a read of an owned dismissed delivery without unredacting it', async () => {
+  const f = await deliveryFixture();
+  await createRecommendationDelivery(f.deps)(f.request);
+  const service = createMemberRecommendationService(f.deps);
+  const command = (action: string, expectedRevision: number) => ({...f.memberRequest,
+    data: {...f.memberRequest.data, action, commandId: `dismissed-${action}`, expectedRevision}});
+  await service(command('dismiss', 1));
+  const read = command('read', 2);
+  const result = await service(read);
+  expect(result).toMatchObject({state: 'dismissed', revision: 3, readAtMillis: 200000,
+    acknowledgedAtMillis: null, dismissedAtMillis: 200000, target: null, explanations: []});
+  expect(await service(read)).toEqual(result);
+  expect([...f.store.documents].find(([p]) => p.includes('/notifications/'))![1].read).toBe(true);
+  await expect(service(command('acknowledge', 3))).rejects.toMatchObject({code: 'failed-precondition'});
+});
 it.each(['wrong_member', 'inactive', 'wrong_org', 'app', 'fresh_auth', 'lifecycle'] as const)('denies %s access before details and actions', async reason => {
   const f = await deliveryFixture(); await createRecommendationDelivery(f.deps)(f.request);
   let request = f.memberRequest, deps = f.deps;

@@ -110,7 +110,9 @@ export function createMemberRecommendationService(deps: RecommendationDeliveryDe
         const receiptPath = `orgs/${q.organizationId}/recommendationMemberCommandReceipts/${digestOf({actorId: auth.uid, commandId: q.commandId})}`;
         if (replayCommand(await tx.get(receiptPath), q, auth.uid, fingerprint, r)) return detail;
         if (r.revision !== q.expectedRevision) throw new DomainError('aborted', 'Recommendation revision changed.');
-        if (r.status === 'prepared' || q.action !== 'dismiss' && detail.state !== 'available') throw queueFailure();
+        const canReadDismissed = q.action === 'read' && detail.state === 'dismissed';
+        if (r.status === 'prepared' ||
+            (q.action !== 'dismiss' && detail.state !== 'available' && !canReadDismissed)) throw queueFailure();
         const field = q.action === 'read' ? 'memberReadAtMillis' : q.action === 'acknowledge' ? 'acknowledgedAtMillis' : 'dismissedAtMillis';
         const changed = r[field] === null;
         const revision = Number(r.revision) + (changed ? 1 : 0);

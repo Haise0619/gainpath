@@ -115,7 +115,10 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
     try {
       var detail = await widget.repository.get(widget.recommendationId);
       if (!_current) return;
-      if (detail.available && detail.readAt == null) {
+      if (detail.readAt == null &&
+          detail.deliveredAt != null &&
+          (detail.available ||
+              detail.state == MemberRecommendationState.dismissed)) {
         detail = await widget.repository.act(detail, 'read', _command('read'));
       }
       if (!_current) return;

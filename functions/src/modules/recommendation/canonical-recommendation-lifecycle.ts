@@ -404,7 +404,9 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
           const fingerprint = digestOf({id, action, expectedRevision}); const command = await tx.get(commandPath);
           if (command) {if (command.fingerprint !== fingerprint) throw new DomainError('aborted', 'Command reused.'); return detail(r);}
           if (r.revision !== expectedRevision) throw new DomainError('aborted', 'Recommendation changed.');
-          if(r.deliveredAtMillis===null||action!=='dismiss'&&state!=='available')throw unavailable();
+          const canReadDismissed = action === 'read' && state === 'dismissed';
+          if (r.deliveredAtMillis === null ||
+              (action !== 'dismiss' && state !== 'available' && !canReadDismissed)) throw unavailable();
           const changed=action==='read'?r.readAtMillis===null:action==='acknowledge'?r.acknowledgedAtMillis===null:r.dismissedAtMillis===null;
           const updated = {...r, revision: r.revision + (changed?1:0), ...(action === 'read' ? {readAtMillis: r.readAtMillis ?? now} :
             action === 'acknowledge' ? {acknowledgedAtMillis: r.acknowledgedAtMillis ?? now} : {dismissedAtMillis: r.dismissedAtMillis ?? now})};

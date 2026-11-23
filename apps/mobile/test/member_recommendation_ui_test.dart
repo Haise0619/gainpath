@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import 'package:gainpath_mobile/app/notifications/member_notifications_screen.dart';
+import 'package:gainpath_mobile/app/notifications/member_notification_badge.dart';
 import 'package:gainpath_mobile/features/recommendation/application/member_recommendation_repository.dart';
 import 'package:gainpath_mobile/features/recommendation/presentation/member/member_recommendation_sheet.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -18,6 +19,9 @@ const member = AuthSession(
     branchIds: ['main']);
 
 class InboxFake implements Module9Repository {
+  InboxFake({this.dismissedOnFirstPage = false});
+  final bool dismissedOnFirstPage;
+  bool recommendationRead = false;
   final calls = <String?>[];
   final readCalls = <String>[];
   @override
@@ -25,7 +29,7 @@ class InboxFake implements Module9Repository {
   @override
   Future<NoticePage> loadInbox({String? afterId}) async {
     calls.add(afterId);
-    return afterId == null
+    return afterId == null && !dismissedOnFirstPage
         ? NoticePage([
             MemberNotice(
                 id: 'booking',
@@ -38,17 +42,20 @@ class InboxFake implements Module9Repository {
         : NoticePage([
             MemberNotice(
                 id: 'rec',
-                title: 'Meet your Coach',
+                title: dismissedOnFirstPage
+                    ? 'Recommendation dismissed'
+                    : 'Meet your Coach',
                 message: 'Support for your next learning step.',
-                read: false,
+                read: recommendationRead,
                 createdAt: DateTime(2026, 11, 1),
                 recommendation: RecommendationNotice.parse({
                   'schemaVersion': 1,
                   'recommendationId': 'r1',
                   'kind': 'trainer',
-                  'state': 'available',
+                  'state': dismissedOnFirstPage ? 'dismissed' : 'available',
                   'expiresAtMillis': 4102444800000,
-                  'target': memberDetail()['target']
+                  'target':
+                      dismissedOnFirstPage ? null : memberDetail()['target']
                 }, 'gym1'))
           ], null);
   }
@@ -105,6 +112,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Booking confirmed'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets(
+      'opening a dismissed recommendation clears its unread label and bell dot',
+      (tester) async {
+    final inbox = InboxFake(dismissedOnFirstPage: true);
+    final actions = <String>[];
+    final repo = RpcMemberRecommendationRepository(
+        scope: member.scope,
+        isCurrent: () => true,
+        invoke: (request) async {
+          final action = request['action'] as String;
+          actions.add(action);
+          if (action == 'read') inbox.recommendationRead = true;
+          return {
+            ...memberDetail(state: 'dismissed'),
+            'dismissedAtMillis': 1300,
+            if (inbox.recommendationRead) 'readAtMillis': 1400,
+          };
+        });
+    final badge = MemberNotificationBadge(
+        inbox: inbox,
+        isCurrent: () => true,
+        loadSeen: () async => {},
+        saveSeen: (_) async {});
+    addTearDown(badge.dispose);
+    await badge.refreshInbox();
+    await tester.pumpWidget(host(MemberNotificationsScreen(
+        session: member,
+        isCurrent: () => true,
+        module9Repository: inbox,
+        notificationBadge: badge,
+        recommendationRepository: repo)));
+    await tester.pumpAndSettle();
+    expect(find.text('Unread'), findsOneWidget);
+    expect(badge.value, isTrue);
+
+    await tester.tap(find.text('Recommendation dismissed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recommendation dismissed.'), findsOneWidget);
+    expect(actions, ['get', 'read']);
+    expect(badge.value, isFalse);
+    expect(inbox.readCalls, isEmpty);
+    Navigator.of(tester.element(find.byType(MemberRecommendationSheet))).pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Recommendation dismissed'), findsOneWidget);
+    expect(find.text('Unread'), findsNothing);
   });
   testWidgets(
       'read ack and dismiss are separate durable commands and no identifiers appear',

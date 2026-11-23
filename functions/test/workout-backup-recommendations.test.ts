@@ -573,6 +573,21 @@ describe('automatic workout guidance', () => {
     await expect(f.lifecycle.member({...auth, uid: 'other'}, org, id, 'get', null, null)).rejects.toThrow();
     expect((await f.lifecycle.member(auth, org, id, 'dismiss', 1, 'dismiss-test')).state).toBe('dismissed');
   });
+  it('syncs a read on a dismissed delivery to the canonical inbox', async () => {
+    const f = fixture();
+    const [id] = await f.deliver(f.add('dismissed-inbox-read', null));
+    const dismiss = await f.lifecycle.member(auth, org, id, 'dismiss', 1, 'dismiss');
+    expect(dismiss).toMatchObject({state: 'dismissed', revision: 2, readAtMillis: null});
+    const noticePath = root + '/notifications/' + digestOf({canonicalRecommendation: id});
+    expect(f.store.documents.get(noticePath)?.read).toBe(false);
+    const read = () => f.lifecycle.member(auth, org, id, 'read', 2, 'read-dismissed');
+    const result = await read();
+    expect(result).toMatchObject({state: 'dismissed', revision: 3, readAtMillis: now,
+      dismissedAtMillis: now, acknowledgedAtMillis: null, target: null, explanations: []});
+    expect(await read()).toEqual(result);
+    expect(f.store.documents.get(noticePath)?.read).toBe(true);
+    await expect(f.lifecycle.member(auth, org, id, 'acknowledge', 3, 'ack-dismissed')).rejects.toMatchObject({code: 'failed-precondition'});
+  });
   it('uses only recent compatible covered scores for progression', async () => {
     const f = fixture();
     f.add('poor-coverage', 5, {coverage: .2});
