@@ -2,7 +2,7 @@ import { initializeApp, deleteApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { beforeAll, beforeEach, afterAll, expect, it } from 'vitest';
 import { FirestoreStore } from '../src/platform/firestore/firestore-store';
-import { createMembershipPayment, settleMembershipPayment } from '../src/modules/commerce/membership-payment-service';
+import { createMembershipPayment, membershipQuote, settleMembershipPayment } from '../src/modules/commerce/membership-payment-service';
 import { resolveMembershipEntitlement } from '../src/modules/commerce/membership-entitlement';
 import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billplz-sandbox';
 import { readFileSync } from 'node:fs';
@@ -84,13 +84,37 @@ it('serializes distinct cleared renewals without losing remaining time', async (
   await Promise.all([settleMembershipPayment(store, 'gainpath', id, bills.get(id)!, () => now), settleMembershipPayment(store, 'gainpath', second, secondBill, () => now)]);
   expect((await db.doc('orgs/gainpath/membershipAccounts/member').get()).data()?.expiresAtMillis).toBe(now + 50000 + 60 * 86400000);
 });
+
+it('persists the issued quote and schedules a paid Premium term once under contention', async () => {
+  const store = new FirestoreStore(db);
+  const term = 30 * 86400000, expiry = now + term;
+  await db.doc('orgs/gainpath/membershipAccounts/member').delete();
+  await db.doc('orgs/gainpath/membershipPlans/premium').set({ active: true, name: 'Premium', amountMinor: 12900, currency: 'MYR', durationDays: 30, benefits: [], version: 'test' });
+  const basic = await createMembershipPayment(store, auth(), { ...base, intent: 'purchase', requestId: 'basic' }, gateway, () => now);
+  const basicId = String(basic.transactionId);
+  await settleMembershipPayment(store, 'gainpath', basicId, bills.get(basicId)!, () => now);
+  const upgrade = { schemaVersion: 1, organizationId: 'gainpath', planId: 'premium', upgradeMode: 'next_term' };
+  const { quoteId } = await membershipQuote(store, auth(), upgrade, () => now + 1000);
+  const commands = await Promise.all(['one', 'two'].map(requestId => createMembershipPayment(store, auth(),
+    { ...upgrade, quoteId, intent: 'purchase', requestId }, gateway, () => now + 2000)));
+  expect(creates).toBe(2);
+  expect(commands[0].transactionId).toBe(commands[1].transactionId);
+  const id = String(commands[0].transactionId);
+  await Promise.all([2000, 3000].map(ms => settleMembershipPayment(store, 'gainpath', id, bills.get(id)!, () => now + ms)));
+  const resolve = (at: number) => store.transact(tx => resolveMembershipEntitlement(tx, auth(), 'gainpath', at));
+  expect(await resolve(expiry - 1)).toMatchObject({ effectiveTier: 'basic', paidExpiresAtMillis: expiry });
+  expect(await resolve(expiry)).toMatchObject({ effectiveTier: 'premium', paidExpiresAtMillis: expiry + term });
+});
+
 it('existing Rules deny direct financial writes and cross-account ledger reads', async () => {
   const env = await initializeTestEnvironment({ projectId, firestore: { host: emulator.host, port: emulator.port, rules: readFileSync('../firebase/firestore.rules', 'utf8') } });
   try {
     const client = env.authenticatedContext('member', { email_verified: true }).firestore();
-    for (const path of ['orgs/gainpath/membershipAccounts/member', 'orgs/gainpath/transactions/forged', 'orgs/gainpath/membershipPlans/basic', 'orgs/gainpath/promoCodes/CODE']) {
+    for (const path of ['orgs/gainpath/membershipAccounts/member', 'orgs/gainpath/transactions/forged', 'orgs/gainpath/membershipPlans/basic', 'orgs/gainpath/promoCodes/CODE', 'orgs/gainpath/membershipUpgradeQuotes/forged', 'orgs/gainpath/membershipCheckoutRecoveries/forged']) {
       await assertFails(setDoc(doc(client, path), { expiresAtMillis: now + 9999999999, amountMinor: 1, status: 'cleared' }));
     }
     await assertFails(getDoc(doc(client, 'orgs/gainpath/transactions/other-members-payment')));
+    await assertFails(getDoc(doc(client, 'orgs/gainpath/membershipUpgradeQuotes/forged')));
+    await assertFails(getDoc(doc(client, 'orgs/gainpath/membershipCheckoutRecoveries/forged')));
   } finally { await env.cleanup(); }
 });

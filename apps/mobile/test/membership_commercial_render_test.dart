@@ -11,6 +11,7 @@ import 'package:gainpath_mobile/features/gamification/presentation/member/reward
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/billing_history_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/browse_plans_screen.dart';
+import 'package:gainpath_mobile/features/membership/presentation/member/premium_upgrade_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/purchase_plan_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/refund_request_screen.dart';
 import 'package:gainpath_mobile/features/membership/presentation/shared/membership_dashboard_screen.dart';
@@ -28,6 +29,9 @@ class _RenderCommerce extends CommercialMembershipFake {
 
 void main() {
   setUpAll(loadDemoRenderFonts);
+  const output = String.fromEnvironment('MEMBERSHIP_RENDER_DIR',
+      defaultValue:
+          '../../build/membership-renewal-premium-rewards-20261112/membership');
   final scenarios = [
     'free',
     'basic',
@@ -36,6 +40,10 @@ void main() {
     'expired-basic',
     'renew-basic',
     'renew-premium',
+    'upgrade-options',
+    'upgrade-now',
+    'upgrade-next-term',
+    'upgrade-scheduled',
     'unknown',
     'plans',
     'basic-plan',
@@ -71,7 +79,23 @@ void main() {
         for (final name in scenarios) {
           final repo = _RenderCommerce();
           final renewal = name.startsWith('renew-');
-          final planId = name.contains('premium') ? 'premium' : 'basic';
+          final upgrade = name.startsWith('upgrade-');
+          final planId =
+              name.contains('premium') || upgrade ? 'premium' : 'basic';
+          if (upgrade) {
+            repo.overview['upgradeSupported'] = true;
+            repo.overview['entitlement'] = {
+              ...fixture.entitlement(tier: 'basic', paidStatus: 'active'),
+              'paidExpiresAtMillis': 1800172800000,
+            };
+          }
+          if (name == 'upgrade-scheduled') {
+            repo.overview['scheduledUpgrade'] = {
+              'planId': 'premium',
+              'startsAtMillis': 1800172800000,
+              'expiresAtMillis': 1802764800000
+            };
+          }
           if (['basic', 'premium'].contains(name) || renewal) {
             repo.overview['entitlement'] = {
               ...fixture.entitlement(tier: planId, paidStatus: 'active'),
@@ -134,6 +158,9 @@ void main() {
                 ],
                 redemptions: const []);
           final page = switch (name) {
+            'upgrade-options' => PremiumUpgradeScreen(
+                repository: repo,
+                plan: MembershipPlan('premium', 'Premium', 129, '30 days', [])),
             'plans' ||
             'basic-plan' ||
             'premium-plan' =>
@@ -143,11 +170,18 @@ void main() {
             'price-changed' ||
             'invalid-promo' ||
             'recovery' ||
+            'upgrade-now' ||
+            'upgrade-next-term' ||
             'renew-basic' ||
             'renew-premium' =>
               PurchasePlanScreen(
                   repository: repo,
                   renewal: renewal,
+                  upgradeMode: name == 'upgrade-now'
+                      ? MembershipUpgradeMode.immediate
+                      : name == 'upgrade-next-term'
+                          ? MembershipUpgradeMode.nextTerm
+                          : null,
                   renewalPreview: renewal
                       ? MembershipRenewalPreview.fromOverview(
                           MembershipEntitlement.fromOverview(repo.overview),
@@ -219,6 +253,11 @@ void main() {
                 scrollable: find.byType(Scrollable).first);
             await tester.pumpAndSettle();
           }
+          if (name == 'upgrade-now' || name == 'upgrade-next-term') {
+            await tester.scrollUntilVisible(find.text('Total'), 110,
+                scrollable: find.byType(Scrollable).first);
+            await tester.pumpAndSettle();
+          }
           expect(tester.takeException(), isNull, reason: name);
           final boundary =
               tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
@@ -227,7 +266,7 @@ void main() {
             final bytes =
                 await image.toByteData(format: ui.ImageByteFormat.png);
             final file = File(
-                '../../build/membership-renewal-premium-rewards-20261112/membership/${size.width.toInt()}x${size.height.toInt()}-$scale-$name.png');
+                '$output/${size.width.toInt()}x${size.height.toInt()}-$scale-$name.png');
             await file.parent.create(recursive: true);
             await file.writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();

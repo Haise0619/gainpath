@@ -44,7 +44,7 @@ class BillingHistoryScreen extends StatelessWidget {
                         '${p['planName']} · ${membershipMoney(p['amountMinor'])}',
                         style: Theme.of(context).textTheme.titleMedium),
                     Text(
-                        '${p['upgradeExpiresAtMillis'] != null ? 'Upgrade' : p['kind'] == 'MembershipRenewal' ? 'Renewal' : 'Purchase'} · ${membershipDate(p['clearedAtMillis'] ?? p['createdAtMillis'])}'),
+                        '${membershipOrderLabel(p)} · ${membershipDate(p['clearedAtMillis'] ?? p['createdAtMillis'])}'),
                     Text(membershipPaymentLabel(p)),
                     if (p['reviewReason'] != null)
                       Text('Admin: ${p['reviewReason']}'),

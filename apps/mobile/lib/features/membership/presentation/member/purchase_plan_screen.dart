@@ -19,12 +19,13 @@ class PurchasePlanScreen extends StatelessWidget {
       this.connected = false,
       this.repository,
       this.renewalPreview,
-      this.renewal = false,
-      this.upgrade = false});
+      this.upgradeMode,
+      this.renewal = false});
   final MembershipPlan plan;
-  final bool connected, renewal, upgrade;
+  final bool connected, renewal;
   final MembershipCommerceRepository? repository;
   final MembershipRenewalPreview? renewalPreview;
+  final MembershipUpgradeMode? upgradeMode;
   @override
   Widget build(BuildContext context) => repository != null
       ? MembershipRepositoryGuard(
@@ -34,8 +35,8 @@ class PurchasePlanScreen extends StatelessWidget {
       repository: repo,
       plan: plan,
       renewal: renewal,
-      upgrade: upgrade,
-      renewalPreview: renewalPreview);
+      renewalPreview: renewalPreview,
+      upgradeMode: upgradeMode);
 }
 
 class _PurchaseForm extends StatefulWidget {
@@ -43,12 +44,13 @@ class _PurchaseForm extends StatefulWidget {
       {required this.repository,
       required this.plan,
       required this.renewal,
-      required this.upgrade,
-      required this.renewalPreview});
+      required this.renewalPreview,
+      required this.upgradeMode});
   final MembershipCommerceRepository repository;
   final MembershipPlan plan;
-  final bool renewal, upgrade;
+  final bool renewal;
   final MembershipRenewalPreview? renewalPreview;
+  final MembershipUpgradeMode? upgradeMode;
   @override
   State<_PurchaseForm> createState() => _PurchaseFormState();
 }
@@ -83,13 +85,20 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     });
     try {
       final code = _promo.text.trim().toUpperCase();
-      final q = await widget.repository.quote(widget.plan.id, code);
-      if ((q['upgradeExpiresAtMillis'] is int) != widget.upgrade) {
-        if (mounted) {
-          setState(() => _message =
-              'Your membership or upgrade availability changed. Return to Membership and refresh.');
-        }
-        return;
+      final q = await widget.repository
+          .quote(widget.plan.id, code, upgradeMode: widget.upgradeMode);
+      if (q['upgradeExpiresAtMillis'] != null) {
+        throw const BookingException('membership-upgrade-unavailable');
+      }
+      if (widget.upgradeMode != null &&
+          (q['upgradeMode'] != widget.upgradeMode!.wireValue ||
+              q['quoteId'] is! String ||
+              q['amountMinor'] is! int ||
+              q['premiumTermAmountMinor'] is! int ||
+              q['upgradeChargeMinor'] is! int ||
+              q['startsAtMillis'] is! int ||
+              q['expiresAtMillis'] is! int)) {
+        throw const BookingException('invalid-response');
       }
       if (mounted) {
         setState(() {
@@ -97,10 +106,18 @@ class _PurchaseFormState extends State<_PurchaseForm> {
           _quotedCode = code;
         });
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _message =
-            'Price or promo could not be verified. Clear the code or retry.');
+        final code = error is BookingException ? error.code : '';
+        setState(() => _message = switch (code) {
+              'membership-upgrade-already-scheduled' =>
+                'Premium is already scheduled. Return to Membership to review it.',
+              'membership-upgrade-unavailable' =>
+                'This upgrade is no longer available. Return to Membership to refresh your plan.',
+              _ => widget.upgradeMode == null
+                  ? 'Price or promo could not be verified. Clear the code or retry.'
+                  : 'The upgrade price could not be verified. Try verifying it again.',
+            });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -117,8 +134,15 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     try {
       final p = await widget.repository.checkout(
           widget.plan.id, _quotedCode, _requestId,
-          renewal: widget.renewal, quoteId: _quote!['quoteId'] as String?);
-      if (!mounted) return;
+          renewal: widget.renewal,
+          quoteId: _quote!['quoteId'] as String?,
+          upgradeMode: widget.upgradeMode);
+      if (!mounted || !widget.repository.current) return;
+      if (_isExistingOrder(p)) {
+        setState(() => _busy = false);
+        if (!await _confirmExistingOrder(p)) return;
+      }
+      if (!mounted || !widget.repository.current) return;
       await Navigator.push(
           context,
           MaterialPageRoute<void>(
@@ -132,7 +156,9 @@ class _PurchaseFormState extends State<_PurchaseForm> {
           'membership-quote-changed',
           'membership-quote-expired',
           'membership-promo-invalid',
-          'membership-unsupported-plan'
+          'membership-unsupported-plan',
+          'membership-upgrade-unavailable',
+          'membership-upgrade-already-scheduled',
         ].contains(code);
         setState(() {
           if (rejected) {
@@ -141,14 +167,19 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             _requestId = 'membership-${DateTime.now().microsecondsSinceEpoch}';
           }
           _message = switch (code) {
-            'membership-quote-expired' =>
-              'The quoted offer has expired. Edit the promo code and verify the current price before paying.',
+            'membership-quote-expired' => widget.upgradeMode == null
+                ? 'The quoted offer has expired. Edit the promo code and verify the current price before paying.'
+                : 'The upgrade quote has expired. Verify the current price before paying.',
             'membership-promo-invalid' =>
               'This promo code is unavailable. Edit or remove it, then verify the price.',
             'membership-unsupported-plan' =>
               'This plan is unavailable. Return to the plan comparison to choose an available plan.',
             'membership-quote-changed' =>
               'Review updated price. Verify the price again before continuing.',
+            'membership-upgrade-already-scheduled' =>
+              'Premium is already scheduled. Return to Membership to review it.',
+            'membership-upgrade-unavailable' =>
+              'This upgrade is no longer available. Return to Membership to refresh your plan.',
             'unauthenticated' =>
               'Your session has expired. Sign in again and check billing history for your checkout.',
             _ =>
@@ -161,14 +192,67 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     }
   }
 
+  bool _isExistingOrder(Map<String, dynamic> payment) {
+    final kind = widget.renewal ? 'MembershipRenewal' : 'MembershipPurchase';
+    final quotedAmount = _quote?['amountMinor'];
+    return payment['recoveredPendingCheckout'] == true ||
+        (payment['planId'] != null && payment['planId'] != widget.plan.id) ||
+        (payment['kind'] != null && payment['kind'] != kind) ||
+        (payment['amountMinor'] is int &&
+            payment['amountMinor'] != quotedAmount) ||
+        (payment['promoCode'] ?? '') != _quotedCode ||
+        payment['upgradeExpiresAtMillis'] != null ||
+        payment['upgradeMode'] != widget.upgradeMode?.wireValue;
+  }
+
+  Future<bool> _confirmExistingOrder(Map<String, dynamic> payment) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => MembershipRepositoryGuard(
+            repository: widget.repository,
+            child: AlertDialog(
+              scrollable: true,
+              title: const Text('Existing payment found'),
+              content: Text(
+                  'Open the existing order to verify or continue payment. '
+                  'No new order was created.\n\n'
+                  '${payment['planName']} · ${membershipMoney(payment['amountMinor'])}\n'
+                  '${membershipOrderLabel(payment)}'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Back')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('View existing order')),
+              ],
+            )),
+      ) ??
+      false;
+
   @override
   Widget build(BuildContext context) {
     final preview = widget.renewal ? widget.renewalPreview : null;
     final estimate = preview?.estimatedExpiry(_quote?['durationDays']);
+    final upgrade = widget.upgradeMode;
+    final stackUpgradeDetails =
+        upgrade != null && MediaQuery.textScalerOf(context).scale(14) >= 21;
+    Widget detail(String label, String value) => stackUpgradeDetails
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                  Text(value,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+          )
+        : DetailRow(label, value);
     return Scaffold(
         appBar: AppBar(
-            title: Text(widget.upgrade
-                ? 'Upgrade to Premium'
+            title: Text(upgrade != null
+                ? 'Review Premium upgrade'
                 : widget.renewal
                     ? 'Extend your membership'
                     : 'Review order')),
@@ -183,11 +267,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                     const SizedBox(height: 8),
                     Text(widget.plan.tagline),
                     const SizedBox(height: 8),
-                    Text(widget.renewal
-                        ? 'Renew anytime. Your remaining membership time will be preserved.'
-                        : widget.upgrade
-                            ? 'Pay the prorated difference for your remaining Basic time. Premium starts after payment is confirmed.'
-                            : 'One-time membership purchase'),
+                    Text(upgrade == MembershipUpgradeMode.immediate
+                        ? 'Upgrade your remaining Basic time and add 30 days of Premium.'
+                        : upgrade == MembershipUpgradeMode.nextTerm
+                            ? 'Keep Basic until it expires. Premium starts at Basic expiry or when payment is confirmed, whichever is later.'
+                            : widget.renewal
+                                ? 'Renew anytime. Your remaining membership time will be preserved.'
+                                : 'One-time membership purchase'),
                     if (preview != null) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -197,7 +283,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                     ],
                   ])),
           const SizedBox(height: 18),
-          if (!widget.upgrade)
+          if (upgrade == null)
             TextField(
                 controller: _promo,
                 enabled: !_busy && !_submitted,
@@ -206,9 +292,9 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                 onChanged: (_) => setState(() => _quote = null)),
           TextButton(
               onPressed: _busy || _submitted ? null : _apply,
-              child: Text(widget.upgrade
-                  ? 'Refresh upgrade price'
-                  : 'Verify price / apply code')),
+              child: Text(upgrade == null
+                  ? 'Verify price / apply code'
+                  : 'Verify price')),
           if (_busy) const LinearProgressIndicator(),
           if (_message != null)
             Padding(
@@ -217,25 +303,38 @@ class _PurchaseFormState extends State<_PurchaseForm> {
           if (_quote != null)
             Panel(
                 child: Column(children: [
-              if (widget.upgrade)
-                DetailRow('Expiry stays the same',
-                    membershipDate(_quote!['upgradeExpiresAtMillis']))
-              else
+              if (upgrade != null) ...[
+                if (upgrade == MembershipUpgradeMode.immediate)
+                  detail('Upgrade remaining Basic time',
+                      membershipMoney(_quote!['upgradeChargeMinor'])),
+                detail('30-day Premium term',
+                    membershipMoney(_quote!['premiumTermAmountMinor'])),
+                detail(
+                    upgrade == MembershipUpgradeMode.immediate
+                        ? 'Premium starts'
+                        : 'Estimated Premium start',
+                    upgrade == MembershipUpgradeMode.immediate
+                        ? 'When payment is confirmed'
+                        : membershipDate(_quote!['startsAtMillis'])),
+                detail('Estimated Premium expiry',
+                    membershipDate(_quote!['expiresAtMillis'])),
+              ] else ...[
                 DetailRow(widget.renewal ? 'Additional time' : 'Duration',
                     '${_quote!['durationDays']} days'),
-              if (!widget.upgrade && _quote!['baseAmountMinor'] != null)
-                DetailRow('Original price',
-                    membershipMoney(_quote!['baseAmountMinor'])),
-              if (_quotedCode.isNotEmpty) DetailRow('Promo code', _quotedCode),
-              if (!widget.upgrade &&
-                  _quote!['baseAmountMinor'] is num &&
-                  _quote!['amountMinor'] is num)
-                DetailRow(
-                    'Discount',
-                    membershipMoney((_quote!['baseAmountMinor'] as num) -
-                        (_quote!['amountMinor'] as num))),
+                if (_quote!['baseAmountMinor'] != null)
+                  DetailRow('Original price',
+                      membershipMoney(_quote!['baseAmountMinor'])),
+                if (_quotedCode.isNotEmpty)
+                  DetailRow('Promo code', _quotedCode),
+                if (_quote!['baseAmountMinor'] is num &&
+                    _quote!['amountMinor'] is num)
+                  DetailRow(
+                      'Discount',
+                      membershipMoney((_quote!['baseAmountMinor'] as num) -
+                          (_quote!['amountMinor'] as num))),
+              ],
               const Divider(),
-              DetailRow('Total', membershipMoney(_quote!['amountMinor'])),
+              detail('Total', membershipMoney(_quote!['amountMinor'])),
             ])),
           const SizedBox(height: 16),
           if (estimate != null)
@@ -384,12 +483,22 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                   child: Column(children: [
                     Text('${_payment['planName']}',
                         style: Theme.of(context).textTheme.headlineMedium),
+                    if (_payment['upgradeMode'] != null ||
+                        _payment['upgradeExpiresAtMillis'] != null)
+                      Text(membershipOrderLabel(_payment)),
                     Text(membershipMoney(_payment['amountMinor'])),
                     const SizedBox(height: 12),
                     Text(membershipPaymentLabel(_payment)),
+                    if (_payment['startsAtMillis'] != null)
+                      Text(
+                          'Premium starts: ${membershipDate(_payment['startsAtMillis'])}'),
                     if (_payment['expiresAtMillis'] != null)
                       Text(
                           'Paid expiry: ${membershipDate(_payment['expiresAtMillis'])}'),
+                    if (_payment['paymentStatus'] == 'pending' &&
+                        _payment['upgradeExpiresAtMillis'] != null)
+                      Text(
+                          'Premium would expire: ${membershipDate(_payment['upgradeExpiresAtMillis'])}'),
                   ])),
               const SizedBox(height: 16),
               ExpansionTile(

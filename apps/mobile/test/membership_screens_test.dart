@@ -64,16 +64,18 @@ class MembershipFake implements MembershipCommerceRepository {
         'fulfilmentStatus': 'reconciliation_required'
       };
   @override
-  Future<Map<String, dynamic>> quote(String id, String code) async => {
+  Future<Map<String, dynamic>> quote(String id, String code,
+          {MembershipUpgradeMode? upgradeMode}) async =>
+      {
         'planId': id,
         'amountMinor': 10000,
         'durationDays': 30,
-        if (id == 'premium' && overview['entitlement']['paidTier'] == 'basic')
-          'upgradeExpiresAtMillis': 1800000000001,
       };
   @override
   Future<Map<String, dynamic>> checkout(String a, String b, String c,
-          {required bool renewal, String? quoteId}) =>
+          {required bool renewal,
+          String? quoteId,
+          MembershipUpgradeMode? upgradeMode}) =>
       payment(c);
   @override
   Future<Map<String, dynamic>> refund(String a, String b, String c) async =>
@@ -149,13 +151,14 @@ void main() {
     expect(find.text('Renew Premium'), findsNothing);
     expect(find.text('Verify Membership'), findsOneWidget);
   });
-  testWidgets('active Basic can review a storefront upgrade quote',
+  testWidgets('active Basic can open both storefront upgrade options',
       (tester) async {
     tester.view.physicalSize = const Size(320, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final repo = MembershipFake();
+    repo.overview['upgradeSupported'] = true;
     repo.overview['entitlement'] =
         entitlement(tier: 'basic', paidStatus: 'active');
     repo.overview['plans'] = [
@@ -194,9 +197,8 @@ void main() {
         isNotNull);
     await tester.tap(find.text('Upgrade to Premium'));
     await tester.pumpAndSettle();
-    expect(find.text('Expiry stays the same'), findsOneWidget);
-    expect(find.text('RM 100.00'), findsOneWidget);
-    expect(find.text('Promo code (optional)'), findsNothing);
+    expect(find.text('Upgrade now and extend 30 days'), findsOneWidget);
+    expect(find.text('Start Premium after Basic expires'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   for (final tier in ['basic', 'premium']) {

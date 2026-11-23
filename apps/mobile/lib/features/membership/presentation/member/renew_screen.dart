@@ -32,6 +32,13 @@ class RenewScreen extends StatelessWidget {
                 'Free membership has no expiry. Choose a paid plan when you are ready to upgrade.')
           ];
         }
+        final scheduled = membershipUpgradeSchedule(data);
+        if (scheduled != null) {
+          return [
+            Text(
+                'Premium is already scheduled for ${membershipDate(scheduled['startsAtMillis'])}.')
+          ];
+        }
         final plans = membershipRows(data['plans'])
             .where((p) => p['planId'] == entitlement.paidPlanId);
         if (plans.isEmpty) {
@@ -41,7 +48,8 @@ class RenewScreen extends StatelessWidget {
           ];
         }
         final p = plans.first;
-        final preview = MembershipRenewalPreview.fromOverview(entitlement, p['planId'] as String);
+        final preview = MembershipRenewalPreview.fromOverview(
+            entitlement, p['planId'] as String);
         return [
           Panel(
               background: AppColors.primaryTint,

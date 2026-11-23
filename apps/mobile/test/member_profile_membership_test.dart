@@ -31,11 +31,14 @@ class _Membership implements MembershipCommerceRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> quote(String planId, String promoCode) =>
+  Future<Map<String, dynamic>> quote(String planId, String promoCode,
+          {MembershipUpgradeMode? upgradeMode}) =>
       throw UnimplementedError();
   @override
   Future<Map<String, dynamic>> checkout(String a, String b, String c,
-          {required bool renewal, String? quoteId}) =>
+          {required bool renewal,
+          String? quoteId,
+          MembershipUpgradeMode? upgradeMode}) =>
       throw UnimplementedError();
   @override
   Future<Map<String, dynamic>> payment(String id) => throw UnimplementedError();

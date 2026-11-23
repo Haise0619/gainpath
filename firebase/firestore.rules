@@ -708,18 +708,27 @@ service cloud.firestore {
       let account = get(/databases/$(database)/documents/orgs/$(orgId)/membershipAccounts/$(uid)).data;
       let user = get(/databases/$(database)/documents/users/$(uid)).data;
       let lifecycle = user.get('accountLifecycle', null);
+      let scheduled = account.get('scheduledUpgrade', null);
       return account.organizationId == orgId && account.memberId == uid
-        && account.planId in ['basic', 'premium']
-        && account.expiresAtMillis is int && account.expiresAtMillis > request.time.toMillis()
         && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == 'active'
         && (lifecycle == null || (lifecycle.schemaVersion == 1 && lifecycle.state == 'active'
           && lifecycle.revocationPending == false && lifecycle.sessionNotBeforeSeconds is int
           && lifecycle.sessionNotBeforeSeconds >= 0
           && (lifecycle.sessionNotBeforeSeconds == 0 || request.auth.token.auth_time >= lifecycle.sessionNotBeforeSeconds)))
-        && account.lastTransactionId is string && account.lastTransactionId.matches('[A-Za-z0-9_-]{1,128}')
-        && matchingCoachDirectoryPayment(orgId, uid, account);
+        && (activeCoachDirectoryTerm(orgId, uid, account, null)
+          || (account.planId == 'basic' && scheduled is map && scheduled.planId == 'premium'
+            && scheduled.startsAtMillis is int && scheduled.startsAtMillis > 0
+            && scheduled.startsAtMillis == account.expiresAtMillis && scheduled.startsAtMillis <= request.time.toMillis()
+            && scheduled.expiresAtMillis is int && scheduled.expiresAtMillis - scheduled.startsAtMillis == 2592000000
+            && activeCoachDirectoryTerm(orgId, uid, scheduled, scheduled.startsAtMillis)));
     }
-    function matchingCoachDirectoryPayment(orgId, uid, account) {
+    function activeCoachDirectoryTerm(orgId, uid, account, scheduledStart) {
+      return account.planId in ['basic', 'premium']
+        && account.expiresAtMillis is int && account.expiresAtMillis > request.time.toMillis()
+        && account.lastTransactionId is string && account.lastTransactionId.matches('[A-Za-z0-9_-]{1,128}')
+        && matchingCoachDirectoryPayment(orgId, uid, account, scheduledStart);
+    }
+    function matchingCoachDirectoryPayment(orgId, uid, account, scheduledStart) {
       let transactionId = account.lastTransactionId;
       let payment = get(/databases/$(database)/documents/orgs/$(orgId)/transactions/$(transactionId)).data;
       return payment.schemaVersion == 1 && payment.organizationId == orgId && payment.memberId == uid
@@ -733,6 +742,8 @@ service cloud.firestore {
         && payment.durationDays is int && payment.durationDays > 0 && payment.durationDays <= 3660
         && payment.clearedAtMillis is int && payment.clearedAtMillis > 0
         && payment.clearedAtMillis <= request.time.toMillis()
+        && (scheduledStart == null || (payment.upgradeMode == 'next_term' && payment.durationDays == 30 && payment.startsAtMillis == scheduledStart
+          && payment.clearedAtMillis <= scheduledStart))
         && payment.expiresAtMillis == account.expiresAtMillis && payment.expiresAtMillis > payment.clearedAtMillis
         && payment.planName is string && payment.planName.size() > 0 && payment.benefits is list;
     }

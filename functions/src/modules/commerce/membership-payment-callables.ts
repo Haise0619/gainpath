@@ -32,10 +32,11 @@ function gateway() {
 export const getMembershipOverviewCommand = onCall({ enforceAppCheck: true, preserveExternalChanges: true }, async r => {
   try {
     check(r.data); const db = getFirestore();
-    return await membershipOverview(store(), r.auth, r.data, {
+    const overview = await membershipOverview(store(), r.auth, r.data, {
       plans: async org => (await db.collection(`orgs/${org}/membershipPlans`).limit(100).get()).docs.map(d => ({ id: d.id, data: d.data() })),
       payments: async (org, uid) => (await db.collection(`orgs/${org}/transactions`).where('memberId', '==', uid).get()).docs.map(d => ({ id: d.id, data: d.data() })),
     }, Date.now, readCoachIdentity);
+    return { ...overview, upgradeSupported: true };
   } catch (e) { throw membershipCommandError(e); }
 });
 export const getMembershipQuoteCommand = onCall({ enforceAppCheck: true }, async r => {

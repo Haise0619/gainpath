@@ -4,6 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/membership_feature_host.dart';
 import '../member/browse_plans_screen.dart';
 import '../member/billing_history_screen.dart';
+import '../member/premium_upgrade_screen.dart';
 import '../member/refund_request_screen.dart';
 import '../member/renew_screen.dart';
 import 'membership_data_view.dart';
@@ -32,6 +33,8 @@ class MembershipDashboardScreen extends StatelessWidget {
         final paid = e.paidStatus == PaidMembershipStatus.active;
         final expired = e.paidStatus == PaidMembershipStatus.expired;
         final verified = e.canStartCheckout;
+        final premium = availablePremiumUpgrade(data, e);
+        final scheduled = verified ? membershipUpgradeSchedule(data) : null;
         Future<void> open(Widget page) async {
           await Navigator.push(
               context, MaterialPageRoute<void>(builder: (_) => page));
@@ -108,30 +111,41 @@ class MembershipDashboardScreen extends StatelessWidget {
                       const Padding(
                           padding: EdgeInsets.only(top: 10),
                           child: Text('No expiry · No membership charge')),
-                    if (paid && !e.historicalOnly)
+                    if (paid && !e.historicalOnly && scheduled == null)
                       const Padding(
                           padding: EdgeInsets.only(top: 10),
                           child: Text(
                               'Renew anytime. Your remaining membership time will be preserved.')),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                            onPressed: !verified
-                                ? refresh
-                                : () => open(expired || paid
-                                    ? RenewScreen(repository: repo)
-                                    : BrowsePlansScreen(repository: repo)),
-                            child: Text(action))),
-                    if (verified && paid && e.paidPlanId == 'basic')
+                    if (scheduled != null) ...[
+                      const SizedBox(height: 16),
+                      Text('Premium scheduled',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                          'Starts ${membershipDate(scheduled['startsAtMillis'])}'),
+                      Text(
+                          'Expires ${membershipDate(scheduled['expiresAtMillis'])}'),
+                    ] else ...[
+                      const SizedBox(height: 18),
                       SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () =>
-                              open(BrowsePlansScreen(repository: repo)),
-                          child: const Text('Upgrade to Premium'),
-                        ),
-                      ),
+                          width: double.infinity,
+                          child: FilledButton(
+                              onPressed: !verified
+                                  ? refresh
+                                  : () => open(expired || paid
+                                      ? RenewScreen(repository: repo)
+                                      : BrowsePlansScreen(repository: repo)),
+                              child: Text(action))),
+                    ],
+                    if (premium != null) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => open(PremiumUpgradeScreen(
+                                repository: repo, plan: premium)),
+                            child: const Text('Upgrade to Premium'),
+                          )),
+                    ],
                     const SizedBox(height: 10),
                     const Text('No automatic renewal or recurring charge.',
                         style:

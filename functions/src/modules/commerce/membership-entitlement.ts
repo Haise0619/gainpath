@@ -10,6 +10,23 @@ const timestamp = (v: unknown): v is number => Number.isSafeInteger(v) && Number
 const text = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= 500;
 const tier = isSupportedPaidPlan;
 const denied = () => new DomainError('permission-denied', 'Current verified Member access is required.');
+const termMillis = 30 * 86400000;
+
+export function scheduledMembershipUpgrade(account: DocumentData | undefined) {
+  const scheduled = account?.scheduledUpgrade as DocumentData | undefined;
+  if (!scheduled || account?.planId !== 'basic' || scheduled.planId !== 'premium'
+      || !timestamp(scheduled.startsAtMillis) || scheduled.startsAtMillis !== account.expiresAtMillis
+      || !timestamp(scheduled.expiresAtMillis) || scheduled.expiresAtMillis - scheduled.startsAtMillis !== termMillis
+      || typeof scheduled.lastTransactionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(scheduled.lastTransactionId)) return undefined;
+  return scheduled;
+}
+
+export function membershipAccountAt(account: DocumentData | undefined, now: number) {
+  const scheduled = scheduledMembershipUpgrade(account);
+  if (!scheduled || Number(scheduled.startsAtMillis) > now) return account;
+  return { ...account, planId: scheduled.planId, planName: scheduled.planName, benefits: scheduled.benefits,
+    expiresAtMillis: scheduled.expiresAtMillis, lastTransactionId: scheduled.lastTransactionId };
+}
 
 /** Read-only effective membership. Organization authority is never a paid tier. */
 export async function readMembershipEntitlement(tx: TransactionPort, auth: Auth, org: string, now: number) {
@@ -26,13 +43,14 @@ export async function readVerifiedTargetMembershipEntitlement(tx: TransactionPor
 
 async function readMemberFacts(tx: TransactionPort, uid: string, org: string, now: number, authTime: unknown, sessionRequired: boolean) {
   if (!timestamp(now)) throw new DomainError('unavailable', 'Membership time is unavailable.');
-  const [user, member, organization, account] = await readAll(tx, [
+  const [user, member, organization, storedAccount] = await readAll(tx, [
     `users/${uid}`, `orgs/${org}/members/${uid}`, `orgs/${org}`, `orgs/${org}/membershipAccounts/${uid}`,
   ]);
   const authority = requireActiveMembership(member);
   if (authority.role !== 'member' || user?.organizationId !== org || member?.organizationId !== org
       || (member.userId !== undefined && member.userId !== uid) || organization?.status !== 'active') throw denied();
   assertMembershipLifecycle(user, authTime, sessionRequired);
+  const account = membershipAccountAt(storedAccount, now);
 
   const common = { schemaVersion: 1, policyVersion: MEMBERSHIP_ENTITLEMENT_POLICY, organizationId: org, memberId: uid, resolvedAtMillis: now };
   const empty = { paidTier: null, paidPlanId: null, paidPlanName: null, paidExpiresAtMillis: null, benefits: [] as string[] };
@@ -50,20 +68,31 @@ async function readMemberFacts(tx: TransactionPort, uid: string, org: string, no
   if (!tier(account!.planId)) return unknown(text(account!.planId) ? 'unsupported_paid_tier' : 'invalid_paid_membership');
   if (!timestamp(account!.expiresAtMillis) || typeof account!.lastTransactionId !== 'string'
       || !/^[A-Za-z0-9_-]{1,128}$/.test(account!.lastTransactionId)) return unknown('invalid_paid_membership');
-  const p = await tx.get(`orgs/${org}/transactions/${account!.lastTransactionId}`);
-  if (!p || p.schemaVersion !== 1 || p.organizationId !== org || p.memberId !== uid || p.transactionId !== account!.lastTransactionId
-      || !['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind)) || p.planId !== account!.planId
-      || p.environment !== 'sandbox' || p.provider !== 'billplz' || p.currency !== 'MYR' || p.paymentStatus !== 'cleared'
-      || !['confirmed', 'reconciliation_required'].includes(String(p.fulfilmentStatus))
-      || !text(p.billId) || !text(p.collectionId) || !Number.isSafeInteger(p.amountMinor) || Number(p.amountMinor) < 1
-      || !Number.isSafeInteger(p.durationDays) || Number(p.durationDays) < 1 || Number(p.durationDays) > 3660
-      || !timestamp(p.clearedAtMillis) || p.clearedAtMillis > now || p.expiresAtMillis !== account!.expiresAtMillis
-      || Number(p.expiresAtMillis) <= p.clearedAtMillis || !text(p.planName)
-      || !Array.isArray(p.benefits) || !p.benefits.every(x => typeof x === 'string' && x.length <= 500)) return unknown('payment_evidence_unavailable');
+  const scheduled = scheduledMembershipUpgrade(storedAccount);
+  const openedSchedule = scheduled && scheduled.lastTransactionId === account!.lastTransactionId;
+  const p = await readMembershipTermReceipt(tx, org, uid, account!, now);
+  if (!p || (openedSchedule && (p.upgradeMode !== 'next_term' || p.durationDays !== 30 || p.startsAtMillis !== scheduled.startsAtMillis
+    || Number(p.clearedAtMillis) > Number(scheduled.startsAtMillis)))) return unknown('payment_evidence_unavailable');
   const active = Number(account!.expiresAtMillis) > now;
   return { account, entitlement: { ...common, status: 'resolved', effectiveTier: active ? account!.planId : 'free',
     paidTier: account!.planId, paidPlanId: account!.planId, paidPlanName: p.planName, paidExpiresAtMillis: account!.expiresAtMillis,
     paidStatus: active ? 'active' : 'expired', benefits: active ? p.benefits : [], reason: active ? 'active_paid_membership' : 'paid_membership_expired' } };
+}
+
+export async function readMembershipTermReceipt(tx: TransactionPort, org: string, uid: string, account: DocumentData, now: number) {
+  const id = account.lastTransactionId;
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id) || !timestamp(account.expiresAtMillis)) return undefined;
+  const p = await tx.get(`orgs/${org}/transactions/${id}`);
+  if (!p || p.schemaVersion !== 1 || p.organizationId !== org || p.memberId !== uid || p.transactionId !== id
+      || !['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind)) || p.planId !== account.planId
+      || p.environment !== 'sandbox' || p.provider !== 'billplz' || p.currency !== 'MYR' || p.paymentStatus !== 'cleared'
+      || !['confirmed', 'reconciliation_required'].includes(String(p.fulfilmentStatus))
+      || !text(p.billId) || !text(p.collectionId) || !Number.isSafeInteger(p.amountMinor) || Number(p.amountMinor) < 1
+      || !Number.isSafeInteger(p.durationDays) || Number(p.durationDays) < 1 || Number(p.durationDays) > 3660
+      || !timestamp(p.clearedAtMillis) || p.clearedAtMillis > now || p.expiresAtMillis !== account.expiresAtMillis
+      || Number(p.expiresAtMillis) <= p.clearedAtMillis || !text(p.planName)
+      || !Array.isArray(p.benefits) || !p.benefits.every(x => typeof x === 'string' && x.length <= 500)) return undefined;
+  return p;
 }
 
 export async function resolveMembershipEntitlement(tx: TransactionPort, auth: Auth, org: string, now: number) {

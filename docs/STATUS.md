@@ -556,3 +556,7 @@ Completed guided Single/Routine exercises now show a short purple/mint celebrati
 ## Admin Reports analytics — 16 November 2026
 
 Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. 60 backend, 13 Emulator, 58 Admin and 198 Domain tests pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
+
+## Member Premium upgrade and extension — 23 November 2026
+
+The local implementation on `95ef039` adds an immediate Premium upgrade with a 30-day extension, and a one-time prepaid Premium term scheduled at Basic expiry. It preserves the original amount and expiry of a short prorated upgrade order issued by the 20 November release. A recovered checkout keeps its original order across retries, and the Member must confirm any mismatch before continuing payment. Firebase release and device acceptance are pending. [Implementation and coordinated release sequence](superpowers/plans/2026-11-23-membership-upgrade.md).

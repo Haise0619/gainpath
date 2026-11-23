@@ -60,7 +60,8 @@ class BookingTransport {
       }
       // Only an explicit server rejection before reservation permits a fresh
       // membership quote. Generic failures must retain the immutable request.
-      if (name == 'createMembershipPaymentCommand' &&
+      if ((name == 'createMembershipPaymentCommand' ||
+              name == 'getMembershipQuoteCommand') &&
           error is FirebaseFunctionsException &&
           error.details is Map &&
           (error.details as Map)['checkoutCreated'] == false) {
@@ -70,6 +71,8 @@ class BookingTransport {
           'quote_expired' => 'membership-quote-expired',
           'promo_invalid' => 'membership-promo-invalid',
           'unsupported_plan' => 'membership-unsupported-plan',
+          'upgrade_unavailable' => 'membership-upgrade-unavailable',
+          'upgrade_already_scheduled' => 'membership-upgrade-already-scheduled',
           _ => null,
         };
         if (code != null) throw BookingException(code);

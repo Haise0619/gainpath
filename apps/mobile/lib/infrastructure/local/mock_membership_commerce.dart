@@ -79,7 +79,11 @@ class MockMembershipCommerce
   }
 
   @override
-  Future<Map<String, dynamic>> quote(String planId, String promoCode) async {
+  Future<Map<String, dynamic>> quote(String planId, String promoCode,
+      {MembershipUpgradeMode? upgradeMode}) async {
+    if (upgradeMode != null) {
+      throw UnsupportedError('Upgrades require verified membership commerce.');
+    }
     if (!['basic', 'premium'].contains(planId)) {
       throw StateError('Choose a configured paid plan.');
     }
@@ -111,11 +115,13 @@ class MockMembershipCommerce
   @override
   Future<Map<String, dynamic>> checkout(
       String planId, String promoCode, String requestId,
-      {required bool renewal, String? quoteId}) async {
+      {required bool renewal,
+      String? quoteId,
+      MembershipUpgradeMode? upgradeMode}) async {
     final old =
         _payments.where((p) => p['transactionId'] == requestId).firstOrNull;
     if (old != null) return old;
-    final q = await quote(planId, promoCode);
+    final q = await quote(planId, promoCode, upgradeMode: upgradeMode);
     final p = {
       'transactionId': requestId,
       'planId': planId,

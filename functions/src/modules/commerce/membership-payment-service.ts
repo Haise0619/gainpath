@@ -8,14 +8,18 @@ import { currentBookingMembership, requireBookingOrganization } from '../coachin
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import { isSupportedPaidPlan, MembershipCheckoutError } from './membership-plan-registry';
-import { assertMembershipLifecycle, readMembershipEntitlement } from './membership-entitlement';
+import { assertMembershipLifecycle, membershipAccountAt, readMembershipEntitlement, readMembershipTermReceipt, scheduledMembershipUpgrade } from './membership-entitlement';
 import { preparePremiumCoachVoucherTerm } from './premium-coach-voucher';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const DAY = 86400000;
+const TERM = 30 * DAY;
+const UPGRADE_QUOTE_VALIDITY = 5 * 60000;
 const root = (org: string) => `orgs/${org}`;
 const accountPath = (org: string, uid: string) => `${root(org)}/membershipAccounts/${uid}`;
 const paymentPath = (org: string, id: string) => `${root(org)}/transactions/${id}`;
+const upgradeQuotePath = (org: string, uid: string, mode: string) => `${root(org)}/membershipUpgradeQuotes/${keyOf(uid, mode)}`;
+const checkoutRecoveryPath = (org: string, id: string) => `${root(org)}/membershipCheckoutRecoveries/${id}`;
 const unavailable = () => new DomainError('failed-precondition', 'Membership configuration or payment state unavailable. Refresh or contact Admin.');
 function context(auth: Auth, raw: unknown, keys: string[]) {
   requireVerifiedEmail(auth);
@@ -39,24 +43,46 @@ export function membershipPlan(id: string, d: DocumentData | undefined) {
       || !Array.isArray(d.benefits) || !d.benefits.every(x => typeof x === 'string' && x.length <= 500)) throw unavailable();
   return { planId: id, name: d.name, amountMinor: Number(d.amountMinor), currency: 'MYR', durationDays: Number(d.durationDays), benefits: d.benefits, version: d.version };
 }
-async function quote(tx: TransactionPort, org: string, d: DocumentData, now: number, auth: Auth, account?: DocumentData) {
+function upgradeMode(value: unknown) {
+  if (value === undefined || value === 'immediate' || value === 'next_term') return value;
+  throw new MembershipCheckoutError('upgrade_unavailable', 'Choose a supported membership upgrade.');
+}
+
+function futureUpgrade(account: DocumentData | undefined, now: number) {
+  const scheduled = scheduledMembershipUpgrade(account);
+  return scheduled && Number(scheduled.startsAtMillis) > now ? scheduled : undefined;
+}
+
+async function quote(tx: TransactionPort, org: string, d: DocumentData, now: number, auth: Auth, quotedAt = now) {
   const id = requiredIdentifier(d.planId, 'planId');
   const plan = membershipPlan(id, await tx.get(`${root(org)}/membershipPlans/${id}`));
-  if (id === 'premium' && account?.planId === 'basic' && Number(account.expiresAtMillis) > now) {
-    const { entitlement } = await readMembershipEntitlement(tx, auth, org, now);
-    if (entitlement.paidStatus !== 'active' || entitlement.paidTier !== 'basic') throw unavailable();
-    if (d.promoCode) throw new MembershipCheckoutError('promo_invalid', 'Promo codes do not apply to upgrades.');
-    const basic = membershipPlan('basic', await tx.get(`${root(org)}/membershipPlans/basic`));
-    const upgradeExpiresAtMillis = Number(account.expiresAtMillis);
-    const remainingDays = Math.ceil((upgradeExpiresAtMillis - now) / DAY);
-    const amountMinor = Math.round((plan.amountMinor - basic.amountMinor) * remainingDays / plan.durationDays);
-    if (!Number.isSafeInteger(amountMinor) || amountMinor < 1) throw unavailable();
-    const quoteId = keyOf('upgrade', plan.version, basic.version, account.lastTransactionId,
-      upgradeExpiresAtMillis, plan.amountMinor, basic.amountMinor, amountMinor);
-    return {
-      value: { ...plan, baseAmountMinor: amountMinor, amountMinor, quoteId, upgradeExpiresAtMillis },
-      upgrade: { upgradeExpiresAtMillis, upgradeFromTransactionId: account.lastTransactionId as string },
-    };
+  const mode = upgradeMode(d.upgradeMode);
+  if (mode) {
+    const { account, entitlement } = await readMembershipEntitlement(tx, auth, org, now);
+    if (futureUpgrade(account, now)) throw new MembershipCheckoutError('upgrade_already_scheduled', 'Premium is already scheduled.');
+    if (id !== 'premium' || entitlement.effectiveTier !== 'basic' || !account) {
+      throw new MembershipCheckoutError('upgrade_unavailable', 'An active Basic membership is required for this upgrade.');
+    }
+    if (d.promoCode !== undefined && d.promoCode !== '') {
+      throw new MembershipCheckoutError('promo_invalid', 'Promo codes do not apply to membership upgrades.');
+    }
+    const basicExpiresAtMillis = Number(account.expiresAtMillis);
+    const quoteExpiresAtMillis = Math.min(quotedAt + UPGRADE_QUOTE_VALIDITY, basicExpiresAtMillis);
+    if (!Number.isSafeInteger(quotedAt) || quotedAt <= 0 || quotedAt > now || now >= quoteExpiresAtMillis) {
+      throw new MembershipCheckoutError('quote_expired', 'The upgrade quote has expired. Review a fresh quote.');
+    }
+    const basic = mode === 'immediate' ? membershipPlan('basic', await tx.get(`${root(org)}/membershipPlans/basic`)) : undefined;
+    const difference = Math.max(0, plan.amountMinor - (basic?.amountMinor ?? plan.amountMinor));
+    const upgradeChargeMinor = Number((BigInt(difference) * BigInt(basicExpiresAtMillis - quotedAt) + BigInt(TERM / 2)) / BigInt(TERM));
+    const amountMinor = plan.amountMinor + upgradeChargeMinor;
+    const expiresAtMillis = basicExpiresAtMillis + TERM;
+    if (!Number.isSafeInteger(amountMinor) || expiresAtMillis > 8640000000000000) throw unavailable();
+    const digest = keyOf('membership-upgrade-v1', org, auth!.uid, mode, account.lastTransactionId, basicExpiresAtMillis,
+      quotedAt, plan.version, plan.amountMinor, basic?.version, basic?.amountMinor, amountMinor);
+    return { value: { ...plan, upgradeMode: mode, amountMinor, baseAmountMinor: amountMinor,
+      premiumTermAmountMinor: plan.amountMinor, upgradeChargeMinor, basicExpiresAtMillis, expiresAtMillis,
+      startsAtMillis: mode === 'next_term' ? basicExpiresAtMillis : quotedAt, quoteExpiresAtMillis,
+      quoteId: digest }, promo: undefined, code: undefined, sourceTransactionId: String(account.lastTransactionId) };
   }
   let promo: DocumentData | undefined, code: string | undefined;
   if (d.promoCode !== undefined && d.promoCode !== '') {
@@ -78,12 +104,25 @@ async function quote(tx: TransactionPort, org: string, d: DocumentData, now: num
   return { value: { ...plan, baseAmountMinor: plan.amountMinor, amountMinor, quoteId: keyOf(id, plan.version, plan.amountMinor, amountMinor, plan.durationDays, code ?? ''), ...(code ? { promoCode: code } : {}) }, promo, code };
 }
 export async function membershipQuote(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now) {
-  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode']);
+  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode', 'upgradeMode']);
   return store.transact(async tx => {
     await member(tx, org, uid, auth);
-    const account = d.planId === 'premium' ? await tx.get(accountPath(org, uid)) : undefined;
-    return (await quote(tx, org, d, clock(), auth, account)).value;
+    const quotedAtMillis = clock();
+    if (d.upgradeMode === undefined && d.planId === 'premium') {
+      requireUpgradeSelection(membershipAccountAt(await tx.get(accountPath(org, uid)), quotedAtMillis), quotedAtMillis);
+    }
+    const { value } = await quote(tx, org, d, quotedAtMillis, auth);
+    if ('upgradeMode' in value && value.upgradeMode) {
+      tx.set(upgradeQuotePath(org, uid, value.upgradeMode), { quoteId: value.quoteId, quotedAtMillis });
+    }
+    return value;
   });
+}
+
+function requireUpgradeSelection(account: DocumentData | undefined, now: number) {
+  if (account?.planId === 'basic' && Number(account.expiresAtMillis) > now) {
+    throw new MembershipCheckoutError('upgrade_unavailable', 'Choose a Premium upgrade option in the current GainPath app.');
+  }
 }
 export function membershipPayment(d: DocumentData | undefined, org: string, id: string): DocumentData {
   if (!d || d.organizationId !== org || d.transactionId !== id || !['MembershipPurchase', 'MembershipRenewal'].includes(String(d.kind))
@@ -92,16 +131,21 @@ export function membershipPayment(d: DocumentData | undefined, org: string, id: 
   return d;
 }
 export function membershipPaymentView(d: DocumentData) {
-  return Object.fromEntries(['transactionId', 'organizationId', 'memberId', 'kind', 'planId', 'planName', 'benefits', 'amountMinor', 'baseAmountMinor', 'currency', 'durationDays', 'paymentStatus', 'fulfilmentStatus', 'checkoutUrl', 'billId', 'createdAtMillis', 'checkoutExpiresAtMillis', 'clearedAtMillis', 'expiresAtMillis', 'refundStatus', 'refundReason', 'refundNotes', 'reviewReason', 'resolutionReason', 'invoiceStatus', 'promoCode', 'upgradeExpiresAtMillis'].filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+  return Object.fromEntries(['transactionId', 'organizationId', 'memberId', 'kind', 'planId', 'planName', 'benefits', 'amountMinor', 'baseAmountMinor', 'currency', 'durationDays', 'paymentStatus', 'fulfilmentStatus', 'checkoutUrl', 'billId', 'createdAtMillis', 'checkoutExpiresAtMillis', 'clearedAtMillis', 'expiresAtMillis', 'refundStatus', 'refundReason', 'refundNotes', 'reviewReason', 'resolutionReason', 'invoiceStatus', 'promoCode', 'upgradeExpiresAtMillis', 'upgradeMode', 'upgradeChargeMinor', 'premiumTermAmountMinor', 'basicExpiresAtMillis', 'startsAtMillis'].filter(k => d[k] !== undefined).map(k => [k, d[k]]));
 }
 function event(tx: TransactionPort, org: string, id: string, name: string, now: number, extra: DocumentData = {}) {
   tx.set(`${paymentPath(org, id)}/events/${keyOf(name)}`, { event: name, atMillis: now, ...extra });
 }
 export async function createMembershipPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, clock = Date.now) {
-  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode', 'requestId', 'intent', 'quoteId']);
+  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode', 'requestId', 'intent', 'quoteId', 'upgradeMode']);
   const requestId = requiredIdentifier(d.requestId, 'requestId');
   if (!['purchase', 'renewal'].includes(String(d.intent))) throw unavailable();
-  const id = `membership_${keyOf(uid, requestId)}`, fingerprint = keyOf(d.planId, d.promoCode ?? '', d.intent, d.quoteId ?? '');
+  const mode = upgradeMode(d.upgradeMode);
+  if (mode && (d.intent !== 'purchase' || typeof d.quoteId !== 'string' || !/^[a-f0-9]{64}$/.test(d.quoteId))) {
+    throw new MembershipCheckoutError('quote_changed', 'Verify the upgrade price before paying.');
+  }
+  const id = `membership_${keyOf(uid, requestId)}`;
+  const fingerprint = keyOf(d.planId, d.promoCode ?? '', d.intent, d.quoteId ?? '', ...(mode ? [mode] : []));
   const reserved = await store.transact(async tx => {
     await member(tx, org, uid, auth);
     const old = await tx.get(paymentPath(org, id));
@@ -111,31 +155,49 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
       if (prior.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Checkout request already used.');
       return { p: prior, create: false };
     }
+    const recovery = await tx.get(checkoutRecoveryPath(org, id));
+    if (recovery) {
+      if (recovery.organizationId !== org || recovery.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
+      if (recovery.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Checkout request already used.');
+      const target = requiredIdentifier(recovery.transactionId, 'transactionId');
+      const payment = membershipPayment(await tx.get(paymentPath(org, target)), org, target);
+      if (payment.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
+      return { p: payment, create: false, recovered: recovery.orderChanged === true };
+    }
     const a = await tx.get(accountPath(org, uid));
-    const now = clock();
-    const requestingUpgrade = d.planId === 'premium' && a?.planId === 'basic' && Number(a.expiresAtMillis) > now;
     // A new client request ID cannot bypass an unresolved checkout.
     if (typeof a?.pendingTransactionId === 'string' && a.pendingTransactionId) {
       const pending = membershipPayment(await tx.get(paymentPath(org, a.pendingTransactionId)), org, a.pendingTransactionId);
       if (pending.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
       if (pending.paymentStatus !== 'cleared' && !['expired', 'failed'].includes(String(pending.fulfilmentStatus))) {
-        const pendingUpgrade = pending.upgradeExpiresAtMillis !== undefined;
-        if ((requestingUpgrade || pendingUpgrade) && pending.fingerprint !== fingerprint) {
-          throw new DomainError('failed-precondition', 'Resolve your existing checkout in billing history first.');
-        }
-        return { p: pending, create: false };
+        const orderChanged = pending.fingerprint !== fingerprint;
+        tx.create(checkoutRecoveryPath(org, id), { transactionId: pending.transactionId, organizationId: org, memberId: uid, fingerprint, orderChanged });
+        return { p: pending, create: false, recovered: orderChanged };
       }
     }
-    const q = await quote(tx, org, d, now, auth, a), user = await tx.get(`users/${uid}`);
-    if ((q.upgrade || d.quoteId !== undefined) && d.quoteId !== q.value.quoteId) throw new MembershipCheckoutError('quote_changed', 'Plan or promo pricing changed. Review a fresh quote.');
+    const now = clock();
+    if (futureUpgrade(a, now)) throw new MembershipCheckoutError('upgrade_already_scheduled', 'Premium is already scheduled.');
+    const current = membershipAccountAt(a, now);
+    if (!mode && d.planId === 'premium') requireUpgradeSelection(current, now);
+    const issuedQuote = mode && await tx.get(upgradeQuotePath(org, uid, mode));
+    if (mode && (!issuedQuote || issuedQuote.quoteId !== d.quoteId)) {
+      throw new MembershipCheckoutError('quote_changed', 'Verify the current upgrade price before paying.');
+    }
+    const q = await quote(tx, org, d, now, auth, issuedQuote ? Number(issuedQuote.quotedAtMillis) : now);
+    const user = await tx.get(`users/${uid}`);
+    if (d.quoteId !== undefined && d.quoteId !== q.value.quoteId) throw new MembershipCheckoutError('quote_changed', 'Plan or promo pricing changed. Review a fresh quote.');
     if (typeof user?.email !== 'string' || !user.email.includes('@')) throw unavailable();
-    if (d.intent === 'renewal' && a?.planId !== d.planId) throw new DomainError('failed-precondition', 'Renew your current plan.');
-    if (!q.upgrade && Number(a?.expiresAtMillis ?? 0) > now && a?.planId !== d.planId) throw new DomainError('failed-precondition', 'Active plan changes require an Admin policy.');
+    if (d.intent === 'renewal' && current?.planId !== d.planId) throw new DomainError('failed-precondition', 'Renew your current plan.');
+    if (!mode && Number(current?.expiresAtMillis ?? 0) > now && current?.planId !== d.planId) throw new DomainError('failed-precondition', 'Active plan changes require an Admin policy.');
     const p = { schemaVersion: 1, organizationId: org, transactionId: id, memberId: uid, kind: d.intent === 'renewal' ? 'MembershipRenewal' : 'MembershipPurchase',
       environment: 'sandbox', provider: 'billplz', planId: d.planId, planName: q.value.name, planVersion: q.value.version, benefits: q.value.benefits,
       amountMinor: q.value.amountMinor, baseAmountMinor: q.value.baseAmountMinor, currency: 'MYR', durationDays: q.value.durationDays,
-      ...(q.code ? { promoCode: q.code } : {}), ...q.upgrade, paymentStatus: 'pending', fulfilmentStatus: 'creating', invoiceStatus: 'pending',
-      createdAtMillis: now, updatedAtMillis: now, checkoutExpiresAtMillis: Math.min(now + 30 * 60000, q.upgrade?.upgradeExpiresAtMillis ?? Infinity), fingerprint };
+      ...(q.code ? { promoCode: q.code } : {}), paymentStatus: 'pending', fulfilmentStatus: 'creating', invoiceStatus: 'pending',
+      ...('upgradeMode' in q.value ? { upgradeMode: q.value.upgradeMode, upgradeChargeMinor: q.value.upgradeChargeMinor,
+        premiumTermAmountMinor: q.value.premiumTermAmountMinor, basicExpiresAtMillis: q.value.basicExpiresAtMillis,
+        sourceTransactionId: q.sourceTransactionId } : {}),
+      createdAtMillis: now, updatedAtMillis: now,
+      checkoutExpiresAtMillis: mode === 'immediate' ? Math.min(now + 30 * 60000, Number(current?.expiresAtMillis)) : now + 30 * 60000, fingerprint };
     // Capacity counts allocated checkouts conservatively. Never release an uncertain provider attempt.
     if (q.promo && q.code) tx.set(`${root(org)}/promoCodes/${q.code}`, { ...q.promo, currentRedemptions: Number(q.promo.currentRedemptions) + 1 });
     tx.create(paymentPath(org, id), p);
@@ -143,7 +205,7 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
     event(tx, org, id, 'checkout_reserved', now);
     return { p, create: true, email: user.email, name: typeof user.displayName === 'string' && user.displayName ? user.displayName : 'Member' };
   });
-  if (!reserved.create) return membershipPaymentView(reserved.p);
+  if (!reserved.create) return { ...membershipPaymentView(reserved.p), ...(reserved.recovered ? { recoveredPendingCheckout: true } : {}) };
   let bill: SandboxBill;
   try {
     bill = await gateway.create({ amountMinor: Number(reserved.p.amountMinor), name: reserved.name!, email: reserved.email!, reference: id, organizationId: org, description: `Membership: ${reserved.p.planName}` });
@@ -183,24 +245,42 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
     }
     if (bill.paid_amount !== p.amountMinor) throw unavailable();
     const a = await tx.get(accountPath(org, String(p.memberId)));
+    const current = membershipAccountAt(a, now);
     // Re-check current organization authority. Paid but ineligible/late => review, never discard money.
     let reason = now >= Number(p.checkoutExpiresAtMillis) ? 'checkout_expired' : '';
     if (!isSupportedPaidPlan(p.planId) || p.durationDays !== 30) reason = 'unsupported_plan';
     if (identityIneligible) reason = 'account_ineligible';
     try { await member(tx, org, String(p.memberId), undefined, false); } catch { reason = 'account_ineligible'; }
-    const upgrading = p.upgradeExpiresAtMillis !== undefined;
-    if (upgrading) {
-      if (p.planId !== 'premium' || a?.planId !== 'basic' || a.expiresAtMillis !== p.upgradeExpiresAtMillis ||
-          a.lastTransactionId !== p.upgradeFromTransactionId || Number(p.upgradeExpiresAtMillis) <= now) reason ||= 'plan_changed';
-    } else if (Number(a?.expiresAtMillis ?? 0) > now && a?.planId !== p.planId) reason = 'plan_changed';
-    const expiresAtMillis = upgrading ? Number(p.upgradeExpiresAtMillis)
-      : Math.max(now, Number(a?.expiresAtMillis ?? 0)) + Number(p.durationDays) * DAY;
-    if (!Number.isSafeInteger(expiresAtMillis) || expiresAtMillis > 8640000000000000) throw unavailable();
-    const next = { ...p, paymentStatus: 'cleared', clearedAtMillis: now, invoiceStatus: 'paid', fulfilmentStatus: reason ? 'reconciliation_required' : 'confirmed', updatedAtMillis: now, ...(reason ? { resolutionReason: reason } : { expiresAtMillis }) };
-    const applyVoucherTerm = !reason && !upgrading ? await preparePremiumCoachVoucherTerm(tx, org, next, a) : () => undefined;
-    if (!reason) tx.set(accountPath(org, String(p.memberId)), { ...a, organizationId: org, memberId: p.memberId, planId: p.planId, planName: p.planName, benefits: p.benefits,
-      expiresAtMillis, lastTransactionId: id, pendingTransactionId: a?.pendingTransactionId === id ? '' : a?.pendingTransactionId ?? '', autoRenew: false, updatedAtMillis: now });
-    tx.set(paymentPath(org, id), next); event(tx, org, id, reason ? 'payment_review_required' : 'membership_activated', now);
+    const immediate = p.upgradeMode === 'immediate';
+    const nextTerm = p.upgradeMode === 'next_term';
+    const legacyUpgrade = p.upgradeMode === undefined && p.upgradeExpiresAtMillis !== undefined;
+    if (futureUpgrade(a, now)) reason = 'plan_changed';
+    if (immediate || nextTerm || legacyUpgrade) {
+      const priorExpiry = legacyUpgrade ? p.upgradeExpiresAtMillis : p.basicExpiresAtMillis;
+      const priorPaymentId = legacyUpgrade ? p.upgradeFromTransactionId : p.sourceTransactionId;
+      if (current?.planId !== 'basic' || current.lastTransactionId !== priorPaymentId || current.expiresAtMillis !== priorExpiry
+          || current.organizationId !== org || current.memberId !== p.memberId || p.planId !== 'premium'
+          || (legacyUpgrade && Number(priorExpiry) <= now)) reason ||= 'plan_changed';
+      if (!reason && current && !await readMembershipTermReceipt(tx, org, String(p.memberId), current, now)) reason = 'source_payment_unavailable';
+    } else if (Number(current?.expiresAtMillis ?? 0) > now && current?.planId !== p.planId) {
+      reason = 'plan_changed';
+    }
+    const cycleStart = Math.max(now, Number(current?.expiresAtMillis ?? 0));
+    const expiresAtMillis = legacyUpgrade ? Number(p.upgradeExpiresAtMillis) : cycleStart + Number(p.durationDays) * DAY;
+    if (!Number.isSafeInteger(expiresAtMillis) || expiresAtMillis > 8640000000000000) reason ||= 'invalid_expiry';
+    const startsAtMillis = immediate ? now : cycleStart;
+    const scheduled = nextTerm && startsAtMillis > now;
+    const next = { ...p, paymentStatus: 'cleared', clearedAtMillis: now, invoiceStatus: 'paid', fulfilmentStatus: reason ? 'reconciliation_required' : 'confirmed', updatedAtMillis: now,
+      ...(reason ? { resolutionReason: reason } : { expiresAtMillis, ...((immediate || nextTerm) ? { startsAtMillis } : {}) }) };
+    const applyVoucherTerm = !reason && !legacyUpgrade ? await preparePremiumCoachVoucherTerm(tx, org, next, current) : () => undefined;
+    if (!reason) {
+      const term = { planId: p.planId, planName: p.planName, benefits: p.benefits, expiresAtMillis, lastTransactionId: id };
+      tx.set(accountPath(org, String(p.memberId)), { ...a, organizationId: org, memberId: p.memberId,
+        ...(scheduled ? { scheduledUpgrade: { ...term, startsAtMillis } } : { ...term, scheduledUpgrade: null }),
+        pendingTransactionId: a?.pendingTransactionId === id ? '' : a?.pendingTransactionId ?? '', autoRenew: false, updatedAtMillis: now });
+    }
+    tx.set(paymentPath(org, id), next);
+    event(tx, org, id, reason ? 'payment_review_required' : scheduled ? 'membership_scheduled' : 'membership_activated', now);
     applyVoucherTerm();
     return membershipPaymentView(next);
   });
@@ -254,8 +334,11 @@ export async function membershipOverview(store: DocumentStore, auth: Auth, raw: 
   const [plans, payments] = await Promise.all([reader.plans(org), reader.payments(org, uid)]);
   return store.transact(async tx => {
     const now = clock(), { account: a, entitlement } = await readMembershipEntitlement(tx, auth, org, now);
+    const scheduled = futureUpgrade(a, now);
     return { schemaVersion: 1, organizationId: org, memberId: uid, serverNowMillis: now, autoRenewSupported: false,
       entitlement,
+      ...(scheduled ? { scheduledUpgrade: { planId: scheduled.planId, planName: scheduled.planName,
+        startsAtMillis: scheduled.startsAtMillis, expiresAtMillis: scheduled.expiresAtMillis } } : {}),
       account: a ? { planId: a.planId ?? '', planName: a.planName ?? '', benefits: a.benefits ?? [], expiresAtMillis: a.expiresAtMillis ?? 0, status: Number(a.expiresAtMillis ?? 0) > now ? 'active' : 'expired' } : { status: 'none' },
       plans: plans.filter(r => r.data.active === true && isSupportedPaidPlan(r.id)).map(r => membershipPlan(r.id, r.data)),
       transactions: payments.filter(r => ['MembershipPurchase', 'MembershipRenewal'].includes(String(r.data.kind)) && r.data.memberId === uid).map(r => membershipPaymentView(membershipPayment(r.data, org, r.id))).sort((a, b) => Number(b.createdAtMillis) - Number(a.createdAtMillis)) };

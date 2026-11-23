@@ -86,6 +86,27 @@ it('denies other-role drafts/direct writes, stale assignments, unverification an
   await db.doc(`${root}/members/coach`).update({ role: 'member' });
   await assertFails(getDoc(doc(client('coach'), `${root}/coaches/coach`)));
 });
+
+it('admits an active scheduled Premium term only with its matching cleared receipt', async () => {
+  const now = Date.now(), cycle = 30 * 86400000;
+  const startsAtMillis = now - 1000;
+  const expiresAtMillis = startsAtMillis + cycle;
+  const account = db.doc(`${root}/membershipAccounts/member`);
+  const payment = db.doc(`${root}/transactions/scheduled`);
+  await db.doc(`${root}/coaches/coach`).set({ status: 'published' });
+  await account.set({ organizationId: org, memberId: 'member', planId: 'basic', expiresAtMillis: startsAtMillis,
+    lastTransactionId: 'expired', scheduledUpgrade: { planId: 'premium', startsAtMillis, expiresAtMillis, lastTransactionId: 'scheduled' } });
+  const read = () => getDocs(query(collection(client('member'), `${root}/coaches`), where('status', '==', 'published')));
+  await assertFails(read());
+  await payment.set({ schemaVersion: 1, organizationId: org, memberId: 'member', transactionId: 'scheduled',
+    planId: 'premium', planName: 'Premium', benefits: [], kind: 'MembershipPurchase', upgradeMode: 'next_term', startsAtMillis,
+    environment: 'sandbox', provider: 'billplz', currency: 'MYR', paymentStatus: 'cleared', fulfilmentStatus: 'confirmed',
+    billId: 'fixture-bill', collectionId: 'fixture-collection', amountMinor: 12900, durationDays: 30,
+    clearedAtMillis: startsAtMillis - 1000, expiresAtMillis });
+  await assertSucceeds(read());
+  await payment.update({ startsAtMillis: startsAtMillis - 1 });
+  await assertFails(read());
+});
 it('real contention and a deterministic callback retry keep the original revision', async () => {
   const store = new FirestoreStore(db);
   await saveCoachProfile(store, actor('coach'), save('create'));

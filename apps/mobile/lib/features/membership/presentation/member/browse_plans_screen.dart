@@ -5,6 +5,7 @@ import '../../application/membership_feature_host.dart';
 import '../../domain/membership_renewal_preview.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
+import 'premium_upgrade_screen.dart';
 import 'widgets/plan_card.dart';
 
 class BrowsePlansScreen extends StatelessWidget {
@@ -21,6 +22,9 @@ class BrowsePlansScreen extends StatelessWidget {
       title: 'Membership plans',
       builder: (context, data, refresh) {
         final e = MembershipEntitlement.fromOverview(data);
+        final upgrade = availablePremiumUpgrade(data, e);
+        final scheduled =
+            e.canStartCheckout ? membershipUpgradeSchedule(data) : null;
         final plans = membershipRows(data['plans'])
             .where((p) => ['basic', 'premium'].contains(p['planId']));
         final active = e.paidStatus == PaidMembershipStatus.active;
@@ -67,20 +71,25 @@ class BrowsePlansScreen extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 12),
                 child: Text(
                     'Refresh online to verify your membership before checkout.')),
-          if (active)
+          if (scheduled != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                  'Premium is scheduled for ${membershipDate(scheduled['startsAtMillis'])}.'),
+            ),
+          if (active && scheduled == null)
             const Padding(
                 padding: EdgeInsets.only(bottom: 12),
                 child: Text(
-                    'Renew your current plan to keep all remaining time. Basic members can upgrade to Premium for the remaining time.')),
+                    'Renew your current plan to keep all remaining time.')),
           if (plans.isEmpty)
             const Text(
                 'No membership plans are configured. Contact your gym administrator.'),
           ...plans.map((p) {
             final tier = p['planId'] as String;
             final current = active && e.paidPlanId == tier;
-            final upgrade =
-                active && e.paidPlanId == 'basic' && tier == 'premium';
-            final switching = active && !current && !upgrade;
+            final canUpgrade = tier == 'premium' && upgrade != null;
+            final switching = active && !current && !canUpgrade;
             final plan = MembershipPlan(
                 tier,
                 p['name'] as String,
@@ -93,29 +102,36 @@ class BrowsePlansScreen extends StatelessWidget {
                     plan: plan,
                     periodLabel: '/ ${p['durationDays']} days',
                     isCurrent: current,
-                    actionLabel: current || e.paidPlanId == tier
-                        ? 'Renew ${plan.name}'
-                        : upgrade
+                    actionLabel: scheduled != null
+                        ? 'Premium already scheduled'
+                        : canUpgrade
                             ? 'Upgrade to Premium'
-                            : switching
-                                ? 'Available after current plan expires'
-                                : 'Choose ${plan.name}',
+                            : current || e.paidPlanId == tier
+                                ? 'Renew ${plan.name}'
+                                : switching
+                                    ? 'Available after current plan expires'
+                                    : 'Choose ${plan.name}',
                     note: tier == 'premium'
                         ? 'Premium-exclusive rewards depend on the configured catalogue. Extra check-in points and coach discounts are not included until their policies are enabled.'
                         : 'All Free digital fitness features are included.',
-                    onSelect: !e.canStartCheckout || switching
+                    onSelect: !e.canStartCheckout ||
+                            switching ||
+                            scheduled != null
                         ? null
                         : () async {
                             await Navigator.push(
                                 context,
                                 MaterialPageRoute<void>(
-                                    builder: (_) => PurchasePlanScreen(
-                                        plan: plan,
-                                        repository: repo,
-                                        renewalPreview: MembershipRenewalPreview
-                                            .fromOverview(e, tier),
-                                        upgrade: upgrade,
-                                        renewal: e.paidPlanId == tier)));
+                                    builder: (_) => canUpgrade
+                                        ? PremiumUpgradeScreen(
+                                            repository: repo, plan: plan)
+                                        : PurchasePlanScreen(
+                                            plan: plan,
+                                            repository: repo,
+                                            renewalPreview:
+                                                MembershipRenewalPreview
+                                                    .fromOverview(e, tier),
+                                            renewal: e.paidPlanId == tier)));
                             if (context.mounted) refresh();
                           }));
           }),

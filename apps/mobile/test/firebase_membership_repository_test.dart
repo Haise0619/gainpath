@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_domain/membership.dart' show MembershipUpgradeMode;
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_app_check_readiness.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_membership_repository.dart';
 import 'package:gainpath_mobile/infrastructure/local/membership_cache.dart';
@@ -46,6 +48,56 @@ void main() {
       'requestId': 'retry-id',
       'intent': 'renewal'
     });
+  });
+  test(
+      'upgrade quote and checkout send the same mode and server quote reference',
+      () async {
+    final requests = <String, Map<String, dynamic>>{};
+    final repo = FirebaseMembershipRepository(
+      scope: scope,
+      isCurrent: () => true,
+      currentUid: () => 'member',
+      readiness: ready(),
+      call: (name, data) async {
+        requests[name] = data;
+        return {'quoteId': 'issued'};
+      },
+    );
+    const mode = MembershipUpgradeMode.nextTerm;
+    final quote = await repo.quote('premium', '', upgradeMode: mode);
+    await repo.checkout('premium', '', 'upgrade',
+        renewal: false, quoteId: quote['quoteId'] as String, upgradeMode: mode);
+    expect(requests['getMembershipQuoteCommand']!['upgradeMode'], 'next_term');
+    expect(requests['createMembershipPaymentCommand'], {
+      'schemaVersion': 1,
+      'organizationId': 'gainpath',
+      'planId': 'premium',
+      'promoCode': '',
+      'requestId': 'upgrade',
+      'quoteId': 'issued',
+      'upgradeMode': 'next_term',
+      'intent': 'purchase',
+    });
+  });
+  test('quote exposes an already scheduled upgrade from Firebase', () async {
+    final repo = FirebaseMembershipRepository(
+      scope: scope,
+      isCurrent: () => true,
+      currentUid: () => 'member',
+      readiness: ready(),
+      call: (_, __) async => throw FirebaseFunctionsException(
+        code: 'failed-precondition',
+        message: 'Premium is already scheduled.',
+        details: const {
+          'reason': 'upgrade_already_scheduled',
+          'checkoutCreated': false
+        },
+      ),
+    );
+    await expectLater(
+        repo.quote('premium', '', upgradeMode: MembershipUpgradeMode.immediate),
+        throwsA(isA<BookingException>().having(
+            (e) => e.code, 'code', 'membership-upgrade-already-scheduled')));
   });
   test('rejects stale account before transport', () async {
     var calls = 0;

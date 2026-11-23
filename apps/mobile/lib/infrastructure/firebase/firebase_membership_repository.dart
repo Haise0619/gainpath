@@ -97,17 +97,25 @@ class FirebaseMembershipRepository implements MembershipCommerceRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> quote(String planId, String promoCode) => _call(
-      'getMembershipQuoteCommand', {'planId': planId, 'promoCode': promoCode});
+  Future<Map<String, dynamic>> quote(String planId, String promoCode,
+          {MembershipUpgradeMode? upgradeMode}) =>
+      _call('getMembershipQuoteCommand', {
+        'planId': planId,
+        'promoCode': promoCode,
+        if (upgradeMode != null) 'upgradeMode': upgradeMode.wireValue,
+      });
   @override
   Future<Map<String, dynamic>> checkout(
           String planId, String promoCode, String requestId,
-          {required bool renewal, String? quoteId}) =>
+          {required bool renewal,
+          String? quoteId,
+          MembershipUpgradeMode? upgradeMode}) =>
       _call('createMembershipPaymentCommand', {
         'planId': planId,
         'promoCode': promoCode,
         'requestId': requestId,
         if (quoteId != null) 'quoteId': quoteId,
+        if (upgradeMode != null) 'upgradeMode': upgradeMode.wireValue,
         'intent': renewal ? 'renewal' : 'purchase'
       });
   @override

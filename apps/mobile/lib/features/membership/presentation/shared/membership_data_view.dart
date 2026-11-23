@@ -133,6 +133,18 @@ List<Map<String, dynamic>> membershipRows(Object? value) =>
     (value as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
+
+Map<String, dynamic>? membershipUpgradeSchedule(Map<String, dynamic> overview) {
+  final term = overview['scheduledUpgrade'];
+  if (term is Map<String, dynamic> &&
+      term['planId'] == 'premium' &&
+      term['startsAtMillis'] is int &&
+      term['expiresAtMillis'] is int) {
+    return term;
+  }
+  return null;
+}
+
 String membershipPaymentLabel(Map<String, dynamic> p) {
   final refund = p['refundStatus'];
   if (refund != null) {
@@ -146,6 +158,9 @@ String membershipPaymentLabel(Map<String, dynamic> p) {
     };
   }
   if (p['paymentStatus'] == 'cleared' && p['fulfilmentStatus'] == 'confirmed') {
+    if (p['upgradeMode'] == 'next_term') {
+      return 'Payment confirmed · Premium start date confirmed';
+    }
     return 'Payment confirmed · Membership activated';
   }
   return switch (p['fulfilmentStatus']) {
