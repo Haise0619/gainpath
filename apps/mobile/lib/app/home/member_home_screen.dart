@@ -107,7 +107,7 @@ class MemberHomeScreen extends StatefulWidget {
   final VoidCallback? onOpenPlan;
   final Future<PersistedBookingRecord?> Function()? onLoadUpcomingCoaching;
   final VoidCallback? onOpenNotifications;
-  final ValueListenable<bool>? unreadNotifications;
+  final ValueListenable<int>? unreadNotifications;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenCoaches, onOpenBookings;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
@@ -677,7 +677,7 @@ class _HeroHeader extends StatelessWidget {
   final VoidCallback? onOpenAnnouncements;
   final VoidCallback? onOpenCoachingUpdates;
   final VoidCallback? onOpenNotifications;
-  final ValueListenable<bool>? unreadNotifications;
+  final ValueListenable<int>? unreadNotifications;
 
   const _HeroHeader({
     required this.greeting,
@@ -695,13 +695,17 @@ class _HeroHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget notificationBell(bool unread) {
+    Widget notificationBell(int unread) {
       const bell = Icon(Icons.notifications_none_rounded);
       return IconButton(
-        tooltip: unread ? 'Notifications, unread updates' : 'Notifications',
-        icon: unread
-            ? const Badge(
-                backgroundColor: AppColors.danger, smallSize: 9, child: bell)
+        tooltip: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
+        icon: unread > 0
+            ? Badge(
+                backgroundColor: AppColors.danger,
+                textColor: Colors.white,
+                label: Text(unread > 99 ? '99+' : '$unread'),
+                child: bell,
+              )
             : bell,
         onPressed: onOpenNotifications ??
             onOpenAnnouncements ??
@@ -742,12 +746,12 @@ class _HeroHeader extends StatelessWidget {
       ),
       actions: [
         if (unreadNotifications case final unread?)
-          ValueListenableBuilder<bool>(
+          ValueListenableBuilder<int>(
             valueListenable: unread,
-            builder: (_, hasUnread, __) => notificationBell(hasUnread),
+            builder: (_, count, __) => notificationBell(count),
           )
         else
-          notificationBell(false),
+          notificationBell(0),
         const SizedBox(width: 4),
       ],
       flexibleSpace: FlexibleSpaceBar(

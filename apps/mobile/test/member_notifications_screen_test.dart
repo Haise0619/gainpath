@@ -86,7 +86,7 @@ void main() {
     );
     addTearDown(badge.dispose);
     await badge.refreshAnnouncements();
-    expect(badge.value, isTrue);
+    expect(badge.value, 1);
 
     await tester.pumpWidget(MaterialApp(
       home: MemberNotificationsScreen(
@@ -98,12 +98,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Unread'), findsOneWidget);
-    expect(badge.value, isTrue);
+    expect(badge.value, 1);
 
     await tester.tap(find.text('New gym hours'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(badge.value, isFalse);
+    expect(badge.value, 0);
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(find.text('Unread'), findsNothing);

@@ -78,16 +78,16 @@ void main() {
     final first = badge();
     addTearDown(first.dispose);
     await first.refreshAnnouncements();
-    expect(first.value, isTrue);
+    expect(first.value, 1);
     await first.markAnnouncementRead(entry);
-    expect(first.value, isFalse);
+    expect(first.value, 0);
     final reopened = badge();
     addTearDown(reopened.dispose);
     await reopened.refreshAnnouncements();
-    expect(reopened.value, isFalse);
+    expect(reopened.value, 0);
     entry = notice(2);
     await reopened.refreshAnnouncements();
-    expect(reopened.value, isTrue);
+    expect(reopened.value, 1);
   });
 
   test('uses the existing server read state for personal notifications',
@@ -100,10 +100,43 @@ void main() {
         saveSeen: (_) async {});
     addTearDown(badge.dispose);
     await badge.refreshInbox();
-    expect(badge.value, isTrue);
+    expect(badge.value, 1);
     await inbox.markRead('booking-update');
     await badge.refreshInbox();
-    expect(badge.value, isFalse);
+    expect(badge.value, 0);
+  });
+
+  test('counts unique announcements and personal notices across pages', () async {
+    final entry = notice(1);
+    final other = Announcement(
+      id: 'new-gym-hours',
+      title: 'New gym hours',
+      body: 'Check the updated schedule',
+      validFrom: entry.validFrom,
+      validTo: entry.validTo,
+    );
+    final inbox = _Inbox();
+    final badge = MemberNotificationBadge(
+      announcements: _Announcements((cursor) async => cursor == null
+          ? AnnouncementPage([entry], nextCursor: 'next')
+          : AnnouncementPage([entry, other])),
+      inbox: inbox,
+      isCurrent: () => true,
+      clock: () => now,
+      loadSeen: () async => {},
+      saveSeen: (_) async {},
+    );
+    addTearDown(badge.dispose);
+    await badge.refreshAnnouncements();
+    await badge.refreshInbox();
+    expect(badge.value, 3);
+    await badge.markAnnouncementRead(other);
+    expect(badge.value, 2);
+    await inbox.markRead('booking-update');
+    await badge.refreshInbox();
+    expect(badge.value, 1);
+    await badge.markAnnouncementRead(entry);
+    expect(badge.value, 0);
   });
 
   test('the device store keeps receipts separate for each account', () async {
@@ -153,7 +186,7 @@ void main() {
     response.complete(AnnouncementPage([notice(1)]));
     await pending;
     await badge.markAnnouncementRead(notice(1));
-    expect(badge.value, isFalse);
+    expect(badge.value, 0);
     expect(writes, 0);
   });
 }

@@ -5,7 +5,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/content.dart';
 
 /// A session-scoped indication of confirmed unread content for the Home bell.
-class MemberNotificationBadge extends ValueNotifier<bool> {
+class MemberNotificationBadge extends ValueNotifier<int> {
   MemberNotificationBadge({
     this.announcements,
     this.inbox,
@@ -14,7 +14,7 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
     required this.saveSeen,
     DateTime Function()? clock,
   })  : _clock = clock ?? DateTime.now,
-        super(false);
+        super(0);
 
   final AnnouncementReader? announcements;
   final Module9Repository? inbox;
@@ -26,8 +26,8 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
   final _seen = <String, int>{};
   late final _loadedSeen = _readSeen();
   Future<void> _pendingSave = Future.value();
-  Announcement? _unreadAnnouncement;
-  bool _unreadInbox = false;
+  List<Announcement> _activeAnnouncements = [];
+  int _unreadInbox = 0;
   int _announcementRequest = 0;
   int _inboxRequest = 0;
   bool _disposed = false;
@@ -63,42 +63,34 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
     final reader = announcements;
     if (!_current || reader == null) return;
     final request = ++_announcementRequest;
-    if (clearFirst) _showAnnouncement(null);
+    if (clearFirst) {
+      _activeAnnouncements = [];
+      _publish();
+    }
     try {
       await _loadedSeen;
       String? cursor;
       final visited = <String>{};
+      final entries = <String, Announcement>{};
       do {
         if (!_current || request != _announcementRequest) return;
         final page = await reader.loadAnnouncements(afterId: cursor);
         if (!_current || request != _announcementRequest) return;
-        final now = _clock();
         for (final item in page.items) {
-          if (item.displayStatusAt(now) == AnnouncementDisplayStatus.active &&
-              !isAnnouncementRead(item)) {
-            _showAnnouncement(item);
-            return;
+          final previous = entries[item.id];
+          if (previous == null || item.revision > previous.revision) {
+            entries[item.id] = item;
           }
         }
         cursor = page.nextCursor;
         if (cursor != null && !visited.add(cursor)) return;
       } while (cursor != null);
-      _showAnnouncement(null);
+      _activeAnnouncements = entries.values.toList();
+      _publish();
     } catch (_) {
       // A failed refresh keeps the last verified indicator for this audience.
       if (_current && request == _announcementRequest) _publish();
     }
-  }
-
-  void _showAnnouncement(Announcement? entry) {
-    _unreadAnnouncement = entry;
-    _expiration?.cancel();
-    if (entry != null) {
-      _expiration = Timer(entry.validTo.difference(_clock()), () {
-        if (_current) unawaited(refreshAnnouncements(clearFirst: true));
-      });
-    }
-    _publish();
   }
 
   Future<void> markAnnouncementRead(Announcement entry) async {
@@ -112,10 +104,7 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
     final snapshot = Map<String, int>.of(_seen);
     _pendingSave =
         _pendingSave.then((_) => saveSeen(snapshot)).catchError((_) {});
-    if (_unreadAnnouncement != null &&
-        isAnnouncementRead(_unreadAnnouncement!)) {
-      await refreshAnnouncements();
-    }
+    _publish();
     await _pendingSave;
   }
 
@@ -125,19 +114,18 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
     final request = ++_inboxRequest;
     String? cursor;
     final visited = <String>{};
+    final readStates = <String, bool>{};
     try {
       do {
         final page = await source.loadInbox(afterId: cursor);
         if (!_current || request != _inboxRequest) return;
-        if (page.records.any((notice) => !notice.read)) {
-          _unreadInbox = true;
-          _publish();
-          return;
+        for (final notice in page.records) {
+          readStates.putIfAbsent(notice.id, () => notice.read);
         }
         cursor = page.nextAfterId;
         if (cursor != null && !visited.add(cursor)) return;
       } while (cursor != null);
-      _unreadInbox = false;
+      _unreadInbox = readStates.values.where((read) => !read).length;
       _publish();
     } catch (_) {
       // Retain the last state for this account when inbox verification fails.
@@ -145,10 +133,23 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
   }
 
   void _publish() {
-    value = _current &&
-        (_unreadInbox ||
-            (_unreadAnnouncement != null &&
-                !isAnnouncementRead(_unreadAnnouncement!)));
+    _expiration?.cancel();
+    if (!_current) return;
+    final now = _clock();
+    DateTime? nextExpiry;
+    var unread = _unreadInbox;
+    for (final entry in _activeAnnouncements) {
+      if (entry.displayStatusAt(now) != AnnouncementDisplayStatus.active ||
+          isAnnouncementRead(entry)) continue;
+      unread++;
+      if (nextExpiry == null || entry.validTo.isBefore(nextExpiry)) {
+        nextExpiry = entry.validTo;
+      }
+    }
+    if (nextExpiry != null) {
+      _expiration = Timer(nextExpiry.difference(now), _publish);
+    }
+    value = unread;
   }
 
   void clear() {
@@ -156,9 +157,9 @@ class MemberNotificationBadge extends ValueNotifier<bool> {
     _inboxRequest++;
     _expiration?.cancel();
     _inboxDebounce?.cancel();
-    _unreadAnnouncement = null;
-    _unreadInbox = false;
-    value = false;
+    _activeAnnouncements = [];
+    _unreadInbox = 0;
+    value = 0;
   }
 
   @override

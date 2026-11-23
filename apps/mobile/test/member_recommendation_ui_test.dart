@@ -146,13 +146,13 @@ void main() {
         recommendationRepository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('Unread'), findsOneWidget);
-    expect(badge.value, isTrue);
+    expect(badge.value, 1);
 
     await tester.tap(find.text('Recommendation dismissed'));
     await tester.pumpAndSettle();
     expect(find.text('Recommendation dismissed.'), findsOneWidget);
     expect(actions, ['get', 'read']);
-    expect(badge.value, isFalse);
+    expect(badge.value, 0);
     expect(inbox.readCalls, isEmpty);
     Navigator.of(tester.element(find.byType(MemberRecommendationSheet))).pop();
     await tester.pumpAndSettle();

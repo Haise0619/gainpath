@@ -26,7 +26,7 @@ void main() {
 
   Widget createWidgetUnderTest({
     VoidCallback? onOpenNotifications,
-    ValueListenable<bool>? unreadNotifications,
+    ValueListenable<int>? unreadNotifications,
     AppCheckInState? appCheckIn,
     Future<void> Function()? onAppClaim,
   }) {
@@ -133,9 +133,9 @@ void main() {
   });
 
   testWidgets(
-      'the bell shows an accessible dot only while there are unread updates',
+      'the bell shows the unread count and caps the visual label at 99+',
       (tester) async {
-    final unread = ValueNotifier(false);
+    final unread = ValueNotifier(0);
     addTearDown(unread.dispose);
     var taps = 0;
     await tester.pumpWidget(createWidgetUnderTest(
@@ -145,15 +145,21 @@ void main() {
     expect(find.byTooltip('Notifications'), findsOneWidget);
     expect(find.byType(Badge), findsNothing);
 
-    unread.value = true;
+    unread.value = 4;
     await tester.pump();
-    expect(find.byTooltip('Notifications, unread updates'), findsOneWidget);
+    expect(find.byTooltip('Notifications, 4 unread'), findsOneWidget);
+    expect(find.widgetWithText(Badge, '4'), findsOneWidget);
     expect(find.byType(Badge), findsOneWidget);
     expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.notifications_none_rounded));
     expect(taps, 1);
 
-    unread.value = false;
+    unread.value = 104;
+    await tester.pump();
+    expect(find.byTooltip('Notifications, 104 unread'), findsOneWidget);
+    expect(find.widgetWithText(Badge, '99+'), findsOneWidget);
+
+    unread.value = 0;
     await tester.pump();
     expect(find.byType(Badge), findsNothing);
   });
