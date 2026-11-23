@@ -7,9 +7,13 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 /// on account changes; generation checks discard late reads and old refreshes.
 class MemberAnnouncements extends StatefulWidget {
   const MemberAnnouncements(
-      {super.key, required this.reader, this.compact = false});
+      {super.key,
+      required this.reader,
+      this.compact = false,
+      this.onAnnouncementOpened});
   final AnnouncementReader reader;
   final bool compact;
+  final Future<void> Function(Announcement)? onAnnouncementOpened;
   @override
   State<MemberAnnouncements> createState() => MemberAnnouncementsState();
 }
@@ -174,7 +178,9 @@ class MemberAnnouncementsState extends State<MemberAnnouncements>
                       appBar: AppBar(title: const Text('Announcements')),
                       body: SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
-                        child: MemberAnnouncements(reader: widget.reader),
+                        child: MemberAnnouncements(
+                            reader: widget.reader,
+                            onAnnouncementOpened: widget.onAnnouncementOpened),
                       ),
                     ),
                   ),
@@ -233,31 +239,34 @@ class MemberAnnouncementsState extends State<MemberAnnouncements>
         important: entry.priority == AnnouncementPriority.important,
         warmAccent: entry.category == AnnouncementCategory.maintenance ||
             entry.category == AnnouncementCategory.closure,
-        onReadMore: () => showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(entry.title),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(entry.category.name),
-                  Text(entry.audienceLabel),
-                  Text(
-                      '${_date(entry.validFrom)} – ${_date(entry.validTo)} MYT'),
-                  const SizedBox(height: 12),
-                  SelectableText(entry.body),
-                ],
+        onReadMore: () {
+          unawaited(widget.onAnnouncementOpened?.call(entry));
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(entry.title),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(entry.category.name),
+                    Text(entry.audienceLabel),
+                    Text(
+                        '${_date(entry.validFrom)} – ${_date(entry.validTo)} MYT'),
+                    const SizedBox(height: 12),
+                    SelectableText(entry.body),
+                  ],
+                ),
               ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close')),
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close')),
-            ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }

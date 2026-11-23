@@ -4,17 +4,22 @@ import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import 'package:gainpath_mobile/app/notifications/member_notifications_screen.dart';
+import 'package:gainpath_mobile/app/notifications/member_notification_badge.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class _FakeAnnouncementReader implements AnnouncementReader {
-  _FakeAnnouncementReader(this.items);
+  _FakeAnnouncementReader(this.items, {this.initialCursor});
   final List<Announcement> items;
+  final String? initialCursor;
   int loadCalls = 0;
 
   @override
   Future<AnnouncementPage> loadAnnouncements({String? afterId}) async {
     loadCalls++;
+    if (afterId == null && initialCursor != null) {
+      return AnnouncementPage([], nextCursor: initialCursor);
+    }
     return AnnouncementPage(items);
   }
 }
@@ -60,6 +65,49 @@ void main() {
     role: AppRole.member,
     branchIds: ['main'],
   );
+
+  testWidgets('opening a later-page announcement clears the shared unread dot',
+      (tester) async {
+    final now = DateTime.now();
+    final reader = _FakeAnnouncementReader([
+      Announcement(
+        id: 'later-announcement',
+        title: 'New gym hours',
+        body: 'The gym opens at 7am.',
+        validFrom: now.subtract(const Duration(hours: 1)),
+        validTo: now.add(const Duration(days: 1)),
+      ),
+    ], initialCursor: 'next');
+    final badge = MemberNotificationBadge(
+      announcements: reader,
+      isCurrent: () => true,
+      loadSeen: () async => {},
+      saveSeen: (_) async {},
+    );
+    addTearDown(badge.dispose);
+    await badge.refreshAnnouncements();
+    expect(badge.value, isTrue);
+
+    await tester.pumpWidget(MaterialApp(
+      home: MemberNotificationsScreen(
+        session: testSession,
+        announcementReader: reader,
+        notificationBadge: badge,
+        isCurrent: () => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Unread'), findsOneWidget);
+    expect(badge.value, isTrue);
+
+    await tester.tap(find.text('New gym hours'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(badge.value, isFalse);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unread'), findsNothing);
+  });
 
   testWidgets(
       'MemberNotificationsScreen unifies announcements, coach notices, and booking updates',

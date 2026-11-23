@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, AppRole, SessionScope;
@@ -25,6 +26,7 @@ void main() {
 
   Widget createWidgetUnderTest({
     VoidCallback? onOpenNotifications,
+    ValueListenable<bool>? unreadNotifications,
     AppCheckInState? appCheckIn,
     Future<void> Function()? onAppClaim,
   }) {
@@ -40,6 +42,7 @@ void main() {
       home: MemberHomeScreen(
         liveSession: testSession,
         onOpenNotifications: onOpenNotifications,
+        unreadNotifications: unreadNotifications,
         appCheckIn: appCheckIn,
         onAppClaim: onAppClaim,
       ),
@@ -127,6 +130,32 @@ void main() {
     await tester.tap(bellFinder);
     await tester.pumpAndSettle();
     expect(notificationsOpened, isTrue);
+  });
+
+  testWidgets(
+      'the bell shows an accessible dot only while there are unread updates',
+      (tester) async {
+    final unread = ValueNotifier(false);
+    addTearDown(unread.dispose);
+    var taps = 0;
+    await tester.pumpWidget(createWidgetUnderTest(
+      onOpenNotifications: () => taps++,
+      unreadNotifications: unread,
+    ));
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+    expect(find.byType(Badge), findsNothing);
+
+    unread.value = true;
+    await tester.pump();
+    expect(find.byTooltip('Notifications, unread updates'), findsOneWidget);
+    expect(find.byType(Badge), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.notifications_none_rounded));
+    expect(taps, 1);
+
+    unread.value = false;
+    await tester.pump();
+    expect(find.byType(Badge), findsNothing);
   });
 
   testWidgets(

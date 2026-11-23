@@ -1,9 +1,12 @@
 import 'package:gainpath_data/gainpath_data.dart'
     show FypDatasetTransportFactory;
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
+import '../../infrastructure/firebase/firebase_demo_recommendation.dart';
 import '../di/member_recommendation_factory.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
+import '../notifications/member_notification_badge.dart';
+import '../../infrastructure/local/member_announcement_read_store.dart';
 import '../../features/content/presentation/member/member_announcements.dart';
 import '../routing/app_check_in_host.dart';
 import '../di/app_check_in_factory.dart';
@@ -20,6 +23,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_domain/coaching.dart' show Module9Repository;
 import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_domain/membership.dart';
 import '../../features/membership/application/membership_feature_host.dart';
@@ -104,11 +108,17 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   PublishedRoutineCatalogCubit? _catalog;
   MembershipCommerceRepository? _membership;
   AnnouncementReader? _announcements;
+  Module9Repository? _notificationInbox;
+  MemberNotificationBadge? _notificationBadge;
   final _announcementKey = GlobalKey<MemberAnnouncementsState>();
 
   Future<void> _refreshAnnouncements() async {
+    final badge = _notificationBadge;
+    unawaited(badge?.refreshAnnouncements(clearFirst: true));
+    unawaited(badge?.refreshInbox());
     await _announcementKey.currentState?.refresh();
   }
+
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<void>? _achievementNetworkSubscription;
@@ -125,6 +135,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           !AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})) {
         _catalog?.invalidate();
         _achievements?.invalidate();
+        _notificationBadge?.clear();
       } else if (appCheckInEnabled) {
         unawaited(_achievements?.loadIfNeeded());
       }
@@ -145,6 +156,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     _createMembership();
     _announcements =
         widget.announcementReaderFactory?.call(scope, _activeScope);
+    _createNotificationBadge(scope);
     final repository =
         widget.routineCatalogFactory?.call(scope, _activeScope) ??
             SinglePublishedRoutineCatalog(
@@ -152,6 +164,62 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     _catalog = PublishedRoutineCatalogCubit(
         repository: repository, activeScope: _activeScope);
     unawaited(_catalog!.refresh());
+  }
+
+  void _createNotificationBadge(SessionScope scope) {
+    bool current() => mounted && _activeScope() == scope;
+    final inbox = scope.datasetScope == null
+        ? FirebaseModule9Repository(scope: scope, isCurrent: current)
+        : FirebaseDemoInboxRepository(
+            (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
+                scope, current));
+    final readStore = MemberAnnouncementReadStore(scope);
+    final badge = MemberNotificationBadge(
+      announcements: _announcements,
+      inbox: inbox,
+      isCurrent: current,
+      loadSeen: readStore.read,
+      saveSeen: readStore.save,
+    );
+    _notificationInbox = inbox;
+    _notificationBadge = badge;
+    badge.watchInbox();
+    unawaited(badge.refreshAnnouncements());
+    unawaited(badge.refreshInbox());
+  }
+
+  Future<void> _openNotifications() async {
+    final session = widget.liveSession;
+    final badge = _notificationBadge;
+    final reader = _announcements;
+    final inbox = _notificationInbox;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => session == null
+            ? MemberNotificationsScreen(isCurrent: () => mounted)
+            : buildMemberRecommendationNotifications(
+                session,
+                datasetTransport: session.datasetScope == null
+                    ? null
+                    : (widget.datasetTransportFactory ??
+                            firebaseFypDatasetTransport)(
+                        session.scope, () => _activeScope() == session.scope),
+                inbox: inbox,
+                coachDirectory: widget.coachDirectoryFactory
+                    ?.call(session.scope, () => _activeScope() == session.scope),
+                catalog: widget.routineCatalogFactory
+                    ?.call(session.scope, _activeScope),
+                announcements: reader,
+                notificationBadge: badge,
+                bookingFactory: widget.bookingFactory,
+                bookingListFactory: widget.bookingListFactory,
+                availabilityFactory: widget.coachAvailabilityFactory,
+              ),
+      ),
+    );
+    unawaited(badge?.refreshAnnouncements());
+    unawaited(badge?.refreshInbox());
   }
 
   void _createMembership() {
@@ -198,8 +266,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        (appCheckInEnabled || _index == 2 || _index == 4)) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_notificationBadge?.refreshAnnouncements());
+    unawaited(_notificationBadge?.refreshInbox());
+    if (appCheckInEnabled || _index == 2 || _index == 4) {
       unawaited(_achievements?.loadIfNeeded());
     }
   }
@@ -212,6 +282,9 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
       _catalog = null;
       _membership = null;
       _announcements = null;
+      _notificationBadge?.dispose();
+      _notificationBadge = null;
+      _notificationInbox = null;
       _achievements?.dispose();
       _achievements = null;
       if (widget.liveSession != null && _auth != null) {
@@ -231,6 +304,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_achievementNetworkSubscription?.cancel());
     _achievements?.dispose();
+    _notificationBadge?.dispose();
     unawaited(_authSubscription?.cancel());
     unawaited(_catalog?.close());
     super.dispose();
@@ -270,7 +344,11 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                                   open: open,
                                   openWorkout: openWorkout,
                                   catalog: catalog), onTabChanged: (index) {
-                            if (index == 0) refresh();
+                            if (index == 0) {
+                              refresh();
+                              unawaited(
+                                  _notificationBadge?.refreshAnnouncements());
+                            }
                             if (index == 0 || index == 2) refreshCheckIn();
                             if (index == 2 || index == 4) {
                               unawaited(_achievements?.loadIfNeeded());
@@ -321,50 +399,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           appCheckIn: checkIn,
           onAppClaim: claimCheckIn,
           onRefreshCheckIn: refreshCheckIn,
-          onOpenNotifications: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => session != null
-                      ? buildMemberRecommendationNotifications(session,
-                          datasetTransport: session.datasetScope == null
-                              ? null
-                              : (widget.datasetTransportFactory ??
-                                      firebaseFypDatasetTransport)(
-                                  session.scope,
-                                  () => _activeScope() == session.scope),
-                          inbox: session.datasetScope == null
-                              ? FirebaseModule9Repository(
-                                  scope: session.scope,
-                                  isCurrent: () =>
-                                      _activeScope() == session.scope)
-                              : null,
-                          coachDirectory: widget.coachDirectoryFactory?.call(
-                              session.scope,
-                              () => _activeScope() == session.scope),
-                          catalog: widget.routineCatalogFactory
-                              ?.call(session.scope, _activeScope),
-                          announcements: _announcements,
-                          bookingFactory: widget.bookingFactory,
-                          bookingListFactory: widget.bookingListFactory,
-                          availabilityFactory: widget.coachAvailabilityFactory)
-                      : MemberNotificationsScreen(
-                          session: session,
-                          announcementReader: _announcements,
-                          module9Repository: session == null
-                              ? null
-                              : FirebaseModule9Repository(
-                                  scope: session.scope,
-                                  isCurrent: () =>
-                                      _activeScope() == session.scope),
-                          bookingListFactory: widget.bookingListFactory,
-                          isCurrent: () =>
-                              session == null ||
-                              _activeScope() == session.scope,
-                          onOpenBookings: session == null
-                              ? null
-                              : () => openBookingList(context, session,
-                                  factory: widget.bookingListFactory),
-                        ))),
+          unreadNotifications: _notificationBadge,
+          onOpenNotifications: _openNotifications,
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
           routineProgress: progress?.routines,
@@ -382,7 +418,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           announcements: _announcements == null
               ? null
               : MemberAnnouncements(
-                  key: _announcementKey, reader: _announcements!, compact: true),
+                  key: _announcementKey,
+                  reader: _announcements!,
+                  compact: true,
+                  onAnnouncementOpened: _notificationBadge?.markAnnouncementRead),
           onRefreshAnnouncements: _refreshAnnouncements,
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),

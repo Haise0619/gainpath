@@ -8,6 +8,7 @@ import '../di/booking_factory.dart';
 import '../../features/coaching/presentation/member/widgets/booking_location.dart';
 import '../../features/recommendation/application/member_recommendation_repository.dart';
 import '../../features/recommendation/presentation/member/member_recommendation_sheet.dart';
+import 'member_notification_badge.dart';
 
 enum NotificationCategoryFilter {
   all,
@@ -50,6 +51,7 @@ class MemberNotificationsScreen extends StatefulWidget {
     super.key,
     this.session,
     this.announcementReader,
+    this.notificationBadge,
     this.module9Repository,
     this.bookingListFactory,
     required this.isCurrent,
@@ -63,6 +65,7 @@ class MemberNotificationsScreen extends StatefulWidget {
 
   final AuthSession? session;
   final AnnouncementReader? announcementReader;
+  final MemberNotificationBadge? notificationBadge;
   final Module9Repository? module9Repository;
   final BookingListFactory? bookingListFactory;
   final bool Function() isCurrent;
@@ -84,6 +87,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
   bool _loading = false;
   bool _loadingMore = false;
   String? _nextInboxCursor;
+  String? _nextAnnouncementCursor;
   int _generation = 0;
   String? _error;
   StreamSubscription<void>? _inboxUpdates;
@@ -123,11 +127,75 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
 
   bool get _current => mounted && widget.isCurrent();
 
+  bool get _includesAnnouncements =>
+      _selectedFilter == NotificationCategoryFilter.all ||
+      _selectedFilter == NotificationCategoryFilter.announcements;
+
+  bool get _includesInbox =>
+      _selectedFilter != NotificationCategoryFilter.announcements;
+
+  Future<AnnouncementPage> _loadAnnouncementPage(String? cursor) async {
+    final reader = widget.announcementReader!;
+    final visited = <String>{};
+    while (_current) {
+      if (cursor != null && !visited.add(cursor)) {
+        throw const FormatException('Invalid announcement cursor');
+      }
+      final page = await reader.loadAnnouncements(afterId: cursor);
+      final now = DateTime.now();
+      final active = page.items.where((item) =>
+          item.displayStatusAt(now) == AnnouncementDisplayStatus.active);
+      if (page.nextCursor != null && visited.contains(page.nextCursor)) {
+        throw const FormatException('Invalid announcement cursor');
+      }
+      if (active.isNotEmpty || page.nextCursor == null) {
+        return AnnouncementPage(active, nextCursor: page.nextCursor);
+      }
+      cursor = page.nextCursor;
+    }
+    return AnnouncementPage([]);
+  }
+
+  UnifiedNotificationItem _announcementItem(Announcement entry) =>
+      UnifiedNotificationItem(
+        id: 'announcement_${entry.id}',
+        category: NotificationCategoryFilter.announcements,
+        title: entry.title,
+        message: entry.body,
+        timestamp: entry.validFrom,
+        isRead: widget.notificationBadge?.isAnnouncementRead(entry),
+        announcement: entry,
+      );
+
+  UnifiedNotificationItem _noticeItem(MemberNotice notice) =>
+      UnifiedNotificationItem(
+        id: 'notice_${notice.id}',
+        category: notice.recommendation != null
+            ? NotificationCategoryFilter.recommendations
+            : notice.bookingId != null
+                ? NotificationCategoryFilter.bookings
+                : NotificationCategoryFilter.coaching,
+        title: notice.title,
+        message: notice.message,
+        timestamp: notice.createdAt,
+        isRead: notice.read,
+        noticeId: notice.id,
+        bookingId: notice.bookingId,
+        recommendation: notice.recommendation,
+      );
+
+  void _sortItems(List<UnifiedNotificationItem> items) {
+    final first = DateTime.fromMillisecondsSinceEpoch(0);
+    items
+        .sort((a, b) => (b.timestamp ?? first).compareTo(a.timestamp ?? first));
+  }
+
   Future<void> _load({bool silent = false}) async {
     if (!_current) return;
     _refreshing = true;
     final generation = ++_generation;
-    String? nextCursor;
+    String? nextInboxCursor;
+    String? nextAnnouncementCursor;
     if (!silent) {
       setState(() {
         _loading = true;
@@ -141,19 +209,10 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     // 1. Gym announcements
     if (widget.announcementReader != null) {
       try {
-        final page = await widget.announcementReader!.loadAnnouncements();
-        for (final a in page.items) {
-          if (a.isActive) {
-            newItems.add(UnifiedNotificationItem(
-              id: 'announcement_${a.id}',
-              category: NotificationCategoryFilter.announcements,
-              title: a.title,
-              message: a.body,
-              timestamp: a.validFrom,
-              announcement: a,
-            ));
-          }
-        }
+        await widget.notificationBadge?.prepareAnnouncements();
+        final page = await _loadAnnouncementPage(null);
+        nextAnnouncementCursor = page.nextCursor;
+        newItems.addAll(page.items.map(_announcementItem));
       } catch (_) {
         loadError = 'Could not load gym announcements.';
       }
@@ -163,25 +222,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     if (widget.module9Repository != null) {
       try {
         final noticePage = await widget.module9Repository!.loadInbox();
-        nextCursor = noticePage.nextAfterId;
-        for (final notice in noticePage.records) {
-          final isBooking = notice.bookingId != null;
-          newItems.add(UnifiedNotificationItem(
-            id: 'notice_${notice.id}',
-            category: notice.recommendation != null
-                ? NotificationCategoryFilter.recommendations
-                : isBooking
-                    ? NotificationCategoryFilter.bookings
-                    : NotificationCategoryFilter.coaching,
-            title: notice.title,
-            message: notice.message,
-            timestamp: notice.createdAt,
-            isRead: notice.read,
-            noticeId: notice.id,
-            bookingId: notice.bookingId,
-            recommendation: notice.recommendation,
-          ));
-        }
+        nextInboxCursor = noticePage.nextAfterId;
+        newItems.addAll(noticePage.records.map(_noticeItem));
       } catch (_) {
         loadError = loadError == null
             ? 'Could not load coaching notices.'
@@ -193,16 +235,12 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
       loadError = 'Notifications are currently unavailable.';
     }
 
-    // Sort chronologically by timestamp (newest first)
-    newItems.sort((a, b) {
-      final ta = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final tb = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return tb.compareTo(ta);
-    });
+    _sortItems(newItems);
 
     if (!_current || generation != _generation) return;
     setState(() {
-      _nextInboxCursor = nextCursor;
+      _nextInboxCursor = nextInboxCursor;
+      _nextAnnouncementCursor = nextAnnouncementCursor;
       _loadingMore = false;
       _items.clear();
       _items.addAll(newItems);
@@ -217,56 +255,71 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
   }
 
   Future<void> _loadMore() async {
-    final cursor = _nextInboxCursor;
-    final repository = widget.module9Repository;
-    if (!_current ||
-        _loading ||
-        _loadingMore ||
-        cursor == null ||
-        repository == null) {
-      return;
-    }
+    if (!_current || _loading || _loadingMore) return;
     final generation = _generation;
+    var nextInboxCursor = _nextInboxCursor;
+    var nextAnnouncementCursor = _nextAnnouncementCursor;
+    final loadAnnouncements = _includesAnnouncements;
+    final loadInbox = _includesInbox;
+    final newItems = <UnifiedNotificationItem>[];
+    var failed = false;
     setState(() => _loadingMore = true);
-    try {
-      final page = await repository.loadInbox(afterId: cursor);
-      if (!_current || generation != _generation) return;
-      if (page.nextAfterId == cursor) {
-        throw const FormatException('Invalid inbox cursor');
-      }
-      setState(() {
-        final known = _items.map((i) => i.id).toSet();
-        for (final notice in page.records) {
-          if (!known.add('notice_${notice.id}')) continue;
-          _items.add(UnifiedNotificationItem(
-              id: 'notice_${notice.id}',
-              category: notice.recommendation != null
-                  ? NotificationCategoryFilter.recommendations
-                  : notice.bookingId != null
-                      ? NotificationCategoryFilter.bookings
-                      : NotificationCategoryFilter.coaching,
-              title: notice.title,
-              message: notice.message,
-              timestamp: notice.createdAt,
-              isRead: notice.read,
-              noticeId: notice.id,
-              bookingId: notice.bookingId,
-              recommendation: notice.recommendation));
-        }
-        _items.sort((a, b) => (b.timestamp ?? DateTime(1970))
-            .compareTo(a.timestamp ?? DateTime(1970)));
-        _nextInboxCursor = page.nextAfterId;
-        _loadingMore = false;
-        _error = null;
-      });
-    } catch (_) {
-      if (_current && generation == _generation) {
-        setState(() {
-          _loadingMore = false;
-          _error = 'Could not load older notifications. Please retry.';
-        });
+    if (loadAnnouncements && nextAnnouncementCursor != null) {
+      try {
+        final page = await _loadAnnouncementPage(nextAnnouncementCursor);
+        newItems.addAll(page.items.map(_announcementItem));
+        nextAnnouncementCursor = page.nextCursor;
+      } catch (_) {
+        failed = true;
       }
     }
+    if (!_current || generation != _generation) return;
+    if (loadInbox && nextInboxCursor != null) {
+      try {
+        final page =
+            await widget.module9Repository!.loadInbox(afterId: nextInboxCursor);
+        if (page.nextAfterId == nextInboxCursor) {
+          throw const FormatException('Invalid inbox cursor');
+        }
+        newItems.addAll(page.records.map(_noticeItem));
+        nextInboxCursor = page.nextAfterId;
+      } catch (_) {
+        failed = true;
+      }
+    }
+    if (!_current || generation != _generation) return;
+    setState(() {
+      final known = _items.map((item) => item.id).toSet();
+      _items.addAll(newItems.where((item) => known.add(item.id)));
+      _sortItems(_items);
+      _nextInboxCursor = nextInboxCursor;
+      _nextAnnouncementCursor = nextAnnouncementCursor;
+      _loadingMore = false;
+      _error =
+          failed ? 'Could not load older notifications. Please retry.' : null;
+    });
+  }
+
+  void _markItemRead(UnifiedNotificationItem item) {
+    final index = _items.indexWhere((entry) =>
+        entry.id == item.id &&
+        entry.announcement?.revision == item.announcement?.revision);
+    if (index < 0 || _items[index].isRead == true) return;
+    final old = _items[index];
+    setState(() {
+      _items[index] = UnifiedNotificationItem(
+        id: old.id,
+        category: old.category,
+        title: old.title,
+        message: old.message,
+        timestamp: old.timestamp,
+        isRead: true,
+        noticeId: old.noticeId,
+        bookingId: old.bookingId,
+        announcement: old.announcement,
+        recommendation: old.recommendation,
+      );
+    });
   }
 
   Future<void> _handleItemTap(UnifiedNotificationItem item) async {
@@ -288,7 +341,10 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
           onOpenTarget: widget.onOpenRecommendationTarget,
           scopedPhotoBuilder: widget.recommendationPhotoBuilder,
           onBrowseCoaches: widget.onBrowseCoaches,
-          onChanged: () => unawaited(_load(silent: true)));
+          onChanged: () {
+            unawaited(widget.notificationBadge?.refreshInbox());
+            unawaited(_load(silent: true));
+          });
       return;
     }
     // 1. If it has a noticeId, mark it as read in the repository
@@ -296,25 +352,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
       try {
         await widget.module9Repository!.markRead(item.noticeId!);
         if (!_current) return;
-        // Locally mark as read immediately
-        setState(() {
-          final idx = _items.indexWhere((i) => i.id == item.id);
-          if (idx >= 0) {
-            final old = _items[idx];
-            _items[idx] = UnifiedNotificationItem(
-              id: old.id,
-              category: old.category,
-              title: old.title,
-              message: old.message,
-              timestamp: old.timestamp,
-              isRead: true,
-              noticeId: old.noticeId,
-              bookingId: old.bookingId,
-              announcement: old.announcement,
-              recommendation: old.recommendation,
-            );
-          }
-        });
+        _markItemRead(item);
+        unawaited(widget.notificationBadge?.refreshInbox());
       } catch (_) {
         // Continue navigation or view even if markRead fails
       }
@@ -359,6 +398,13 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     }
 
     // 3. Announcement or Coach Notice detail dialog
+    if (item.announcement case final announcement?) {
+      final badge = widget.notificationBadge;
+      if (badge != null) {
+        _markItemRead(item);
+        unawaited(badge.markAnnouncementRead(announcement));
+      }
+    }
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -720,7 +766,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                       },
                     ),
             ),
-            if (_nextInboxCursor != null)
+            if ((_includesInbox && _nextInboxCursor != null) ||
+                (_includesAnnouncements && _nextAnnouncementCursor != null))
               SafeArea(
                   top: false,
                   child: TextButton(

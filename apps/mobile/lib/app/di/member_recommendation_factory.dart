@@ -20,6 +20,7 @@ import '../../infrastructure/firebase/firebase_coach_directory_repository.dart';
 import '../../infrastructure/firebase/firebase_published_routine_repository.dart';
 import '../../navigation/session_host.dart';
 import '../notifications/member_notifications_screen.dart';
+import '../notifications/member_notification_badge.dart';
 import '../notifications/member_recommendation_navigator.dart';
 import 'booking_factory.dart';
 import 'coach_profile_factory.dart';
@@ -33,6 +34,7 @@ Widget buildMemberRecommendationNotifications(AuthSession session,
         {ScopedCommandTransport? datasetTransport,
         Module9Repository? inbox,
         AnnouncementReader? announcements,
+        MemberNotificationBadge? notificationBadge,
         MemberRecommendationFactory? recommendationFactory,
         CoachDirectoryRepository? coachDirectory,
         PublishedRoutineCatalogRepository? catalog,
@@ -78,6 +80,7 @@ Widget buildMemberRecommendationNotifications(AuthSession session,
                   FirebaseModule9Repository(
                       scope: session.scope, isCurrent: current),
               announcementReader: announcements,
+              notificationBadge: notificationBadge,
               recommendationRepository: repository,
               onOpenRecommendationTarget: navigator?.open,
               recommendationPhotoBuilder: navigator?.buildCoachPhoto,

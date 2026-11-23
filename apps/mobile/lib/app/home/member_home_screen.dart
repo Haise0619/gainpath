@@ -1,4 +1,5 @@
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'dart:math' as math;
 import 'member_home_activity.dart';
 import 'member_home_data.dart';
@@ -78,6 +79,7 @@ class MemberHomeScreen extends StatefulWidget {
       this.onOpenCoaches,
       this.onOpenBookings,
       this.onOpenNotifications,
+      this.unreadNotifications,
       this.onOpenWorkout,
       this.onOpenPlan,
       this.onLoadUpcomingCoaching});
@@ -105,6 +107,7 @@ class MemberHomeScreen extends StatefulWidget {
   final VoidCallback? onOpenPlan;
   final Future<PersistedBookingRecord?> Function()? onLoadUpcomingCoaching;
   final VoidCallback? onOpenNotifications;
+  final ValueListenable<bool>? unreadNotifications;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenCoaches, onOpenBookings;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
@@ -428,6 +431,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   _selectedBranchName ?? (live ? 'Select Gym' : 'Main Branch'),
               onSelectBranch: _openBranchSwitcher,
               onOpenNotifications: widget.onOpenNotifications,
+              unreadNotifications: widget.unreadNotifications,
               onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
               onOpenAnnouncements: live && widget.announcements != null
                   ? _openAnnouncements
@@ -673,6 +677,7 @@ class _HeroHeader extends StatelessWidget {
   final VoidCallback? onOpenAnnouncements;
   final VoidCallback? onOpenCoachingUpdates;
   final VoidCallback? onOpenNotifications;
+  final ValueListenable<bool>? unreadNotifications;
 
   const _HeroHeader({
     required this.greeting,
@@ -682,6 +687,7 @@ class _HeroHeader extends StatelessWidget {
     this.branchName,
     this.onSelectBranch,
     this.onOpenNotifications,
+    this.unreadNotifications,
     this.onOpenAnnouncements,
     this.onOpenCoachingUpdates,
     this.avatarText = 'ZY',
@@ -689,6 +695,23 @@ class _HeroHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget notificationBell(bool unread) {
+      const bell = Icon(Icons.notifications_none_rounded);
+      return IconButton(
+        tooltip: unread ? 'Notifications, unread updates' : 'Notifications',
+        icon: unread
+            ? const Badge(
+                backgroundColor: AppColors.danger, smallSize: 9, child: bell)
+            : bell,
+        onPressed: onOpenNotifications ??
+            onOpenAnnouncements ??
+            onOpenCoachingUpdates ??
+            () => live
+                ? showUnavailable(context)
+                : showToast(context, 'No new notifications.'),
+      );
+    }
+
     return SliverAppBar(
       pinned: true,
       expandedHeight: 116 +
@@ -718,16 +741,13 @@ class _HeroHeader extends StatelessWidget {
         ],
       ),
       actions: [
-        IconButton(
-          tooltip: 'Notifications',
-          icon: const Icon(Icons.notifications_none_rounded),
-          onPressed: onOpenNotifications ??
-              onOpenAnnouncements ??
-              onOpenCoachingUpdates ??
-              () => live
-                  ? showUnavailable(context)
-                  : showToast(context, 'No new notifications.'),
-        ),
+        if (unreadNotifications case final unread?)
+          ValueListenableBuilder<bool>(
+            valueListenable: unread,
+            builder: (_, hasUnread, __) => notificationBell(hasUnread),
+          )
+        else
+          notificationBell(false),
         const SizedBox(width: 4),
       ],
       flexibleSpace: FlexibleSpaceBar(
