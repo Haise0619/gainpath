@@ -140,7 +140,9 @@ class MemberNotificationBadge extends ValueNotifier<int> {
     var unread = _unreadInbox;
     for (final entry in _activeAnnouncements) {
       if (entry.displayStatusAt(now) != AnnouncementDisplayStatus.active ||
-          isAnnouncementRead(entry)) continue;
+          isAnnouncementRead(entry)) {
+        continue;
+      }
       unread++;
       if (nextExpiry == null || entry.validTo.isBefore(nextExpiry)) {
         nextExpiry = entry.validTo;
