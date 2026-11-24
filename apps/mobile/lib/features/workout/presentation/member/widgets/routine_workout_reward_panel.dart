@@ -10,10 +10,12 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
       {super.key,
       required this.reference,
       required this.isCurrent,
+      this.videoWorkoutPointsEnabled = false,
       this.difficulty});
   final WorkoutRewardAttemptReference reference;
   final bool Function() isCurrent;
   final String? difficulty;
+  final bool videoWorkoutPointsEnabled;
   @override
   Widget build(BuildContext context) {
     if (!isCurrent()) return const SizedBox.shrink();
@@ -66,14 +68,18 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                     const SizedBox(height: 16),
                     const Divider(color: Color(0xFFEED9AE), height: 1),
                     const SizedBox(height: 14),
-                    Text('Workout rewards · Not active',
+                    Text(
+                        videoWorkoutPointsEnabled
+                            ? 'Video Guided · 5 points'
+                            : 'Workout rewards · Not active',
                         style: Theme.of(context)
                             .textTheme
                             .labelLarge
                             ?.copyWith(color: AppColors.accentDark)),
                     const SizedBox(height: 8),
-                    const Text(
-                        'This workout does not add redeemable points. You can still progress toward training badges.'),
+                    Text(videoWorkoutPointsEnabled
+                        ? 'Complete all timed sets in an eligible video exercise while connected. Confirmed points appear in Points History. AI workout points are awaiting verification.'
+                        : 'This workout does not add redeemable points. You can still progress toward training badges.'),
                   ]));
         });
   }

@@ -10,11 +10,13 @@ class GuidedTimedWorkoutScreen extends StatefulWidget {
       {super.key,
       required this.controller,
       required this.exerciseName,
+      this.workoutPointsEnabled = false,
       required this.onBack,
       required this.onSkip,
       required this.onCompleted});
   final GuidedTimedWorkoutController controller;
   final String exerciseName;
+  final bool workoutPointsEnabled;
   final Future<void> Function() onBack, onSkip;
   final VoidCallback onCompleted;
   @override
@@ -96,10 +98,10 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
           primaryLabel = retrySave
               ? 'Retry save'
               : retryVideo
-              ? 'Retry video'
-              : p.completed
-                  ? 'Retry save'
-                  : 'Resume';
+                  ? 'Retry video'
+                  : p.completed
+                      ? 'Retry save'
+                      : 'Resume';
           primary = retrySave
               ? c.retryProgressSave
               : retryVideo
@@ -170,6 +172,9 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
                                       Theme.of(context).textTheme.titleMedium),
                             ]),
                         const Text('Not AI verified'),
+                        if (widget.workoutPointsEnabled)
+                          const Text(
+                              '5 workout points after all timed sets · Once per exercise per day'),
                         const SizedBox(height: 12),
                         Panel(
                             background: AppColors.primaryTint,

@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../features/gamification/application/member_achievements_controller.dart';
 import '../../features/workout/presentation/member/widgets/workout_achievement_feedback.dart';
 import '../../infrastructure/firebase/firebase_app_check_in_repository.dart';
+import '../../infrastructure/firebase/firebase_video_workout_points.dart';
 import '../di/app_check_in_factory.dart';
 import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../../infrastructure/local/workout_preferences_factory.dart';
@@ -10,6 +11,7 @@ import '../../features/workout/application/workout_preferences_controller.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
 import 'between_exercise_rest_route.dart';
 import '../../features/workout/domain/tutorial_player.dart';
+import '../../features/workout/domain/guided_timed_progress.dart';
 import '../../infrastructure/media/video_tutorial_player.dart';
 import '../../features/workout/presentation/workout_presentation.dart';
 import 'package:flutter/material.dart';
@@ -281,6 +283,57 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
       }
       final progress = await c.prepareGuidedSession(index);
       if (!currentLaunch()) return;
+      final points =
+          workoutExercisePointsEnabled && widget.scope.datasetScope == null
+              ? FirebaseVideoWorkoutPoints(
+                  scope: widget.scope,
+                  isCurrent: () => mounted && _authorized(auth))
+              : null;
+      Future<void> pointWork = Future.value();
+      var startedSet = 0;
+      var completedSets = progress.completedSets;
+      var confirmed = false;
+      void sendPoints(GuidedTimedProgress value,
+          {required bool finish, required int set}) {
+        if (points == null) return;
+        pointWork = pointWork.then((_) async {
+          if (confirmed || !mounted || !_authorized(auth)) return;
+          try {
+            Future<({String status, int waitMillis})> send() => points.send(
+                finish: finish,
+                routineId: widget.routine.id,
+                entryId: value.entryId,
+                runId: value.runId,
+                set: set);
+            var result = await send();
+            if (result.status == 'too_early' && result.waitMillis <= 3000) {
+              await Future<void>.delayed(
+                  Duration(milliseconds: result.waitMillis));
+              result = await send();
+            }
+            if (!mounted || !_authorized(auth)) return;
+            if (result.status == 'awarded' ||
+                result.status == 'already_awarded') {
+              confirmed = true;
+              if (result.status == 'awarded') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('+5 workout points added')));
+              }
+            } else if (finish && value.completed) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content:
+                      Text('Workout saved. Points could not be confirmed.')));
+            }
+          } catch (_) {
+            if (finish && value.completed && mounted && _authorized(auth)) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content:
+                      Text('Workout saved. Points could not be confirmed.')));
+            }
+          }
+        });
+      }
+
       final outcome = await Navigator.push<GuidedTimedWorkoutOutcome>(
           context,
           MaterialPageRoute(
@@ -291,6 +344,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                       feature: MembershipAccessFeature.exercise,
                       resourceId: widget.routine.exercises[index].exerciseId,
                       child: GuidedTimedWorkoutRoute(
+                          workoutPointsEnabled: points != null,
                           autoStart: automatic,
                           playerFactory: widget.timedPlayerFactory,
                           autoContinue: _preferences?.autoContinue == true,
@@ -298,8 +352,19 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                           routine: widget.routine,
                           exerciseIndex: index,
                           progress: progress,
-                          persist: (value) =>
-                              c.saveGuidedProgress(index, value))))));
+                          persist: (value) async {
+                            await c.saveGuidedProgress(index, value);
+                            if (value.completedSets > completedSets) {
+                              completedSets = value.completedSets;
+                              sendPoints(value,
+                                  finish: true, set: completedSets);
+                            }
+                            if (value.phase == GuidedTimedPhase.working &&
+                                value.completedSets + 1 > startedSet) {
+                              startedSet = value.completedSets + 1;
+                              sendPoints(value, finish: false, set: startedSet);
+                            }
+                          })))));
       if (!mounted || !_authorized(auth)) return;
       if (outcome == GuidedTimedWorkoutOutcome.skipped) await c.skip(index);
       await c.refresh(completeRoutine: true);
@@ -650,6 +715,8 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
         }
         final achievements = _achievementController(context.read<AuthBloc>());
         return RoutineJourneyScreen(
+            videoWorkoutPointsEnabled: workoutExercisePointsEnabled &&
+                widget.scope.datasetScope == null,
             onOpenSavedSession: (id) {
               final saved = c.measuredSessions
                   .where((s) => s.sessionId == id)

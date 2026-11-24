@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="GainPath Member — Android" type="FlutterRunConfigurationType" factoryName="Flutter">
     <option name="filePath" value="$PROJECT_DIR$/apps/mobile/lib/main.dart" />
-    <option name="additionalArgs" value="--dart-define=GAINPATH_RECOMMENDATIONS_ENABLED=true --dart-define=USE_FIREBASE_EMULATORS=false --dart-define=APP_CHECK_MODE=debug --dart-define=WORKOUT_CLOUD_BACKUP_ENABLED=true --dart-define=APP_CHECK_IN_ENABLED=true --dart-define=ENABLE_PASSWORD_RECOVERY_OTP=true" />
+    <option name="additionalArgs" value="--dart-define=GAINPATH_RECOMMENDATIONS_ENABLED=true --dart-define=USE_FIREBASE_EMULATORS=false --dart-define=APP_CHECK_MODE=debug --dart-define=WORKOUT_CLOUD_BACKUP_ENABLED=true --dart-define=APP_CHECK_IN_ENABLED=true --dart-define=ENABLE_PASSWORD_RECOVERY_OTP=true --dart-define=WORKOUT_EXERCISE_POINTS_ENABLED=true" />
     <method v="2" />
   </configuration>
 </component>

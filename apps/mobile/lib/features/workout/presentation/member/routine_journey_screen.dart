@@ -19,12 +19,14 @@ class RoutineJourneyScreen extends StatefulWidget {
       this.onOpenSettings,
       this.saveStatusBuilder,
       this.onOpenSavedSession,
+      this.videoWorkoutPointsEnabled = false,
       this.onViewHistory});
   final RoutineJourneyController controller;
   final Widget Function(RoutineCheckpoint)? saveStatusBuilder;
   final ValueChanged<String>? onOpenSavedSession;
   final VoidCallback? onViewHistory;
   final VoidCallback? onOpenSettings;
+  final bool videoWorkoutPointsEnabled;
   final Future<void> Function(int index) onTrack, onTutorial;
   final Future<void> Function(int index)? onManualSet;
   @override
@@ -779,6 +781,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             label: const Text('Workout history')),
       const SizedBox(height: 12),
       RoutineWorkoutRewardPanel(
+          videoWorkoutPointsEnabled: widget.videoWorkoutPointsEnabled,
           reference: WorkoutRewardAttemptReference(
               scope: c.scope,
               attemptId: c.checkpoint!.id,

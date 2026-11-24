@@ -28,6 +28,7 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
       this.utcNow,
       this.autoStart = false,
       this.autoContinue = false,
+      this.workoutPointsEnabled = false,
       this.playerFactory = VideoTutorialPlayer.new});
   final SessionScope scope;
   final PublishedRoutine routine;
@@ -38,6 +39,7 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
   final Duration Function()? monotonicNow;
   final DateTime Function()? utcNow;
   final bool autoStart, autoContinue;
+  final bool workoutPointsEnabled;
   @override
   State<GuidedTimedWorkoutRoute> createState() =>
       _GuidedTimedWorkoutRouteState();
@@ -261,6 +263,7 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
         feature: MembershipAccessFeature.exercise,
         resourceId: widget.progress.exerciseId,
         child: GuidedTimedWorkoutScreen(
+            workoutPointsEnabled: widget.workoutPointsEnabled,
             controller: c,
             exerciseName: widget.routine.exercises[widget.exerciseIndex].name,
             onBack: _back,

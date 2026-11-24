@@ -8,11 +8,17 @@ import { rewardsCommand } from './verified-rewards-service';
 import {rewardRequest, freshRewardAuth} from './reward-command-security';
 import {readPointsHistory} from './points-history';
 import {readEarnedPointsLeaderboard} from './earned-points-leaderboard';
+import {videoWorkoutPoints} from './video-workout-points';
 
 /** One scoped command surface; source production and policy publication are deliberately separate. */
 export const verifiedRewardsCommand = onCall({ region: 'asia-southeast1', enforceAppCheck: true, timeoutSeconds: 60, maxInstances: 5 }, async request => {
   try {
     const auth = await rewardRequest(request), db = getFirestore(), org = request.data.organizationId;
+    if (['beginVideoWorkoutSet', 'finishVideoWorkoutSet'].includes(request.data.action)) {
+      const result = await videoWorkoutPoints(new FirestoreStore(db), auth, request.data);
+      await freshRewardAuth(auth);
+      return result;
+    }
     if(request.data.action==='leaderboard'){
       const rows=async(root:string,after:string|undefined,limit:number,uid?:string)=>{
         let query=db.collection(root).orderBy(FieldPath.documentId()).limit(limit);
