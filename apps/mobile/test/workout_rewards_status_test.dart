@@ -179,7 +179,7 @@ void main() {
         ]))));
     await t.pumpAndSettle();
     expect(find.text('Workout rewards · Not active'), findsOneWidget);
-    expect(find.textContaining('Your workout progress is still saved'),
+    expect(find.textContaining('This workout does not add redeemable points'),
         findsOneWidget);
     expect(find.textContaining('policy activation'), findsNothing);
     expect(find.textContaining('multipliers'), findsNothing);

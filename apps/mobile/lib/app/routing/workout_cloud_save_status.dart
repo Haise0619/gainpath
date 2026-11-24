@@ -27,9 +27,10 @@ class WorkoutCloudSaveStatus extends StatefulWidget {
         record = locallySavedWorkoutRecord(summary),
         localResult = summary.provenance == WorkoutProvenance.realCamera &&
             summary.poseMetrics != null,
-        attempt = null;
+        attempt = null,
+        achievementFeedback = null;
   WorkoutCloudSaveStatus.routine(RoutineAttempt value,
-      {super.key, this.factory})
+      {super.key, this.factory, this.achievementFeedback})
       : scope = value.scope,
         attempt = value,
         localResult = value.scope.datasetScope == null,
@@ -38,6 +39,7 @@ class WorkoutCloudSaveStatus extends StatefulWidget {
   final WorkoutBackupRecord? record;
   final RoutineAttempt? attempt;
   final WorkoutBackupFactory? factory;
+  final Widget Function(BackupRecordStatus, bool?)? achievementFeedback;
   final bool localResult;
   @override
   State<WorkoutCloudSaveStatus> createState() => _WorkoutCloudSaveStatusState();
@@ -147,7 +149,12 @@ class _WorkoutCloudSaveStatusState extends State<WorkoutCloudSaveStatus>
   Widget build(BuildContext context) {
     if (!widget.localResult) return const SizedBox.shrink();
     final c = _lease?.coordinator;
-    if (c == null) return const WorkoutSaveIndicator();
+    if (c == null) {
+      return _withAchievements(
+          const WorkoutSaveIndicator(),
+          BackupRecordStatus.localOnly,
+          workoutCloudBackupEnabled || widget.factory != null ? null : false);
+    }
     if (active() == null) return const SizedBox.shrink();
     return ListenableBuilder(
         listenable: c,
@@ -162,12 +169,30 @@ class _WorkoutCloudSaveStatusState extends State<WorkoutCloudSaveStatus>
                       backupCanonical(r.payload['attempt']) ==
                           backupCanonical(target?.toJson()))
                   .firstOrNull;
-          return WorkoutSaveIndicator(
-              status:
-                  row == null ? BackupRecordStatus.localOnly : c.statusFor(row),
-              syncEnabled: c.state.enabled,
-              onRetry: () => unawaited(c.sync().catchError((Object _) {})),
-              onSetup: !c.state.consentChoiceMade ? () => setup(c) : null);
+          final status =
+              row == null ? BackupRecordStatus.localOnly : c.statusFor(row);
+          return _withAchievements(
+              WorkoutSaveIndicator(
+                  status: status,
+                  syncEnabled: c.state.enabled,
+                  onRetry: () => unawaited(c.sync().catchError((Object _) {})),
+                  onSetup: !c.state.consentChoiceMade ? () => setup(c) : null),
+              status,
+              c.state.enabled);
         });
+  }
+
+  Widget _withAchievements(
+      Widget indicator, BackupRecordStatus status, bool? enabled) {
+    final feedback = widget.achievementFeedback;
+    if (feedback == null) return indicator;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        indicator,
+        const SizedBox(height: 12),
+        feedback(status, enabled),
+      ],
+    );
   }
 }

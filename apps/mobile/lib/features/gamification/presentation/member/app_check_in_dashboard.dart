@@ -93,8 +93,11 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                   LeaderboardScreen(connected: true, repository: repo))));
   void _badges(BuildContext context) {
     if (widget.achievements case final controller?) {
-      Navigator.push(context, MaterialPageRoute<void>(
-          builder: (_) => MemberAchievementsScreen(controller: controller)));
+      Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) =>
+                  MemberAchievementsScreen(controller: controller)));
       return;
     }
     final snapshot = state.snapshot;
@@ -135,6 +138,7 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final achievements = widget.achievements;
     final s = state.snapshot;
     return Scaffold(
         backgroundColor: AppColors.bg,
@@ -267,6 +271,34 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                         homeDense: true,
                       ),
                       const SizedBox(height: 18),
+                      const MemberSectionHeader(title: 'Training achievements'),
+                      Panel(
+                        padding: EdgeInsets.zero,
+                        child: achievements != null
+                            ? ListenableBuilder(
+                                listenable: achievements,
+                                builder: (_, __) {
+                                  final badges = achievements.snapshot?.badges
+                                      .where((badge) =>
+                                          badge.category == 'workout')
+                                      .toList();
+                                  final confirmed =
+                                      achievements.snapshot?.complete == true;
+                                  return _Shortcut(
+                                      icon: Icons.military_tech_outlined,
+                                      title: 'Badges',
+                                      subtitle: badges == null || !confirmed
+                                          ? 'View your training goals and badge progress'
+                                          : '${badges.where((badge) => badge.unlocked).length} / ${badges.length} training badges unlocked',
+                                      onTap: () => _badges(context));
+                                })
+                            : _Shortcut(
+                                icon: Icons.military_tech_outlined,
+                                title: 'Badges',
+                                subtitle: 'View your check-in badges',
+                                onTap: () => _badges(context)),
+                      ),
+                      const SizedBox(height: 18),
                       widget.gamesSection ??
                           FitnessArcadeHost(
                               key: ValueKey('games-$_gamesRevision'),
@@ -277,6 +309,7 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                               key: ValueKey('rank-$_rankRevision'),
                               onTap: () => _rankings(context)),
                       const SizedBox(height: 12),
+                      const MemberSectionHeader(title: 'Points and vouchers'),
                       widget.rewardGoalSection ??
                           RewardGoalHost(
                               key: ValueKey('goal-$_rankRevision'),
@@ -315,24 +348,6 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                                     MaterialPageRoute<void>(
                                         builder: (_) =>
                                             const MyRewardsScreen()))),
-                            if (widget.achievements case final achievements?)
-                              ListenableBuilder(
-                                  listenable: achievements,
-                                  builder: (_, __) {
-                                    final collection = achievements.snapshot;
-                                    return _Shortcut(
-                                        icon: Icons.military_tech_outlined,
-                                        title: 'Badges',
-                                        subtitle: collection == null
-                                            ? 'View your achievements'
-                                            : '${collection.unlockedCount} / ${collection.badges.length} unlocked',
-                                        onTap: () => _badges(context));
-                                  })
-                            else
-                              _Shortcut(
-                                  icon: Icons.military_tech_outlined,
-                                  title: 'Badges',
-                                  onTap: () => _badges(context)),
                             _Shortcut(
                                 icon: Icons.history_rounded,
                                 title: 'Points History',
@@ -348,7 +363,10 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
 
 class _Shortcut extends StatelessWidget {
   const _Shortcut(
-      {required this.icon, required this.title, required this.onTap, this.subtitle});
+      {required this.icon,
+      required this.title,
+      required this.onTap,
+      this.subtitle});
   final IconData icon;
   final String title;
   final String? subtitle;
@@ -388,9 +406,7 @@ class _BadgeProgress extends StatelessWidget {
                   : '$progress/${badge.requiredStreak} days')),
           if (!unlocked)
             LinearProgressIndicator(value: progress / badge.requiredStreak),
-          if (unlocked) ...[
-            ShareCheckInBadgeButton(badge: badge)
-          ],
+          if (unlocked) ...[ShareCheckInBadgeButton(badge: badge)],
         ])));
   }
 }

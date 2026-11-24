@@ -49,14 +49,14 @@ void main() {
             onTutorial: (_) async {},
             onViewHistory: () => opened = true)));
     expect(find.text('Workout complete'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Points and rewards'), 200);
-    await tester.tap(find.text('Points and rewards'));
+    await tester.scrollUntilVisible(find.text('Workout points'), 200);
+    await tester.tap(find.text('Workout points'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
         find.text('Workout rewards · Not active'), 200);
     await tester.pumpAndSettle();
     expect(find.text('Workout rewards · Not active'), findsOneWidget);
-    expect(find.textContaining('Your workout progress is still saved'),
+    expect(find.textContaining('This workout does not add redeemable points'),
         findsOneWidget);
     expect(find.text('Claim reward'), findsNothing);
     expect(find.text('View progress'), findsNothing);
@@ -106,7 +106,10 @@ void main() {
     expect(find.text('No saved camera sessions yet.'), findsOneWidget);
     await tester.tap(find.text('Workouts'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Strength days · Day 1'));
+    await tester.tap(find.text('All time'));
+    await tester.pumpAndSettle();
+    final routineRow = find.text('${a.routine.title} · Day ${a.day}');
+    await tester.tap(routineRow);
     await tester.pumpAndSettle();
     expect(find.text('Workout summary'), findsOneWidget);
     await tester.runAsync(() async {
@@ -114,7 +117,7 @@ void main() {
       await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
     });
     await tester.pumpAndSettle();
-    expect(find.text('Strength days · Day 1'), findsNothing);
+    expect(routineRow, findsNothing);
     expect(
         find.text('Sign in to view this account’s routine.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

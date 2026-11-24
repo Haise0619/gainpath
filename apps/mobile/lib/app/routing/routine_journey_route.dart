@@ -1,4 +1,8 @@
 import 'dart:async';
+import '../../features/gamification/application/member_achievements_controller.dart';
+import '../../features/workout/presentation/member/widgets/workout_achievement_feedback.dart';
+import '../../infrastructure/firebase/firebase_app_check_in_repository.dart';
+import '../di/app_check_in_factory.dart';
 import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../../infrastructure/local/workout_preferences_factory.dart';
 import '../../features/workout/domain/program_enrollment.dart';
@@ -99,6 +103,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
   bool _foreground = true, _launching = false;
   int _interruptionEpoch = 0;
   RoutineJourneyController? _controller;
+  MemberAchievementsController? _achievements;
   WorkoutSessionRepository? _workouts;
   StreamSubscription<AuthState>? _subscription;
   bool _opening = false;
@@ -120,6 +125,18 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
   bool _authorized(AuthBloc auth) =>
       auth.state.session?.scope == widget.scope &&
       AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
+
+  MemberAchievementsController? _achievementController(AuthBloc auth) {
+    if (!appCheckInEnabled || widget.scope.datasetScope != null) return null;
+    if (_achievements case final achievements?) return achievements;
+    final scope = widget.scope;
+    bool current() => mounted && widget.scope == scope && _authorized(auth);
+    final repository = FirebaseAppCheckInRepository(
+        scope: scope, activeScope: () => current() ? scope : null);
+    return _achievements ??= MemberAchievementsController(
+        load: repository.achievements, isCurrent: current);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -596,6 +613,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_subscription?.cancel());
     _controller?.dispose();
+    _achievements?.dispose();
     _workouts?.dispose();
     super.dispose();
   }
@@ -630,6 +648,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           return const Scaffold(
               body: Center(child: CircularProgressIndicator()));
         }
+        final achievements = _achievementController(context.read<AuthBloc>());
         return RoutineJourneyScreen(
             onOpenSavedSession: (id) {
               final saved = c.measuredSessions
@@ -646,7 +665,17 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
             },
             saveStatusBuilder: (checkpoint) => checkpoint.attempt == null
                 ? const SizedBox.shrink()
-                : WorkoutCloudSaveStatus.routine(checkpoint.attempt!),
+                : WorkoutCloudSaveStatus.routine(
+                    checkpoint.attempt!,
+                    key: ValueKey(checkpoint.id),
+                    achievementFeedback: achievements == null
+                        ? null
+                        : (status, enabled) => WorkoutAchievementFeedback(
+                              controller: achievements,
+                              status: status,
+                              syncEnabled: enabled,
+                            ),
+                  ),
             controller: c,
             onTrack: _track,
             onManualSet: _manualSet,

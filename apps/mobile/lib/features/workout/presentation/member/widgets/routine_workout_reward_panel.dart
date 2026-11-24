@@ -54,20 +54,13 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('Points and rewards',
+                                Text('Workout points',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
                                         ?.copyWith(
                                             color: AppColors.ink,
                                             fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 4),
-                                Text('Your effort counts',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                            color: AppColors.accentDark)),
                               ])),
                         ]),
                     const SizedBox(height: 16),
@@ -80,7 +73,7 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                             ?.copyWith(color: AppColors.accentDark)),
                     const SizedBox(height: 8),
                     const Text(
-                        'Workout points are not available yet. Your workout progress is still saved.'),
+                        'This workout does not add redeemable points. You can still progress toward training badges.'),
                   ]));
         });
   }

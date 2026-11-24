@@ -253,7 +253,7 @@ void main() {
       await capture('rewards');
       expect(
           find.text(
-              'Workout points are not available yet. Your workout progress is still saved.'),
+              'This workout does not add redeemable points. You can still progress toward training badges.'),
           findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
