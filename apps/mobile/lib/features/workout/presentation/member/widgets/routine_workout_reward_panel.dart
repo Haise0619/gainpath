@@ -70,7 +70,7 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                     const SizedBox(height: 14),
                     Text(
                         videoWorkoutPointsEnabled
-                            ? 'Video Guided · 5 points'
+                            ? 'AI Tracked · 10 points  /  Video Guided · 5 points'
                             : 'Workout rewards · Not active',
                         style: Theme.of(context)
                             .textTheme
@@ -78,7 +78,7 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                             ?.copyWith(color: AppColors.accentDark)),
                     const SizedBox(height: 8),
                     Text(videoWorkoutPointsEnabled
-                        ? 'Complete all timed sets in an eligible video exercise while connected. Confirmed points appear in Points History. AI workout points are awaiting verification.'
+                        ? 'Complete an eligible exercise to earn points once per day. Confirmed points appear in Points History.'
                         : 'This workout does not add redeemable points. You can still progress toward training badges.'),
                   ]));
         });

@@ -12,6 +12,8 @@ import '../../features/workout/presentation/member/workout_ai_consent_guard.dart
 import 'between_exercise_rest_route.dart';
 import '../../features/workout/domain/tutorial_player.dart';
 import '../../features/workout/domain/guided_timed_progress.dart';
+import '../../features/workout/domain/workout_backup.dart';
+import '../../features/workout/presentation/member/widgets/ai_workout_points_feedback.dart';
 import '../../infrastructure/media/video_tutorial_player.dart';
 import '../../features/workout/presentation/workout_presentation.dart';
 import 'package:flutter/material.dart';
@@ -735,13 +737,35 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                 : WorkoutCloudSaveStatus.routine(
                     checkpoint.attempt!,
                     key: ValueKey(checkpoint.id),
-                    achievementFeedback: achievements == null
-                        ? null
-                        : (status, enabled) => WorkoutAchievementFeedback(
-                              controller: achievements,
-                              status: status,
-                              syncEnabled: enabled,
-                            ),
+                    achievementFeedback: (status, enabled) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (achievements != null)
+                          WorkoutAchievementFeedback(
+                            controller: achievements,
+                            status: status,
+                            syncEnabled: enabled,
+                          ),
+                        if (workoutExercisePointsEnabled &&
+                            widget.scope.datasetScope == null &&
+                            checkpoint.finished &&
+                            checkpoint.attempt!.entries.any((entry) =>
+                                entry.status ==
+                                    RoutineExerciseStatus.completed &&
+                                entry.sessionIds.isNotEmpty)) ...[
+                          const SizedBox(height: 12),
+                          AiWorkoutPointsFeedback(
+                            synced: status == BackupRecordStatus.backedUp,
+                            claim: () => FirebaseVideoWorkoutPoints(
+                              scope: widget.scope,
+                              isCurrent: () =>
+                                  mounted &&
+                                  _authorized(context.read<AuthBloc>()),
+                            ).claimAiRoutine(checkpoint.id),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
             controller: c,
             onTrack: _track,

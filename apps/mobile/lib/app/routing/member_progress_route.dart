@@ -41,6 +41,8 @@ import '../di/workout_backup_factory.dart';
 import '../../features/workout/presentation/member/workout_backup_screen.dart';
 import '../../features/workout/application/workout_backup_coordinator.dart';
 import '../../features/workout/application/workout_backup_scheduler.dart';
+import '../../features/workout/domain/workout_backup.dart';
+import '../../infrastructure/firebase/firebase_video_workout_points.dart';
 
 enum MemberProgressView {
   dashboard,
@@ -204,6 +206,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
       _backupPresentation.value = _BackupPresentation(lease.coordinator, null);
       _backupDigests = lease.coordinator.state.baselines;
       lease.coordinator.addListener(_onBackupChanged);
+      _confirmSyncedWorkoutPoints(lease.coordinator);
       await _syncBackup();
     } catch (_) {
       _backupLease?.coordinator.removeListener(_onBackupChanged);
@@ -228,7 +231,53 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     final changed = next.length != _backupDigests.length ||
         next.entries.any((entry) => _backupDigests[entry.key] != entry.value);
     _backupDigests = next;
-    if (changed) widget.onWorkoutBackupChanged?.call();
+    if (changed) {
+      widget.onWorkoutBackupChanged?.call();
+      _confirmSyncedWorkoutPoints(backup);
+    }
+  }
+
+  final _checkedWorkoutPoints = <String>{};
+
+  void _confirmSyncedWorkoutPoints(WorkoutBackupCoordinator backup) {
+    final scope = _activeScope();
+    if (!workoutExercisePointsEnabled ||
+        scope == null ||
+        scope.datasetScope != null ||
+        backup.scope != scope) {
+      return;
+    }
+    final points = FirebaseVideoWorkoutPoints(
+        scope: scope, isCurrent: () => mounted && _activeScope() == scope);
+    final malaysiaNow = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final firstToday =
+        DateTime.utc(malaysiaNow.year, malaysiaNow.month, malaysiaNow.day)
+            .subtract(const Duration(hours: 8))
+            .microsecondsSinceEpoch;
+    for (final row in backup.records) {
+      if (row.kind != 'routine' ||
+          backup.statusFor(row) != BackupRecordStatus.backedUp) {
+        continue;
+      }
+      final attempt = row.payload['attempt'];
+      if (attempt is! Map ||
+          attempt['finished'] != true ||
+          attempt['finishedAtMicros'] is! int ||
+          (attempt['finishedAtMicros'] as int) < firstToday ||
+          attempt['entries'] is! List ||
+          !(attempt['entries'] as List).any((entry) =>
+              entry is Map &&
+              entry['status'] == 'completed' &&
+              entry['sessionIds'] is List &&
+              (entry['sessionIds'] as List).isNotEmpty)) {
+        continue;
+      }
+      final key = '$scope/${row.key}/${row.digest}';
+      if (!_checkedWorkoutPoints.add(key)) continue;
+      unawaited(points.claimAiRoutine(row.id).then<void>((_) {}, onError: (_) {
+        _checkedWorkoutPoints.remove(key);
+      }));
+    }
   }
 
   Future<void> _syncBackup() async {

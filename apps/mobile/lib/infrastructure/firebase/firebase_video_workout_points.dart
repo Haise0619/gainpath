@@ -15,6 +15,32 @@ class FirebaseVideoWorkoutPoints {
 
   final BookingTransport _transport;
 
+  Future<int> claimAiRoutine(String attemptId) async {
+    if (!await FirebaseAppCheckReadiness.instance
+        .ensureReady(check: _transport.check)) {
+      throw StateError('App verification unavailable');
+    }
+    final scope = _transport.scope;
+    final result = await _transport.call('verifiedRewardsCommand', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+      'action': 'claimAiWorkoutPoints',
+      'attemptId': attemptId,
+    });
+    final confirmed = result['confirmed'];
+    if (result['schemaVersion'] != 1 ||
+        result['organizationId'] != scope.organizationId ||
+        result['memberId'] != scope.userId ||
+        result['attemptId'] != attemptId ||
+        confirmed is! int ||
+        confirmed < 0 ||
+        confirmed > 500 ||
+        confirmed % 10 != 0) {
+      throw const FormatException('Invalid AI workout points receipt');
+    }
+    return confirmed;
+  }
+
   static Future<Map<String, dynamic>> _call(
       String name, Map<String, dynamic> data) async {
     final firebase = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
