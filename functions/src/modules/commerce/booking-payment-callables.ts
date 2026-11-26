@@ -1,3 +1,4 @@
+import { applyXenditRefund, XenditRefundGateway } from './xendit-refund';
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, onRequest, type HttpsFunction } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
@@ -8,7 +9,7 @@ import { coachCommandError } from '../coaching/coach-profile-callables';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway, verifyBillplzCallback } from './billplz-sandbox';
 import { BookingQuoteChangedError, BookingPaymentMethodUnavailableError, createBookingPayment, getBookingPaymentMethods, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
-import { XenditBookingGateway } from './xendit-booking';
+import { requireXenditCheckout, xenditGateway, xenditKey } from './xendit-payment-config';
 import { settleMembershipPayment } from './membership-payment-service';
 
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
@@ -16,25 +17,11 @@ const signatureKey = defineSecret('BILLPLZ_SANDBOX_X_SIGNATURE_KEY');
 const collection = defineString('BILLPLZ_SANDBOX_COLLECTION_ID', { default: '' });
 const organization = defineString('BILLPLZ_SANDBOX_ORGANIZATION_ID', { default: 'gainpath' });
 const enabled = defineString('BILLPLZ_SANDBOX_ENABLED', { default: 'false' });
-const xenditKey = defineSecret('XENDIT_TEST_API_KEY');
 const xenditToken = defineSecret('XENDIT_TEST_WEBHOOK_TOKEN');
-const xenditEnabled = defineString('XENDIT_BOOKING_ENABLED', { default: 'false' });
-const xenditChannels = defineString('XENDIT_BOOKING_CHANNELS', { default: 'CIMB_FPX,TOUCHNGO,CARDS' });
-const prefersXendit = (data: { supportsXendit?: unknown } | undefined) =>
-  data?.supportsXendit === true && xenditEnabled.value() === 'true';
-
-function xenditGateway() {
-  const project = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
-  if (!project || !/^[a-z0-9-]+$/.test(project)) {
-    throw new DomainError('unavailable', 'Payment is temporarily unavailable.');
-  }
-  return new XenditBookingGateway(xenditKey.value(),
-    `https://us-central1-${project}.cloudfunctions.net/billplzSandboxReturn`,
-    new Set(xenditChannels.value().split(',').map(channel => channel.trim())));
-}
 
 function configured(raw?: unknown, booking = false) {
-  if (!(booking && xenditEnabled.value() === 'true') && (enabled.value() !== 'true' || !/^[A-Za-z0-9_-]{1,128}$/.test(collection.value()))) throw new DomainError('unavailable','Sandbox checkout is not enabled.');
+  if (booking) requireXenditCheckout();
+  else if (enabled.value() !== 'true' || !/^[A-Za-z0-9_-]{1,128}$/.test(collection.value())) throw new DomainError('unavailable','Sandbox checkout is not enabled.');
   if (raw && (raw as Record<string,unknown>).organizationId !== organization.value()) throw new DomainError('permission-denied','Sandbox organization unavailable.');
 }
 function gateway() {
@@ -50,14 +37,17 @@ export const getBookingPaymentQuoteCommand=onCall({enforceAppCheck:true},async r
   try { configured(r.data, true); return await getBookingPaymentQuote(store(),r.auth,r.data,Date.now,readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 export const createBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey,xenditKey]},async r=>{
-  try { configured(r.data, true); return await createBookingPayment(store(),r.auth,r.data,prefersXendit(r.data) ? xenditGateway() : gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
+  try { configured(r.data, true); return await createBookingPayment(store(),r.auth,r.data,xenditGateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 export const getBookingPaymentMethodsCommand=onCall({enforceAppCheck:true,secrets:[apiKey,xenditKey]},async r=>{
-  try {configured(r.data, true);return await getBookingPaymentMethods(store(),r.auth,r.data,prefersXendit(r.data) && r.data?.includeSelectionMethods === true ? xenditGateway() : gateway());}catch(e){throw bookingPaymentCommandError(e);}
+  try {configured(r.data, true);return await getBookingPaymentMethods(store(),r.auth,r.data,xenditGateway());}catch(e){throw bookingPaymentCommandError(e);}
 });
 export const getBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey,xenditKey]},async r=>{
-  try { configured(r.data, true); return r.data?.includeSelectionMethods===true
-    ? await getBookingPaymentMethods(store(),r.auth,r.data,prefersXendit(r.data) ? xenditGateway() : gateway())
+  try {
+    if (r.data?.organizationId !== organization.value()) throw new DomainError('permission-denied', 'Sandbox organization unavailable.');
+    if (r.data?.includeSelectionMethods === true) requireXenditCheckout();
+    return r.data?.includeSelectionMethods===true
+    ? await getBookingPaymentMethods(store(),r.auth,r.data,xenditGateway())
     : await readBookingPayment(store(),r.auth,r.data,{ get: id => gateway().get(id) },readCoachIdentity,Date.now,
       { get: id => xenditGateway().get(id) }); } catch(e) {throw bookingPaymentCommandError(e);}
 });
@@ -112,10 +102,25 @@ export async function xenditBookingWebhook(...[req, res]: Parameters<HttpsFuncti
   if (!expected.length || expected.length !== received.length || !timingSafeEqual(expected, received)) {
     res.sendStatus(401); return;
   }
+  if (req.body?.data?.session_type === 'SAVE') { res.sendStatus(204); return; }
+  if (['refund.succeeded', 'refund.failed'].includes(req.body?.event)) {
+    try {
+      const data = req.body.data;
+      if (typeof data?.reference_id !== 'string' || !/^[a-f0-9]{64}$/.test(data.reference_id)) { res.sendStatus(200); return; }
+      const org = organization.value();
+      const rows = await getFirestore().collection('orgs/' + org + '/transactions').where('refundReference', '==', data.reference_id).limit(2).get();
+      if (rows.size === 1) {
+        const result = await new XenditRefundGateway(xenditKey.value()).get(data.refund_id);
+        await applyXenditRefund(store(), org, rows.docs[0].id, result, Date.now());
+      }
+      res.sendStatus(200);
+    } catch { res.sendStatus(503); }
+    return;
+  }
   if (req.body?.event !== 'payment_session.completed') { res.sendStatus(204); return; }
   const reference = req.body?.data?.reference_id;
   if (typeof reference === 'string' && !/^[a-f0-9]{64}$/.test(reference)) {
-    res.sendStatus(204); return; // Other Xendit sessions do not belong to GainPath bookings.
+    res.sendStatus(204); return; // Other Xendit sessions do not belong to GainPath checkout.
   }
   const id = req.body?.data?.payment_session_id;
   if (typeof id !== 'string' || !/^ps-[a-f0-9]{24}$/.test(id)) { res.sendStatus(204); return; }
@@ -125,7 +130,12 @@ export async function xenditBookingWebhook(...[req, res]: Parameters<HttpsFuncti
     if (rows.size !== 1 || rows.docs[0].data().provider !== 'xendit') { res.sendStatus(503); return; }
     const payment = await xenditGateway().get(id);
     if (!payment.paid) { res.sendStatus(503); return; }
-    await settleBookingPayment(store(), org, rows.docs[0].id, payment, readCoachIdentity);
+    const row = rows.docs[0];
+    if (['MembershipPurchase', 'MembershipRenewal'].includes(String(row.data().kind))) {
+      await settleMembershipPayment(store(), org, row.id, payment, Date.now, readCoachIdentity);
+    } else {
+      await settleBookingPayment(store(), org, row.id, payment, readCoachIdentity);
+    }
     res.sendStatus(204);
   } catch { res.sendStatus(503); }
 }

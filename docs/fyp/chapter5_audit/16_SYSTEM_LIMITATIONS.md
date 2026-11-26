@@ -1,0 +1,16 @@
+# 5.6.3 System limitations
+
+| Class | Limitation | Evidence and impact |
+|---|---|---|
+| Technical | Six currently active device trackers, scoped to expected side/front geometry. Occlusion, perspective, frame gaps, smoothing and visibility can suppress valid-looking motion. | M02 and pose core. Label counts, tracking coverage and invalid-frame outcomes separately. |
+| Technical | No general-purpose posture ground truth or clinical validation. Form confidence and score depend on analyzer thresholds and required evidence. | [Core evaluation](10_CORE_AI_EVALUATION/) and [pose metrics](evidence/evaluation_results/POSE_HISTORICAL_METRICS.csv). |
+| Technical | Android min API26, camera and microphone/audio environment affect results. Real performance varies with delegate, device, framing and thermal state. | Build config and historical phone reports. Earlier measured CPU time cannot be used as current app latency. |
+| Functional | Workouts are local-first in relevant paths; cloud backup depends on authorization, connectivity and supported payload contracts. Commercial, account and cloud AI operations are online. | Backup validation, scoped local stores and M04/M06. Device loss/reinstall can leave unsynced records unavailable. |
+| Functional | Primary snapshot OTP export missing, announcement audience contracts diverge; role-specific Admin/Coach content and view flows have differing authority. | M01/M11, alternate branch commits. Record parity before accepting these end-to-end. |
+| Functional | Payment flows are sandbox/test, method/provider dependent, and request/admin approval/settlement are distinct. | M04; historical reports include legacy Billplz errors and Xendit method-specific constraints. |
+| Functional | Account recovery/deactivation optional grace policy branches exist. Permanent purge is unverified. | Lifecycle source; legal controls do not establish compliance. |
+| Evaluation | Most automated tests establish software invariants. Historical one-device observations do not cover all exercises/viewpoints/environments or error rates. | Fresh logs and core evaluation docs. |
+| Evaluation | Chatbot and recommendation evidence is bounded; equipment labels, held-out relevance and representative human ratings remain open. | Core AI evaluation sections. No broad safety or recommendation accuracy claim. |
+| Evaluation | Controlled walkthroughs, synthetic fixtures and Admin browser evidence cover selected scenarios. Representative Member/Coach/Admin UAT, Gecko, low vision/text scaling and physical interaction coverage are incomplete. | UAT and figure checklist. |
+| Deployment | App Check configuration, cloud function staging, protected secrets, API quotas, provider state and device APK identity vary by environment. | Snapshot and deployment references. Current live readback was outside fresh verification. |
+| Verification | The audited Member shell passes onOpenGroupClasses to a Coach-directory factory without a matching named parameter. Twenty-five Mobile suite loads fail to compile. Sixteen other Mobile assertions and 13 Admin widget assertions also failed, and the architecture gate flagged two imports. | apps/mobile/lib/app/shells/member_shell.dart:603–610 and apps/mobile/lib/app/di/coach_profile_factory.dart:99–103. [Fresh results](12_TEST_EXECUTION_RESULTS.md). |

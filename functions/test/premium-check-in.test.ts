@@ -23,4 +23,17 @@ it('configured test-only Premium bonus credits once with separate receipt proven
 it.each(['free','basic','elite'])('%s retains base points only',async tier=>{const s=fixture(tier);policy(s);expect((await claim(s)).snapshot.balance).toBe(50);});
 it('expired Premium and missing policy never invent a bonus',async()=>{const s=fixture('premium',now);policy(s);expect((await claim(s)).snapshot.balance).toBe(50);expect((await claim(fixture())).snapshot.balance).toBe(50);});
 it('configuration changes do not retroactively top up an existing daily receipt',async()=>{const s=fixture();await claim(s);policy(s);expect((await claim(s)).snapshot.balance).toBe(50);});
+it('offers 75 points for a cleared Xendit Premium term and keeps legacy responses compatible', async () => {
+ const s=fixture(); policy(s);
+ Object.assign(s.documents.get(`orgs/${org}/settings/premiumCheckInBonus`)!,{bonusPoints:25});
+ Object.assign(s.documents.get(`orgs/${org}/transactions/paid`)!,{provider:'xendit',kind:'MembershipRenewal'});
+ const overview=()=>appCheckInCommand(s,{uid,token:{email_verified:true}},
+   {schemaVersion:1,organizationId:org,action:'overview',includeClaimOffer:true},()=>now);
+ expect((await overview()).snapshot).toMatchObject({pointsPerClaim:50,availablePoints:75,balance:0});
+ const result=await claim(s);
+ expect(result.snapshot).not.toHaveProperty('availablePoints');
+ expect(result.snapshot.recentClaims[0]).toMatchObject({points:75,premiumBonusPoints:25});
+ expect((await overview()).snapshot).toMatchObject({availablePoints:0,balance:75});
+ expect((await claim(s)).awarded).toBe(false);
+});
 it('Free accumulates base points across days and upgrading preserves wallet',async()=>{const s=fixture('free');expect((await claim(s)).snapshot.balance).toBe(50);expect((await claim(s,now+day)).snapshot.balance).toBe(100);const paid=fixture('basic',now+5*day);for(const [k,v] of paid.documents)if(k.includes('/membershipAccounts/')||k.includes('/transactions/'))s.documents.set(k,v);expect((await claim(s,now+day)).snapshot.balance).toBe(100);});

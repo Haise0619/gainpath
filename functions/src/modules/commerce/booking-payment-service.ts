@@ -81,11 +81,12 @@ export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, r
   return store.transact(async tx => {
     const member = await currentBookingMembership(tx, org, auth!.uid); await requireBookingOrganization(tx, org);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members may start checkout.');
-    if (!member.branchIds.includes(branchId)) await requireMembershipCapability(tx, auth, org, 'canBookCoach', clock());
+    const now = clock();
+    await requireMembershipCapability(tx, auth, org, 'canBookCoach', now);
     const quote = { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, [branchId]), durationMinutes: d.durationMinutes as number };
     const reviewed = (result: BookingPaymentQuoteResult, voucher?: unknown) => d.includeQuoteToken === true ? {...result,serverNowMillis:clock(),quoteToken:financialToken(org,auth!.uid,coachId,branchId,d.durationMinutes as number,quote.amountMinor,result.amountMinor,voucher)} : result;
     if (d.includePremiumVoucher !== true && d.usePremiumVoucher !== true) return reviewed(quote);
-    const voucher = await premiumCoachVoucherOffer(tx, auth, org, { ...quote, coachId, branchId }, clock());
+    const voucher = await premiumCoachVoucherOffer(tx, auth, org, { ...quote, coachId, branchId }, now);
     if (d.usePremiumVoucher === true) {
       const snapshot = requireAvailablePremiumCoachVoucher(voucher);
       return reviewed({ ...quote, amountMinor: snapshot.amountMinor, grossAmountMinor: quote.amountMinor, discountMinor: snapshot.discountMinor, premiumVoucher: voucher.offer },snapshot);
@@ -105,6 +106,7 @@ function view(d: DocumentData) {
     paymentStatus:String(d.paymentStatus), ...bookingVoucherProjection(d),...selectedPaymentProjection(d),
     ...(d.providerReferenceVersion===2 ? {gatewayCode:String(d.gatewayCode),paymentMethodName:String(d.paymentMethodName)} : {}),
     ...(typeof d.refundStatus === 'string' ? { refundStatus: d.refundStatus } : {}),
+    ...(typeof d.refundFailureCode === 'string' ? { refundFailureCode: d.refundFailureCode } : {}),
     ...(typeof d.resolutionReason === 'string' ? { resolutionReason: d.resolutionReason } : {}) };
 }
 function audit(tx: TransactionPort, org: string, id: string, event: string, now: number, fields: DocumentData = {}) {

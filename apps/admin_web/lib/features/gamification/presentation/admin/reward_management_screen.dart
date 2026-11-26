@@ -10,7 +10,6 @@ import 'package:gainpath_domain/workout.dart'
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../reward_fulfilment_repository.dart';
 import 'reward_fulfilment_panel.dart';
-import 'workout_reward_draft_panel.dart';
 
 String _requestId() =>
     'reward_${DateTime.now().microsecondsSinceEpoch}_${List.generate(16, (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
@@ -58,7 +57,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
   PublishedReward? _editing;
   String? _newId, _error;
   bool _busy = false, _loading = false;
-  late String _activeTab = widget.initialTab; // 'shop', 'vouchers', 'policies'
+  late String _activeTab =
+      widget.initialTab == 'vouchers' ? 'vouchers' : 'shop';
 
   // Search & Filter state
   final _searchController = TextEditingController();
@@ -67,7 +67,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
   String _categoryFilter = 'All';
   String _visibilityFilter = 'all'; // 'all', 'active', 'removed'
   String _stockFilter = 'all'; // 'all', 'in_stock', 'low_stock', 'out_of_stock'
-  String _sortBy = 'name_asc'; // 'name_asc', 'name_desc', 'points_asc', 'points_desc', 'stock_desc'
+  String _sortBy =
+      'name_asc'; // 'name_asc', 'name_desc', 'points_asc', 'points_desc', 'stock_desc'
   String _viewMode = 'grid'; // 'grid', 'list'
 
   int _generation = 0;
@@ -186,7 +187,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
     }
   }
 
-  List<PublishedReward> _getFilteredAndSortedRewards(List<PublishedReward> items) {
+  List<PublishedReward> _getFilteredAndSortedRewards(
+      List<PublishedReward> items) {
     var filtered = items.where((item) {
       // 1. Eligibility Filter
       if (!_eligibility.includes(item)) return false;
@@ -259,11 +261,6 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
               id: 'vouchers',
               label: 'Voucher collection',
               icon: Icons.qr_code_scanner,
-            ),
-            _buildTabItem(
-              id: 'policies',
-              label: 'Reward policies',
-              icon: Icons.policy_outlined,
             ),
           ],
         ),
@@ -348,8 +345,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                 hintText: 'Search rewards...',
                 hintStyle:
                     const TextStyle(fontSize: 13, color: AppColors.inkSoft),
-                prefixIcon:
-                    const Icon(Icons.search, size: 18, color: AppColors.inkSoft),
+                prefixIcon: const Icon(Icons.search,
+                    size: 18, color: AppColors.inkSoft),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear,
@@ -384,8 +381,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
               child: DropdownButton<String>(
                 value: _sortBy,
                 isDense: true,
-                icon: const Icon(Icons.arrow_drop_down,
-                    color: AppColors.inkSoft),
+                icon:
+                    const Icon(Icons.arrow_drop_down, color: AppColors.inkSoft),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -399,8 +396,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                   DropdownMenuItem(
                       value: 'points_asc', child: Text('Points (Low–High)')),
                   DropdownMenuItem(
-                      value: 'points_desc',
-                      child: Text('Points (High–Low)')),
+                      value: 'points_desc', child: Text('Points (High–Low)')),
                   DropdownMenuItem(
                       value: 'stock_desc', child: Text('Stock (High–Low)')),
                 ],
@@ -422,8 +418,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                 InkWell(
                   onTap: () => setState(() => _viewMode = 'grid'),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: _viewMode == 'grid'
                           ? Colors.white
@@ -451,8 +447,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                 InkWell(
                   onTap: () => setState(() => _viewMode = 'list'),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: _viewMode == 'list'
                           ? Colors.white
@@ -556,15 +552,17 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                           isDense: true,
                           icon: const Icon(Icons.arrow_drop_down,
                               color: AppColors.inkSoft),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ink,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.ink,
+                                  ),
                           items: categories
                               .map((c) => DropdownMenuItem(
                                   value: c,
-                                  child: Text(c == 'All' ? 'All categories' : c)))
+                                  child:
+                                      Text(c == 'All' ? 'All categories' : c)))
                               .toList(),
                           onChanged: (v) =>
                               setState(() => _categoryFilter = v ?? 'All'),
@@ -586,11 +584,12 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                           isDense: true,
                           icon: const Icon(Icons.arrow_drop_down,
                               color: AppColors.inkSoft),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ink,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.ink,
+                                  ),
                           items: const [
                             DropdownMenuItem(
                                 value: 'all', child: Text('All visibility')),
@@ -619,21 +618,24 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                           isDense: true,
                           icon: const Icon(Icons.arrow_drop_down,
                               color: AppColors.inkSoft),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ink,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.ink,
+                                  ),
                           items: const [
                             DropdownMenuItem(
                                 value: 'all', child: Text('All stock')),
                             DropdownMenuItem(
-                                value: 'in_stock', child: Text('In stock (>10)')),
+                                value: 'in_stock',
+                                child: Text('In stock (>10)')),
                             DropdownMenuItem(
                                 value: 'low_stock',
                                 child: Text('Low stock (≤10)')),
                             DropdownMenuItem(
-                                value: 'out_of_stock', child: Text('Out of stock')),
+                                value: 'out_of_stock',
+                                child: Text('Out of stock')),
                           ],
                           onChanged: (v) =>
                               setState(() => _stockFilter = v ?? 'all'),
@@ -1155,81 +1157,6 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
     );
   }
 
-  Widget _buildRewardPoliciesTab(BuildContext context) {
-    if (widget.repository is! WorkoutRewardConfigurationRepository) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.hairline),
-        ),
-        child: const Text('Reward policies unavailable for this server.'),
-      );
-    }
-
-    final workoutRepo =
-        widget.repository as WorkoutRewardConfigurationRepository;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Policy Status Card
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.hairline),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: AppColors.warning.withValues(alpha: 0.3)),
-                    ),
-                    child: const Text(
-                      'Disabled · Pending Physical Validation',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Workout-based reward points issuance is disabled pending physical validation. Configuration parameters and thresholds are saved as a draft and cannot award points to members until authorized.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.inkSoft,
-                  height: 1.45,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Workout Reward Draft Panel
-        WorkoutRewardDraftPanel(
-          key: ObjectKey(widget.repository),
-          repository: workoutRepo,
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!widget.repository.current) {
@@ -1335,8 +1262,9 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                         ),
                       ),
                     FilledButton.icon(
-                      onPressed:
-                          _busy || _loading || _shop == null ? null : () => _open(),
+                      onPressed: _busy || _loading || _shop == null
+                          ? null
+                          : () => _open(),
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('Add reward'),
                       style: FilledButton.styleFrom(
@@ -1409,8 +1337,8 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                       ),
                       const Text(
                         'Manage items in your Member shop.',
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.inkSoft),
+                        style:
+                            TextStyle(fontSize: 13, color: AppColors.inkSoft),
                       ),
                     ],
                   ),
@@ -1498,8 +1426,6 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                     : _buildListView(visibleRewards),
             ] else if (_activeTab == 'vouchers') ...[
               _buildVoucherCollectionTab(context),
-            ] else if (_activeTab == 'policies') ...[
-              _buildRewardPoliciesTab(context),
             ],
           ],
         ),
@@ -1693,9 +1619,8 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
             labelText: label,
             isDense: true,
           ),
-          validator: (v) => required && (v == null || v.trim().isEmpty)
-              ? 'Required'
-              : null,
+          validator: (v) =>
+              required && (v == null || v.trim().isEmpty) ? 'Required' : null,
         ),
       );
 
@@ -1830,8 +1755,7 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
         // 3. Membership Eligibility Card
         _cardContainer(
           title: 'Membership eligibility',
-          subtitle:
-              'Specify which membership tiers can redeem this reward.',
+          subtitle: 'Specify which membership tiers can redeem this reward.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1920,10 +1844,10 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: _busy ||
-                            widget.repository is! RewardMediaRepository
-                        ? null
-                        : _pickCover,
+                    onPressed:
+                        _busy || widget.repository is! RewardMediaRepository
+                            ? null
+                            : _pickCover,
                     icon: const Icon(Icons.upload_outlined, size: 16),
                     label: Text(
                       _selectedCover != null || _image.text.isNotEmpty

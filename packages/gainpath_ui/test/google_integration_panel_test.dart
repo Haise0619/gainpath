@@ -24,7 +24,7 @@ void main() {
                     loadCoaches: () async => {'coach': 'Coach'})))));
     await tester.pumpAndSettle();
     expect(
-        find.text('Automatic delivery: Enabled for approved test recipients'),
+        find.text('Test delivery: Enabled for approved recipients'),
         findsOneWidget);
     expect(find.textContaining('Automatic delivery needs Admin review'),
         findsOneWidget);

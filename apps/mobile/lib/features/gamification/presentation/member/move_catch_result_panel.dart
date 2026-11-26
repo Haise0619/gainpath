@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'mini_game_score_sharing.dart';
 
 /// Round statistics and local persistence feedback, separate from reward points.
 class MoveCatchResultPanel extends StatelessWidget {
@@ -25,6 +26,9 @@ class MoveCatchResultPanel extends StatelessWidget {
     this.competitionStatus,
     this.onLeaderboard,
     this.footer,
+    this.completedAt,
+    this.activeMillis,
+    this.isShareCurrent,
   });
 
   final int score, caught, missed, obstacles, bestScore;
@@ -34,6 +38,9 @@ class MoveCatchResultPanel extends StatelessWidget {
   final String? error;
   final Widget? rewardStatus, competitionStatus, footer;
   final String gameTitle;
+  final DateTime? completedAt;
+  final int? activeMillis;
+  final bool Function()? isShareCurrent;
   final bool hitsOnly, newPersonalBest, saving;
   final VoidCallback? onRetrySave, onLeaderboard;
 
@@ -185,6 +192,21 @@ class MoveCatchResultPanel extends StatelessWidget {
                             onPressed: onReplay,
                             icon: const Icon(Icons.replay_rounded),
                             label: const Text('Play again')),
+                        if (completedAt case final date?) ...[
+                          const SizedBox(height: 10),
+                          MiniGameShareButton(
+                            result: MiniGameShareResult(
+                              game: hitsOnly
+                                  ? ShareGame.reachTap
+                                  : ShareGame.moveCatch,
+                              score: score,
+                              hits: caught,
+                              completedAt: date,
+                              activeMillis: activeMillis,
+                            ),
+                            isCurrent: isShareCurrent,
+                          ),
+                        ],
                         if (onLeaderboard != null) ...[
                           const SizedBox(height: 10),
                           OutlinedButton.icon(

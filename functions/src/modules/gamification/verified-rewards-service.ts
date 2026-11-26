@@ -5,7 +5,7 @@ import { DomainError } from '../../platform/errors';
 import { requiredIdentifier, InputValidationError } from '../../platform/validation';
 import { readAll, type DocumentData, type DocumentStore, type TransactionPort } from '../../platform/firestore/store';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
-import { resolveMembershipEntitlement } from '../commerce/membership-entitlement';
+import { isSupportedMembershipReceiptProvider, resolveMembershipEntitlement } from '../commerce/membership-entitlement';
 import {rewardItemDetails, rewardVoucherDetails} from './reward-details';
 import {parsePointsRewardShop,pointsRewardItem,POINTS_SHOP_VERSION} from './points-reward-shop';
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
@@ -80,11 +80,12 @@ export interface RewardsHistoryReader {page(uid: string, after: string | null, l
 function historicalPremium(p: DocumentData | undefined, org: string, uid: string, transactionId: unknown, at: number) {
   if (!p || !id(transactionId) || p.schemaVersion !== 1 || p.organizationId !== org || p.memberId !== uid
       || p.transactionId !== transactionId || p.planId !== 'premium' || !['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind))
-      || p.environment !== 'sandbox' || p.provider !== 'billplz' || p.currency !== 'MYR' || p.paymentStatus !== 'cleared'
+      || p.environment !== 'sandbox' || !isSupportedMembershipReceiptProvider(p.provider)
+      || p.currency !== 'MYR' || p.paymentStatus !== 'cleared' || p.refundStatus === 'completed'
       || p.fulfilmentStatus !== 'confirmed' || !text(p.billId) || !text(p.collectionId) || !text(p.planName)
       || !integer(p.amountMinor, 1) || !integer(p.durationDays, 1) || p.durationDays > 3660 || !time(p.clearedAtMillis)
       || !time(p.expiresAtMillis) || p.clearedAtMillis > at || p.expiresAtMillis <= at) return false;
-  const starts = p.expiresAtMillis - p.durationDays * DAY;
+  const starts = p.startsAtMillis ?? p.expiresAtMillis - p.durationDays * DAY;
   return time(starts) && p.clearedAtMillis <= starts && starts <= at;
 }
 export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unknown, identity: CoachIdentityReader, clock = Date.now, historyReader?: RewardsHistoryReader): Promise<Record<string, any>> {

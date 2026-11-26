@@ -1,0 +1,22 @@
+# 5.1.4.6 — Fitness Arcade motion games
+
+Two current production-route game IDs use the local BlazePose pipeline. Flutter controllers, painters/widgets and pure Dart engines own game state and collision. Member selects a game, confirms play mode, aligns with the camera, starts, controls the round by body motion, then sees results and can retry. Touch navigates, confirms and pauses. Scoring inputs are camera observations.
+
+| Property | Reach & Tap (reach-tap-v1) | Move & Catch (move-catch-v1) |
+|---|---|---|
+| Motion input | Calibrate with visible torso and arms; either qualifying wrist can reach a target. Bilateral shoulders and hips anchor scale; one hand can remain eligible when the opposite becomes occluded. | Normalize bilateral shoulder/hip torso center and shoulder width, steer basket laterally with calibrated screen-space body center. |
+| Geometry | Mirror once, center-crop into board, discard cropped-out joints. Raw and smoothed cursor must both overlap target in pixel-scaled Euclidean distance. | Steering dead zone .08, saturation edge .85; exponential response uses 65 ms time constant or 30 ms for a displacement ≥.14. |
+| Collision and score | 100 ms same-arm contact (target radius + cursor radius scaled by short board dimension); 250 ms lockout after hit; +10 per hit; target changes after hit. | On crossing y=.84, collide if absolute x difference ≤.10. +10 star, −5 obstacle with zero floor; a missed star is counted separately. |
+| Calibration and round | 2 s alignment nominal target, 40 s active round, fresh evidence ≤200 ms; recovery window 3 s, reentry hold 400 ms. Sustained loss pauses scoring/timer while the user returns. | 1.2 s stable alignment, 3 s countdown, 40 s active round, 250 ms age, 500 ms loss threshold and 3 s tracking grace. |
+| Difficulty | New target chosen within calibrated play area; target location varies and can require stepping and reaching. No difficulty uplift claim based on user performance. | Spawn every 700 ms with calibrated board bounds, .78 star probability and 12-object cap; fall speed linearly grows .25→.50 board/s over active time. |
+| Result | Score, hits, local best/history and retry from completed round. Invalid/no body evidence or abandoned round need not yield completed statistics. | Score, catches, obstacle hits, misses and local best. Interruption gates prevent advancing on untrustworthy timing. |
+
+As an example, a target whose scaled radius is 26 px and cursor radius 14 px can accept a particular wrist only when both positions stay within 40 px for the contact dwell. The control formulas are camera projections. They cannot prove real hand contact, physical reach or calorie expenditure.
+
+Online integration is distinct from motion inference. Fun mode can complete locally. Earn mode checks scoped Member eligibility and the server round/timing protocol, with request receipts/lease and idempotent claims. Reach default earning policy refers to 20 once per Malaysia day with a shared 60-point game cap; Move can use configured participation policy. Participation earning is distinct from game score. Competition is opt-in, sends constrained event sequence and timing, can reconstruct scores and report weekly/all-time leaderboard. The server's trust label distinguishes event-validated scoring from independent physical verification. The server never receives raw frames/landmarks via these game paths.
+
+Source anchors:
+- apps/mobile/lib/infrastructure/pose/reach_tap_pose_camera.dart:15–94 and move_catch_pose_camera.dart; apps/mobile/lib/features/gamification/domain/reach_tap.dart:42–61,397–519 and move_and_catch.dart:25–43,99–178,221–261.
+- apps/mobile/lib/features/gamification/presentation/member/fitness_arcade_games.dart:187,257–282,350–423, mini_game_details_screen.dart and mini_game_result_screen.dart; application/mini_game_round_coordinator.dart:17 onward and mini_game_competition_coordinator.dart.
+- functions/src/modules/gamification/mini-game-rounds.ts:35–40,77–138, mini-game-participation.ts:8–14,74–110 and mini-game-competition.ts:33–56,59–80.
+- Automated coverage anchors: apps/mobile/test/reach_tap_engine_test.dart, reach_tap_recovery_test.dart, reach_tap_projection_test.dart, move_catch_responsiveness_test.dart, move_catch_pose_sample_test.dart and related server round tests. Host motion observations do not establish camera compatibility. For a figure, capture calibration, one intentional score and recovery or result on a consented synthetic Member session, with background faces and identifiers excluded.

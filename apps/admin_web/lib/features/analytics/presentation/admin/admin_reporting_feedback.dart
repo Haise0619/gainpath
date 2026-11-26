@@ -19,17 +19,31 @@ class AdminReportingFeedback extends StatelessWidget {
     if (state.errorMessage == null) return const SizedBox.shrink();
     return Padding(
         padding: const EdgeInsets.only(bottom: 16),
-        child: Panel(
-            child: Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-              Text(state.errorMessage!),
-              TextButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry reports'))
-            ])));
+        child: Semantics(
+            liveRegion: true,
+            child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.dangerTint,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    child: Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: AppColors.danger, size: 18),
+                          Text(state.errorMessage!,
+                              style: const TextStyle(color: AppColors.danger)),
+                          TextButton.icon(
+                              onPressed: onRetry,
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.danger),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry reports'))
+                        ])))));
   }
 }

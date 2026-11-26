@@ -1,7 +1,23 @@
 import {expect,it,vi} from 'vitest';
 import {MemoryStore} from './memory-store';
 import {GymGoogleConnection,GOOGLE_SCOPES} from '../src/modules/coaching/google-gym-connection';
+import {DomainError} from '../src/platform/errors';
 const auth={uid:'admin',token:{email_verified:true,auth_time:100}};
+it('reconnects an invalid Google grant without deleting the coach calendar or revoking the new grant',async()=>{
+ const f=fixture(),path='system/googleGym/orgs/org',calendar=path+'/calendars/coach';
+ const connect=async()=>{const attempt=await f.service.begin(auth,'org');await f.service.complete(new URL(attempt.authorizationUrl).searchParams.get('state')!,'code');};
+ await connect();
+ const oldSecret=f.store.documents.get(path)!.secretId;
+ f.store.documents.set(calendar,{status:'ready',calendarId:'existing-calendar'});
+ f.provider.refresh.mockRejectedValue(new DomainError('failed-precondition','invalid_grant'));
+ await expect(f.service.access('org')).rejects.toMatchObject({code:'unavailable'});
+ await connect();
+ expect(f.store.documents.get(path)).toMatchObject({status:'connected',subject:'google-sub'});
+ expect(f.store.documents.get(path)!.secretId).not.toBe(oldSecret);
+ expect(f.store.documents.get(calendar)?.calendarId).toBe('existing-calendar');
+ expect(f.vault.destroy).toHaveBeenCalledWith(oldSecret);
+ expect(f.provider.revoke).not.toHaveBeenCalled();
+});
 function fixture(){const store=new MemoryStore();store.documents.set('orgs/org',{status:'active'});for(const [uid,role] of [['admin','admin'],['coach','coach']]){store.documents.set(`users/${uid}`,{organizationId:'org'});store.documents.set(`orgs/org/members/${uid}`,{organizationId:'org',status:'active',role,branchIds:[]});}let secret:any;const vault={put:vi.fn(async(_id:string,value:any)=>{secret=value;}),read:vi.fn(async()=>secret),destroy:vi.fn(async()=>{secret=undefined;})};const provider={exchange:vi.fn(async(_input:any)=>({refreshToken:'PRIVATE_REFRESH',accessToken:'PRIVATE_ACCESS',scope:GOOGLE_SCOPES.join(' '),subject:'google-sub',email:'gym@example.com',emailVerified:true})),refresh:vi.fn(async()=>({accessToken:'PRIVATE_ACCESS'})),revoke:vi.fn(async()=>{})};const service=new GymGoogleConnection(store,vault,provider,{clientId:'client',redirectUri:'https://example.com/callback',gymEmail:'gym@example.com'},()=>1000000);return{store,vault,provider,service};}
 it('requires current Admin for connect and permits only own Coach status without secrets',async()=>{const{service}=fixture();await expect(service.begin({uid:'coach',token:auth.token},'org')).rejects.toMatchObject({code:'permission-denied'});expect(await service.status({uid:'coach',token:auth.token},'org','coach')).toMatchObject({connectionStatus:'disconnected'});await expect(service.status({uid:'coach',token:auth.token},'org','other')).rejects.toBeDefined();});
 it('uses minimum scopes, PKCE, one-use state and stores tokens only in the vault',async()=>{const{service,provider,store,vault}=fixture();const b=await service.begin(auth,'org');const url=new URL(b.authorizationUrl);expect(url.searchParams.get('scope')).toBe(GOOGLE_SCOPES.join(' '));expect(url.searchParams.get('code_challenge_method')).toBe('S256');expect(url.searchParams.get('access_type')).toBe('offline');const state=url.searchParams.get('state')!;await service.complete(state,'valid-code');expect(vault.put).toHaveBeenCalledOnce();expect(provider.exchange.mock.calls[0][0].verifier.length).toBeGreaterThan(40);expect(JSON.stringify([...store.documents])).not.toContain('PRIVATE_');await expect(service.complete(state,'valid-code')).rejects.toBeDefined();expect(await service.status(auth,'org')).toMatchObject({connectionStatus:'connected',senderEmail:'gym@example.com'});});

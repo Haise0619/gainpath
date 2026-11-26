@@ -1,4 +1,4 @@
-import type {DocumentData,TransactionPort} from '../../platform/firestore/store';
+import type {TransactionPort} from '../../platform/firestore/store';
 import {resolveMembershipEntitlement} from '../commerce/membership-entitlement';
 import {membershipCapabilities} from '../commerce/membership-capabilities';
 
@@ -14,11 +14,4 @@ export async function premiumCheckInBonus(tx: TransactionPort,
   if (typeof effectiveUntilMillis !== 'number' || !Number.isSafeInteger(effectiveUntilMillis) || effectiveUntilMillis <= now || effectiveUntilMillis > 8640000000000000) return null;
   const entitlement = await resolveMembershipEntitlement(tx, auth, org, now);
   return membershipCapabilities(entitlement).isEligibleForPremiumCheckInBonus ? {points: bonusPoints, version} : null;
-}
-export function validCheckInBonusReceipt(raw: DocumentData, base: number) {
-  const {basePoints, premiumBonusPoints, premiumBonusPolicyVersion, points} = raw;
-  if (premiumBonusPoints === undefined) return basePoints === undefined && premiumBonusPolicyVersion === undefined && points === base;
-  return basePoints === base && typeof premiumBonusPoints === 'number' && Number.isSafeInteger(premiumBonusPoints) && premiumBonusPoints > 0
-    && typeof premiumBonusPolicyVersion === 'string' && premiumBonusPolicyVersion.trim().length > 0 && premiumBonusPolicyVersion.length <= 128
-    && Number.isSafeInteger(points) && points === base + premiumBonusPoints;
 }

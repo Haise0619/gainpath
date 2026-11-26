@@ -13,9 +13,13 @@ import '../../../../navigation/feature_navigation.dart';
 
 class VerifiedRewardShopView extends StatefulWidget {
   const VerifiedRewardShopView(
-      {super.key, required this.repository, this.onBalanceChanged});
+      {super.key,
+      required this.repository,
+      this.onBalanceChanged,
+      this.initialRewardId});
   final VerifiedRewardsRepository repository;
   final Future<void> Function()? onBalanceChanged;
+  final String? initialRewardId;
   @override
   State<VerifiedRewardShopView> createState() => _VerifiedRewardShopViewState();
 }
@@ -31,6 +35,33 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _future = widget.repository.overview();
+    if (widget.initialRewardId case final id?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openInitial(id));
+      });
+    }
+  }
+
+  Future<void> _openInitial(String id) async {
+    final pending = _future;
+    VerifiedRewardsSnapshot data;
+    try {
+      data = await pending;
+    } catch (_) {
+      return; // The shop displays read failures and retry.
+    }
+    if (!mounted ||
+        !widget.repository.current ||
+        pending != _future ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    final item = data.items.where((reward) => reward.itemId == id).firstOrNull;
+    if (item == null) return;
+    final reason = _reason(data, item);
+    await _review(item, reason.isEmpty, reason, data.balance,
+        showMembership: !data.canRedeem ||
+            (item.premiumOnly && data.effectiveTier != 'premium'));
   }
 
   @override

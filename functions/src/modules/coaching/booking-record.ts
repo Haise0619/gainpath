@@ -30,7 +30,7 @@ export function storedBooking(data: DocumentData | undefined, org: string, id: s
     if (localDate(Number(d.startAtMillis), d.timeZone) !== d.localDate || localDate(Number(d.endAtMillis) - 1, d.timeZone) !== d.localDate) throw bookingReview();
     if (d.resolvedAtMillis !== undefined || d.resolution !== undefined || d.status === 'expired') {
       if (!validBookingTime(d.resolvedAtMillis) || d.resolvedAtMillis < Number(d.createdAtMillis)) throw bookingReview();
-      if (d.status === 'cancelled') {
+      if (d.status === 'cancelled' || (d.status === 'refunded' && d.resolution !== 'hold_expired')) {
         if (d.resolution === 'member_cancelled') {
           if (d.resolvedAtMillis >= Number(d.holdExpiresAtMillis)) throw bookingReview();
         } else if (d.resolution === 'member_confirmed_cancelled') {
@@ -42,7 +42,7 @@ export function storedBooking(data: DocumentData | undefined, org: string, id: s
         } else {
           throw bookingReview();
         }
-      } else if (d.status === 'expired') {
+      } else if (d.status === 'expired' || d.status === 'refunded') {
         if (d.resolution !== 'hold_expired' || d.resolvedAtMillis < Number(d.holdExpiresAtMillis)) throw bookingReview();
       } else {
         throw bookingReview();

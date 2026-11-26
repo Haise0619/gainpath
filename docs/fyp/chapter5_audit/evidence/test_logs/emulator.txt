@@ -1,0 +1,11 @@
+Run: emulator
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:44.9227180Z
+Ended UTC: 2026-11-25T14:44:09.0902837Z
+Duration seconds (wall-clock): 24.17
+Child process exit code: 2
+See diagnostic summary.
+Running core: 44 files on demo-gainpath
+Error: TIMEOUT: Port 14400 on 127.0.0.1 was not active within 60000ms
+Error: An unexpected error has occurred.
+

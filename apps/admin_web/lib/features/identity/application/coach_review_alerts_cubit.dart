@@ -9,10 +9,14 @@ class CoachReviewAlert {
 
 class CoachReviewAlertsState {
   const CoachReviewAlertsState(
-      {this.items = const [], this.loading = false, this.error});
+      {this.items = const [],
+      this.loading = false,
+      this.error,
+      this.accessLost = false});
   final List<CoachReviewAlert> items;
   final bool loading;
   final String? error;
+  final bool accessLost;
 }
 
 /// Derived from canonical drafts/publications: no duplicate notification store
@@ -69,9 +73,11 @@ class CoachReviewAlertsCubit extends Cubit<CoachReviewAlertsState> {
       if (!isClosed) {
         emit(CoachReviewAlertsState(items: List.unmodifiable(alerts)));
       }
-    } catch (_) {
+    } catch (error) {
       if (!isClosed) {
-        emit(const CoachReviewAlertsState(
+        emit(CoachReviewAlertsState(
+            accessLost: error is CoachRepositoryException &&
+                error.code == 'permission-denied',
             error: 'Could not check Coach updates. Retry.'));
       }
     } finally {

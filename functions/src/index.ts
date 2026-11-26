@@ -7,7 +7,7 @@ initializeApp();
 export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';
 export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';
 
-export { getMembershipOverviewCommand, getMembershipQuoteCommand, createMembershipPaymentCommand, getMembershipPaymentCommand, requestMembershipRefundCommand } from './modules/commerce/membership-payment-callables';
+export { cancelMembershipRenewalCommand, getMembershipOverviewCommand, getMembershipQuoteCommand, createMembershipPaymentCommand, getMembershipPaymentCommand, requestMembershipRefundCommand } from './modules/commerce/membership-payment-callables';
 export { getMembershipAccessCommand, verifyMemberMembershipCommand } from './modules/commerce/membership-access-callables';
 export { verifiedRewardsCommand } from './modules/gamification/verified-rewards-callables';
 
@@ -78,3 +78,6 @@ export {exerciseCatalogCommand} from './modules/content/exercise-catalog-callabl
 export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
 export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';
 export { adminMemberProvisioning } from './modules/identity/admin-member-provisioning-callable';
+export { supportRequestCommand } from './modules/support/support-request';
+export { complianceCommand } from './modules/compliance/compliance-callable';
+export { groupClassesCommand } from './modules/group-classes/group-classes-callable';

@@ -70,7 +70,7 @@ class BookingScheduleScreen extends StatefulWidget {
   final void Function(String id)? onPayment;
   final void Function(Booking b)? onNotes;
   final void Function(Booking b)? onRescheduleBooking;
-  final void Function(Booking b)? onCancelBooking;
+  final void Function(Booking, BuildContext)? onCancelBooking;
   final Widget? header;
   final Future<void> Function()? onRefresh;
   final bool? historyRange;
@@ -87,8 +87,6 @@ enum _HistoryFilter { all, past, completed, cancelled, expired, refunded }
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   _MainBookingTab? _userSelectedTab;
   _HistoryFilter _historyFilter = _HistoryFilter.all;
-  int? _lastKnownUpcomingCount;
-  int? _lastKnownHistoryCount;
 
   @override
   void didUpdateWidget(covariant BookingScheduleScreen oldWidget) {
@@ -150,58 +148,52 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   Widget _buildMainTabs(
       _MainBookingTab currentTab, int upcomingCount, int historyCount) {
-    final tabWidth = MediaQuery.textScalerOf(context).scale(1) > 1.3
-        ? MediaQuery.sizeOf(context).width - 38
-        : (MediaQuery.sizeOf(context).width - 42) / 2;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: [
-          SizedBox(
-            width: tabWidth,
-            child: _buildMainTabButton(
-              tab: _MainBookingTab.upcoming,
-              label: 'Upcoming',
-              count: upcomingCount,
-              isSelected: currentTab == _MainBookingTab.upcoming,
-              icon: Icons.event_available_rounded,
-              onTap: () {
-                if (currentTab != _MainBookingTab.upcoming ||
-                    widget.historyRange == true) {
-                  setState(() => _userSelectedTab = _MainBookingTab.upcoming);
-                  widget.onRangeChanged?.call(false);
-                }
-              },
-            ),
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.hairline, width: 1),
           ),
-          SizedBox(
-            width: tabWidth,
-            child: _buildMainTabButton(
-              tab: _MainBookingTab.history,
-              label: 'Past & Cancelled',
-              count: historyCount,
-              isSelected: currentTab == _MainBookingTab.history,
-              icon: Icons.history_rounded,
-              onTap: () {
-                if (currentTab != _MainBookingTab.history ||
-                    widget.historyRange == false) {
-                  setState(() {
-                    _userSelectedTab = _MainBookingTab.history;
-                    _historyFilter = _HistoryFilter.all;
-                  });
-                  widget.onRangeChanged?.call(true);
-                }
-              },
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildMainTabButton(
+                tab: _MainBookingTab.upcoming,
+                label: 'Upcoming',
+                count: upcomingCount,
+                isSelected: currentTab == _MainBookingTab.upcoming,
+                onTap: () {
+                  if (currentTab != _MainBookingTab.upcoming ||
+                      widget.historyRange == true) {
+                    setState(() => _userSelectedTab = _MainBookingTab.upcoming);
+                    widget.onRangeChanged?.call(false);
+                  }
+                },
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: _buildMainTabButton(
+                tab: _MainBookingTab.history,
+                label: 'History',
+                count: historyCount,
+                isSelected: currentTab == _MainBookingTab.history,
+                onTap: () {
+                  if (currentTab != _MainBookingTab.history ||
+                      widget.historyRange == false) {
+                    setState(() {
+                      _userSelectedTab = _MainBookingTab.history;
+                      _historyFilter = _HistoryFilter.all;
+                    });
+                    widget.onRangeChanged?.call(true);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -211,11 +203,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     required String label,
     required int count,
     required bool isSelected,
-    required IconData icon,
     VoidCallback? onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
+    return Semantics(
+      selected: isSelected,
+      button: true,
       child: InkWell(
         key: ValueKey('tab_${tab.name}'),
         onTap: onTap ??
@@ -223,57 +215,47 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               setState(() => _userSelectedTab = tab);
               widget.onRangeChanged?.call(tab == _MainBookingTab.history);
             },
-        borderRadius: BorderRadius.circular(11),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: .24),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? AppColors.primary : Colors.transparent,
+                width: 2.5,
+              ),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected ? Colors.white : AppColors.inkSoft,
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppColors.primary : AppColors.inkSoft,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 6),
-              Flexible(
-                  child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  color: isSelected ? Colors.white : AppColors.ink,
-                ),
-              )),
-              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.white.withValues(alpha: .22)
+                      ? AppColors.primaryTint
                       : AppColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : AppColors.inkSoft,
+                    color: isSelected ? AppColors.primary : AppColors.inkSoft,
                   ),
                 ),
               ),
@@ -284,133 +266,403 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     );
   }
 
-  Widget _buildHistoryFilterChips(
-      int totalCount, int completedCount, int cancelledCount,
-      {int pastCount = 0, int expiredCount = 0, int refundedCount = 0}) {
-    final chips = <Widget>[
-      _buildHistoryFilterChip(
-          filter: _HistoryFilter.all,
-          label: 'All',
-          count: totalCount,
-          icon: Icons.dashboard_outlined),
-      if (pastCount > 0)
-        _buildHistoryFilterChip(
-            filter: _HistoryFilter.past,
-            label: 'Past',
-            count: pastCount,
-            icon: Icons.schedule_outlined),
-      if (expiredCount > 0)
-        _buildHistoryFilterChip(
-            filter: _HistoryFilter.expired,
-            label: 'Expired',
-            count: expiredCount,
-            icon: Icons.timer_off_outlined),
-      _buildHistoryFilterChip(
-          filter: _HistoryFilter.completed,
-          label: 'Completed',
-          count: completedCount,
-          icon: Icons.task_alt_outlined),
-      _buildHistoryFilterChip(
-          filter: _HistoryFilter.cancelled,
-          label: 'Cancelled',
-          count: cancelledCount,
-          icon: Icons.event_busy_outlined),
-      if (refundedCount > 0)
-        _buildHistoryFilterChip(
-            filter: _HistoryFilter.refunded,
-            label: 'Refunded',
-            count: refundedCount,
-            icon: Icons.receipt_long_outlined),
-    ];
+  String _historyFilterName(_HistoryFilter f) => switch (f) {
+        _HistoryFilter.all => 'All records',
+        _HistoryFilter.completed => 'Completed',
+        _HistoryFilter.cancelled => 'Cancelled',
+        _HistoryFilter.past => 'Past sessions',
+        _HistoryFilter.expired => 'Expired holds',
+        _HistoryFilter.refunded => 'Refunded',
+      };
+
+  Widget _buildHistoryFilterBar({
+    required int totalCount,
+    required int currentCount,
+    required int completedCount,
+    required int cancelledCount,
+    required int pastCount,
+    required int expiredCount,
+    required int refundedCount,
+  }) {
+    final hasActiveFilter = _historyFilter != _HistoryFilter.all;
+    final activeLabel = _historyFilterName(_historyFilter);
+
     return Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: SingleChildScrollView(
-            key: const ValueKey('booking-history-filters'),
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              for (final chip in chips)
-                Padding(padding: const EdgeInsets.only(right: 8), child: chip)
-            ])));
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const ValueKey('booking-filter-button'),
+              onTap: () => _showFilterBottomSheet(
+                totalCount: totalCount,
+                completedCount: completedCount,
+                cancelledCount: cancelledCount,
+                pastCount: pastCount,
+                expiredCount: expiredCount,
+                refundedCount: refundedCount,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: hasActiveFilter
+                      ? AppColors.primary.withValues(alpha: .08)
+                      : AppColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: hasActiveFilter
+                        ? AppColors.primary
+                        : AppColors.hairline,
+                    width: hasActiveFilter ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.tune_rounded,
+                      size: 16,
+                      color: hasActiveFilter
+                          ? AppColors.primary
+                          : AppColors.inkSoft,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Filter',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            hasActiveFilter ? FontWeight.w700 : FontWeight.w600,
+                        color:
+                            hasActiveFilter ? AppColors.primary : AppColors.ink,
+                      ),
+                    ),
+                    if (hasActiveFilter) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          '1',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (hasActiveFilter)
+            Container(
+              constraints: const BoxConstraints(minHeight: 38),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.hairline),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      '$activeLabel · $currentCount',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    key: const ValueKey('clear-history-filter'),
+                    onTap: () =>
+                        setState(() => _historyFilter = _HistoryFilter.all),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: AppColors.hairline,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 13,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '$totalCount total ${totalCount == 1 ? "record" : "records"}',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.inkSoft,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildHistoryFilterChip({
-    required _HistoryFilter filter,
-    required String label,
-    required int count,
-    required IconData icon,
-  }) {
-    final isSelected = _historyFilter == filter;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('filter_${filter.name}'),
-        onTap: () => setState(() => _historyFilter = filter),
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : AppColors.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.hairline,
-              width: 1,
-            ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: .18),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 14,
-                  color: isSelected ? Colors.white : AppColors.inkSoft,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected ? Colors.white : AppColors.ink,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Container(
+  Future<void> _showFilterBottomSheet({
+    required int totalCount,
+    required int completedCount,
+    required int cancelledCount,
+    required int pastCount,
+    required int expiredCount,
+    required int refundedCount,
+  }) async {
+    _HistoryFilter tempFilter = _historyFilter;
+
+    final selected = await showModalBottomSheet<_HistoryFilter>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Widget optionTile({
+            required _HistoryFilter filter,
+            required String label,
+            required int count,
+            required IconData icon,
+          }) {
+            final isSelected = tempFilter == filter;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                key: ValueKey('filter_${filter.name}'),
+                onTap: () => setSheet(() => tempFilter = filter),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.white.withValues(alpha: .22)
-                        : AppColors.surfaceAlt,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? Colors.white : AppColors.inkSoft,
+                        ? AppColors.primary.withValues(alpha: .08)
+                        : AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color:
+                          isSelected ? AppColors.primary : AppColors.hairline,
+                      width: isSelected ? 1.5 : 1,
                     ),
                   ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_off_rounded,
+                        size: 20,
+                        color:
+                            isSelected ? AppColors.primary : AppColors.inkSoft,
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(
+                        icon,
+                        size: 18,
+                        color:
+                            isSelected ? AppColors.primary : AppColors.inkSoft,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                isSelected ? AppColors.primary : AppColors.ink,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primary.withValues(alpha: .15)
+                              : AppColors.surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+              child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              20 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.hairline,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Filter History',
+                          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ),
+                    if (tempFilter != _HistoryFilter.all)
+                      TextButton(
+                        onPressed: () =>
+                            setSheet(() => tempFilter = _HistoryFilter.all),
+                        child: const Text('Reset'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Select a status to filter your session history',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 16),
+                optionTile(
+                  filter: _HistoryFilter.all,
+                  label: 'All records',
+                  count: totalCount,
+                  icon: Icons.dashboard_outlined,
+                ),
+                optionTile(
+                  filter: _HistoryFilter.completed,
+                  label: 'Completed',
+                  count: completedCount,
+                  icon: Icons.task_alt_outlined,
+                ),
+                optionTile(
+                  filter: _HistoryFilter.cancelled,
+                  label: 'Cancelled',
+                  count: cancelledCount,
+                  icon: Icons.event_busy_outlined,
+                ),
+                optionTile(
+                  filter: _HistoryFilter.past,
+                  label: 'Past sessions',
+                  count: pastCount,
+                  icon: Icons.schedule_outlined,
+                ),
+                optionTile(
+                  filter: _HistoryFilter.expired,
+                  label: 'Expired holds',
+                  count: expiredCount,
+                  icon: Icons.timer_off_outlined,
+                ),
+                optionTile(
+                  filter: _HistoryFilter.refunded,
+                  label: 'Refunded',
+                  count: refundedCount,
+                  icon: Icons.receipt_long_outlined,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          minimumSize: const Size(0, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, tempFilter),
+                        child: const Text('Apply Filters'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-        ),
+          ));
+        },
       ),
     );
+
+    if (selected != null && mounted) {
+      setState(() => _historyFilter = selected);
+    }
   }
 
   Widget _sectionHeader(String title, int count) {
@@ -527,20 +779,27 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     };
   }
 
+  int _compareHistory(Booking a, Booking b) {
+    final aStart = widget.recordFor?.call(a.id)?.startAtMillis ??
+        a.start.millisecondsSinceEpoch;
+    final bStart = widget.recordFor?.call(b.id)?.startAtMillis ??
+        b.start.millisecondsSinceEpoch;
+    final timeOrder = bStart.compareTo(aStart);
+    return timeOrder == 0 ? a.id.compareTo(b.id) : timeOrder;
+  }
+
   Widget _card(Booking booking, bool live) {
     final record = widget.recordFor?.call(booking.id);
     final phase = _phase(booking);
-    final elapsed = phase == MemberBookingPhase.past ||
-        phase == MemberBookingPhase.holdElapsed;
     final pending = record != null
         ? record.rawStatus == 'pending_hold'
         : booking.status == BookingStatus.pending;
     final now = widget.serverNowMillis;
-    final canReschedule = !elapsed &&
+    final canReschedule = phase == MemberBookingPhase.upcoming &&
         (record == null ||
             now == null ||
             record.startAtMillis - now >= 24 * 3600000);
-    final canCancel = !elapsed &&
+    final canCancel = phase == MemberBookingPhase.upcoming &&
         (pending ||
             record == null ||
             now == null ||
@@ -577,11 +836,12 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   ? pending
                       ? widget.onCancelHold == null
                           ? null
-                          : () => widget.onCancelHold!(booking.id)
+                          : (_) => widget.onCancelHold!(booking.id)
                       : widget.onCancelBooking == null
                           ? null
-                          : () => widget.onCancelBooking!(booking)
-                  : () => _cancel(booking))
+                          : (detailsContext) =>
+                              widget.onCancelBooking!(booking, detailsContext)
+                  : (_) => _cancel(booking))
               : null,
           onMessage: live &&
                   record != null &&
@@ -610,12 +870,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     final mock = widget.persistedBookings == null
         ? context.watch<BookingBloc>().state
         : null;
-    final bookings = widget.persistedBookings ??
-        [
-          ...mock!.memberUpcoming,
-          ...mock.memberCompleted,
-          ...mock.memberCancelled
-        ];
+    final bookings = widget.persistedBookings == null
+        ? [
+            ...mock!.memberUpcoming,
+            ...mock.memberCompleted,
+            ...mock.memberCancelled
+          ]
+        : visiblePersistedBookings(widget.persistedBookings!, widget.recordFor);
     List<Booking> group(MemberBookingPhase phase) =>
         bookings.where((b) => _phase(b) == phase).toList();
     final current = group(MemberBookingPhase.upcoming);
@@ -637,46 +898,24 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         expired.length +
         refunded.length;
 
-    if (widget.historyRange == false || widget.historyRange == null) {
-      _lastKnownUpcomingCount = current.length;
-    }
-    if (widget.historyRange == true || widget.historyRange == null) {
-      _lastKnownHistoryCount = historyCount;
-    }
-
-    final displayUpcomingCount = (widget.historyRange == true &&
-            upcoming.isEmpty &&
-            _lastKnownUpcomingCount != null)
-        ? _lastKnownUpcomingCount!
-        : current.length;
-
-    final displayHistoryCount = (widget.historyRange == false &&
-            historyCount == 0 &&
-            _lastKnownHistoryCount != null)
-        ? _lastKnownHistoryCount!
-        : historyCount;
-
     final live = widget.persistedBookings != null;
     final tab = _currentTab(current.length, historyCount);
-    final sections = <({String title, List<Booking> rows})>[
-      if (_historyFilter == _HistoryFilter.all ||
-          _historyFilter == _HistoryFilter.refunded)
-        (title: 'Refunded', rows: refunded),
-      if (_historyFilter == _HistoryFilter.all ||
-          _historyFilter == _HistoryFilter.past) ...[
-        (title: 'Past sessions', rows: past),
-        (title: 'Reservation time elapsed', rows: elapsed)
-      ],
-      if (_historyFilter == _HistoryFilter.all ||
-          _historyFilter == _HistoryFilter.completed)
-        (title: 'Completed', rows: completed),
-      if (_historyFilter == _HistoryFilter.all ||
-          _historyFilter == _HistoryFilter.cancelled)
-        (title: 'Cancelled', rows: cancelled),
-      if (_historyFilter == _HistoryFilter.all ||
-          _historyFilter == _HistoryFilter.expired)
-        (title: 'Expired holds', rows: expired),
-    ];
+    final filteredHistory = switch (_historyFilter) {
+      _HistoryFilter.all => [
+          ...refunded,
+          ...past,
+          ...elapsed,
+          ...completed,
+          ...cancelled,
+          ...expired,
+        ],
+      _HistoryFilter.refunded => refunded,
+      _HistoryFilter.past => [...past, ...elapsed],
+      _HistoryFilter.completed => completed,
+      _HistoryFilter.cancelled => cancelled,
+      _HistoryFilter.expired => expired,
+    };
+    filteredHistory.sort(_compareHistory);
     Widget body = ListView(
         key: const PageStorageKey('member-booking-scroll'),
         physics: widget.onRefresh == null
@@ -685,7 +924,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           if (widget.header != null) widget.header!,
-          _buildMainTabs(tab, displayUpcomingCount, displayHistoryCount),
+          _buildMainTabs(tab, current.length, historyCount),
           if (tab == _MainBookingTab.upcoming) ...[
             _sectionHeader('Upcoming', upcoming.length),
             if (current.isEmpty)
@@ -701,25 +940,43 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               ...awaiting.map((b) => _card(b, live)),
             ],
           ] else ...[
-            _buildHistoryFilterChips(
-                historyCount, completed.length, cancelled.length,
-                pastCount: past.length + elapsed.length,
-                expiredCount: expired.length,
-                refundedCount: refunded.length),
-            if (sections.every((s) => s.rows.isEmpty))
-              _emptyState(context,
-                  icon: Icons.history_rounded,
-                  title: _historyFilter == _HistoryFilter.all
-                      ? 'No session history'
-                      : 'No ${_historyFilter.name} sessions',
-                  subtitle:
-                      'Past coaching sessions and booking updates will appear here.',
-                  action: _buildFindCoachButton()),
-            for (final section in sections)
-              if (section.rows.isNotEmpty) ...[
-                _sectionHeader(section.title, section.rows.length),
-                ...section.rows.map((b) => _card(b, live)),
-              ],
+            _buildHistoryFilterBar(
+              totalCount: historyCount,
+              currentCount: filteredHistory.length,
+              completedCount: completed.length,
+              cancelledCount: cancelled.length,
+              pastCount: past.length + elapsed.length,
+              expiredCount: expired.length,
+              refundedCount: refunded.length,
+            ),
+            if (filteredHistory.isEmpty)
+              _emptyState(
+                context,
+                icon: _historyFilter == _HistoryFilter.all
+                    ? Icons.history_rounded
+                    : Icons.filter_alt_off_outlined,
+                title: _historyFilter == _HistoryFilter.all
+                    ? 'No session history'
+                    : 'No ${_historyFilterName(_historyFilter).toLowerCase()}',
+                subtitle: _historyFilter == _HistoryFilter.all
+                    ? 'Past coaching sessions and booking updates will appear here.'
+                    : 'Try selecting another status or clearing your filter to view other sessions.',
+                action: _historyFilter == _HistoryFilter.all
+                    ? _buildFindCoachButton()
+                    : OutlinedButton(
+                        onPressed: () =>
+                            setState(() => _historyFilter = _HistoryFilter.all),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 42),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Clear filter'),
+                      ),
+              )
+            else
+              ...filteredHistory.map((b) => _card(b, live)),
           ],
         ]);
     if (widget.onRefresh != null) {
@@ -734,7 +991,16 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     return widget.embedded
         ? body
         : Scaffold(
-            appBar: AppBar(title: const Text('My bookings')), body: body);
+            backgroundColor: const Color(0xFFF8F7FC),
+            appBar: AppBar(
+              backgroundColor: AppColors.surface,
+              foregroundColor: AppColors.ink,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              title: const Text('My Bookings'),
+            ),
+            body: SafeArea(top: false, child: body),
+          );
   }
 
   void _bookAgain(Booking b) {

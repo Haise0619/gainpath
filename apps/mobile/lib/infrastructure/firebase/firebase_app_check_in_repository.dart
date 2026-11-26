@@ -42,7 +42,8 @@ class FirebaseAppCheckInRepository implements AppCheckInRepository {
     final raw = await _invoke({
       'schemaVersion': 1,
       'organizationId': scope.organizationId,
-      'action': action
+      'action': action,
+      if (action != 'achievements') 'includeClaimOffer': true,
     }).timeout(Duration(seconds: action == 'achievements' ? 36 : 25));
     if (activeScope() != scope) throw StateError('Check-in account changed');
     return raw;

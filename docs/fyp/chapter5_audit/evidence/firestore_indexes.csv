@@ -1,0 +1,8 @@
+"collection_group","scope","fields"
+"jobs","COLLECTION_GROUP","schemaVersion ASCENDING / type ASCENDING / status ASCENDING / dueAtMillis ASCENDING"
+"content","COLLECTION","status ASCENDING / kind ASCENDING"
+"bookings","COLLECTION","coachId ASCENDING / startAtMillis ASCENDING"
+"bookings","COLLECTION","memberId ASCENDING / startAtMillis ASCENDING"
+"bookings","COLLECTION","coachId ASCENDING / branchId ASCENDING / startAtMillis ASCENDING"
+"notifications","COLLECTION","recipientId ASCENDING / createdAtMillis DESCENDING"
+"workoutSessions","COLLECTION","memberId ASCENDING / status ASCENDING / endedAtMillis DESCENDING"

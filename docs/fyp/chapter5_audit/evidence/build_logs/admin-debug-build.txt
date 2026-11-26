@@ -1,0 +1,9 @@
+Start UTC: 2026-11-25T14:48:46.0529865Z
+End UTC: 2026-11-25T14:51:35.0916317Z
+Duration seconds: 169.04
+Exit code: 0
+Compiling lib\main.dart for the Web...                          
+Wasm dry run succeeded. Consider building and testing your application with the `--wasm` flag. See docs for more info: <URL>
+Use --no-wasm-dry-run to disable these warnings.
+Compiling lib\main.dart for the Web...                            167.5s
+√ Built ..\..\build\chapter5-audit-raw\admin-debug-web

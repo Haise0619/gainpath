@@ -1,0 +1,6 @@
+"id","file","first_line","last_line","symbol","purpose","test"
+"identity-registration","functions/src/modules/identity/provision-member-registration.ts","21","37","provisionMemberRegistration","Provisioning trusts Firebase Auth identity and maps domain errors to stable callable errors.","functions/test/member-provisioning.test.ts"
+"member-report-aggregation","apps/mobile/lib/features/analytics/domain/member_workout_report.dart","330","369","MemberWorkoutReport.build","Groups full reps, partial attempts and time by date and keeps compatible form scores in separate series.","apps/mobile/test/member_workout_report_test.dart"
+"admin-report-authorization","functions/src/modules/analytics/admin-reporting.ts","27","37","authorizeAdminReport","Requires canonical association, active Admin and organization, and a current authentication epoch.","functions/test/admin-reporting.test.ts"
+"rules-access","firebase/firestore.rules","5","26","activeMember and contentAuthor","Rules combine authentication, verified email, canonical membership, and role. Callables maintain their own server-side checks.","functions/emulator/"
+"backup-idempotency","functions/src/modules/workouts/workout-backup.ts","48","77","Workout backup write transaction","Scoped deterministic key and canonical digest support safe retries and reject conflicting prior data.","functions/test/"

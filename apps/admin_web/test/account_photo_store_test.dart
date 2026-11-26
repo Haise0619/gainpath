@@ -45,12 +45,14 @@ void main() {
         isCurrent: () => true,
         auth: _Auth(),
         storage: _Storage(),
+        appCheckToken: () async => 'local-app-check-token',
         client: MockClient((request) async {
           expect(request.url.host, 'firebasestorage.googleapis.com');
           expect(request.url.pathSegments,
               ['v0', 'b', 'private-test-bucket', 'o', path]);
           expect(request.url.queryParameters, {'alt': 'media'});
           expect(request.headers['Authorization'], 'Firebase local-test-token');
+          expect(request.headers['X-Firebase-AppCheck'], 'local-app-check-token');
           expect(request.followRedirects, false);
           return http.Response.bytes(png, 200);
         }));

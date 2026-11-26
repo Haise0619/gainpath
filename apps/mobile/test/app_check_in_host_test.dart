@@ -82,7 +82,8 @@ void main() {
         activeScope: () => scope,
         invoke: (input) async {
           expect(input.keys.toSet(),
-              {'schemaVersion', 'organizationId', 'action'});
+              {'schemaVersion', 'organizationId', 'action', 'includeClaimOffer'});
+          expect(input['includeClaimOffer'], true);
           final data = support.snapshotJson(scope);
           if (forge) data['memberId'] = 'other';
           return {'awarded': false, 'snapshot': data};

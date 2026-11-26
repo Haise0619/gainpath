@@ -375,12 +375,19 @@ class _FitnessArcadeGamesState extends State<FitnessArcadeGames>
         if (!_current) return const Text('Game session ended.');
         final organization = widget.reader?.scope.organizationId ?? 'built-in';
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          MemberSectionHeader(
-            title: 'Play Mini-Games',
-            actionText: 'View all',
-            onAction: _viewAll,
-            padded: false,
-          ),
+          Row(children: [
+            const Expanded(
+              child:
+                  MemberSectionHeader(title: 'Play Mini-Games', padded: false),
+            ),
+            TextButton(
+              onPressed: _viewAll,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsetsDirectional.only(start: 8),
+              ),
+              child: const Text('View all'),
+            ),
+          ]),
           const SizedBox(height: 8),
           if (_guideFailed)
             Semantics(

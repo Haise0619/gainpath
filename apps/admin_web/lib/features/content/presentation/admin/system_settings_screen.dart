@@ -6,6 +6,7 @@ import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../published_compliance_repository.dart';
 
 /// AD-M11.6 — System Settings. Mock mode retains all prototype tabs.
 /// Firebase mode supports facility names and compliance drafts; publication and member
@@ -20,8 +21,10 @@ import 'package:url_launcher/url_launcher.dart';
 /// right half of a wide desktop screen empty; this fills it with
 /// something actually useful instead of just stretching fields wider.
 class SystemSettingsScreen extends StatefulWidget {
-  const SystemSettingsScreen({super.key, this.live = false});
+  const SystemSettingsScreen(
+      {super.key, this.live = false, this.complianceCall});
   final bool live;
+  final ComplianceCall? complianceCall;
 
   @override
   State<SystemSettingsScreen> createState() => _SystemSettingsScreenState();
@@ -29,8 +32,7 @@ class SystemSettingsScreen extends StatefulWidget {
 
 class _SystemSettingsScreenState extends State<SystemSettingsScreen>
     with SingleTickerProviderStateMixin {
-  late final _tabs =
-      TabController(length: 4, initialIndex: 0, vsync: this);
+  late final _tabs = TabController(length: 4, initialIndex: 0, vsync: this);
 
   @override
   void dispose() {
@@ -89,7 +91,10 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
               children: [
                 _GeneralPreferencesTab(live: widget.live),
                 _ConversionRateTab(live: widget.live),
-                _ComplianceDocumentTab(live: widget.live),
+                if (widget.complianceCall case final call?)
+                  _LegalDocumentsTab(call: call)
+                else
+                  _ComplianceDocumentTab(live: widget.live),
                 _GoogleIntegrationTab(live: widget.live),
               ],
             ),
@@ -571,9 +576,59 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
   }
 }
 
+class _LegalDocumentsTab extends StatefulWidget {
+  const _LegalDocumentsTab({required this.call});
+  final ComplianceCall call;
+
+  @override
+  State<_LegalDocumentsTab> createState() => _LegalDocumentsTabState();
+}
+
+class _LegalDocumentsTabState extends State<_LegalDocumentsTab> {
+  String _selected = 'terms';
+  late final _repositories = {
+    for (final kind in legalDocumentNames.keys)
+      kind: PublishedComplianceRepository(kind, widget.call),
+  };
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final entry in {
+                  ...legalDocumentNames,
+                  'legacy': 'Existing draft'
+                }.entries)
+                  ChoiceChip(
+                    label: Text(entry.value),
+                    selected: _selected == entry.key,
+                    onSelected: (_) => setState(() => _selected = entry.key),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _ComplianceDocumentTab(
+              key: ValueKey(_selected),
+              live: true,
+              publicationRepository: _repositories[_selected],
+            ),
+          ),
+        ],
+      );
+}
+
 class _ComplianceDocumentTab extends StatefulWidget {
-  const _ComplianceDocumentTab({this.live = false});
+  const _ComplianceDocumentTab(
+      {super.key, this.live = false, this.publicationRepository});
   final bool live;
+  final PublishedComplianceRepository? publicationRepository;
 
   @override
   State<_ComplianceDocumentTab> createState() => _ComplianceDocumentTabState();
@@ -584,6 +639,9 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
   bool _loading = false, _saving = false, _blocked = false, _started = false;
   String? _error;
   bool get _busy => _loading || _saving;
+  ComplianceDocumentRepository get _repository =>
+      widget.publicationRepository ??
+      context.read<ComplianceDocumentRepository>();
 
   @override
   void didChangeDependencies() {
@@ -601,7 +659,7 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
       _error = null;
     });
     try {
-      final loaded = await context.read<ComplianceDocumentRepository>().load();
+      final loaded = await _repository.load();
       if (!mounted) return;
       setState(() {
         _snapshot = loaded;
@@ -625,8 +683,7 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
       _error = null;
     });
     try {
-      final saved = await context.read<ComplianceDocumentRepository>().save(
-          _snapshot!,
+      final saved = await _repository.save(_snapshot!,
           text: _controller.text,
           isArchived: isArchived ?? _snapshot!.current?.isArchived ?? false);
       if (!mounted) return;
@@ -677,6 +734,95 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
             'No video is ever recorded, stored, or transmitted off your device...',
   );
 
+  Future<void> _publishSavedDraft() async {
+    final repository = widget.publicationRepository!;
+    final snapshot = _snapshot;
+    if (snapshot?.current == null ||
+        _busy ||
+        _blocked ||
+        snapshot!.current!.isArchived ||
+        _controller.text.trim() != snapshot.current!.text) return;
+    final firstRelease = repository.publications.isEmpty;
+    var requireConsent = firstRelease;
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, update) => AlertDialog(
+          title: Text('Publish ${legalDocumentNames[repository.kind]}'),
+          content: SizedBox(
+            width: 460,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                  'Members will see the saved text. This release will be kept in version history.'),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Require member consent'),
+                subtitle: Text(firstRelease
+                    ? 'The first release requires consent.'
+                    : 'Select this for an update that members must explicitly agree to.'),
+                value: requireConsent,
+                onChanged: firstRelease
+                    ? null
+                    : (value) => update(() => requireConsent = value == true),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, requireConsent),
+                child: const Text('Publish')),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null || _busy || !identical(snapshot, _snapshot))
+      return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final version =
+          await repository.publish(snapshot, requireConsent: choice);
+      if (!mounted) return;
+      await _load();
+      if (mounted)
+        showToast(context,
+            '${legalDocumentNames[repository.kind]} $version published.');
+    } catch (_) {
+      if (mounted)
+        setState(() => _error =
+            'Publication could not be confirmed. Reload to check the latest version.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _viewPublication(Map<String, dynamic> version) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+            '${legalDocumentNames[widget.publicationRepository!.kind]} ${version['version']}'),
+        content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: SelectableText(version['text'] as String,
+                  style: const TextStyle(height: 1.5)),
+            )),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _publish() async {
     final ok = await confirmDialog(
       context,
@@ -711,7 +857,10 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
                 Expanded(
                   child: Text(
                       widget.live
-                          ? 'Privacy and liability draft for review.'
+                          ? (widget.publicationRepository == null
+                              ? 'Existing compliance draft'
+                              : legalDocumentNames[
+                                  widget.publicationRepository!.kind]!)
                           : 'Privacy and liability document shown during onboarding consent.',
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
@@ -742,6 +891,9 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
                       'No compliance draft has been saved. Enter text to create the first draft.')),
             TextField(
               controller: _controller,
+              onChanged: widget.publicationRepository != null
+                  ? (_) => setState(() {})
+                  : null,
               enabled: !widget.live ||
                   (!_busy &&
                       !_blocked &&
@@ -781,6 +933,18 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
                         ? null
                         : () => _save(),
                     child: Text(_saving ? 'Saving…' : 'Save draft version')),
+                if (widget.publicationRepository != null)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.publish_outlined),
+                    label: const Text('Publish saved draft'),
+                    onPressed: _busy ||
+                            _blocked ||
+                            _snapshot?.current == null ||
+                            _snapshot!.current!.isArchived ||
+                            _controller.text.trim() != _snapshot!.current!.text
+                        ? null
+                        : _publishSavedDraft,
+                  ),
                 if (_snapshot?.current != null)
                   OutlinedButton(
                       onPressed: _busy || _blocked
@@ -800,9 +964,33 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
         rail: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Eyebrow(widget.live
-                ? 'Version history · latest 20'
-                : 'Version history'),
+            if (widget.publicationRepository case final repository?) ...[
+              const Eyebrow('Published versions'),
+              Panel(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    if (repository.publications.isEmpty)
+                      const ListTile(title: Text('No published versions')),
+                    for (final (index, version)
+                        in repository.publications.indexed)
+                      ListTile(
+                        title: Text(index == 0
+                            ? '${version['version']} · Current'
+                            : version['version'] as String),
+                        subtitle: Text(version['requireConsent'] == true
+                            ? 'Consent required'
+                            : 'Routine update'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _viewPublication(version),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            Eyebrow(
+                widget.live ? 'Draft history · latest 20' : 'Version history'),
             Panel(
               padding: EdgeInsets.zero,
               child: Column(
@@ -839,24 +1027,35 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
 }
 
 class _GoogleIntegrationTab extends StatelessWidget {
- const _GoogleIntegrationTab({required this.live});
- final bool live;
- Future<Map<String,String>> _coaches(BuildContext context) async {
-  final repo = context.read<CoachProfileAdminRepository>();
-  final result = <String,String>{}, seen = <String>{};
-  String? cursor;
-  do {
-   final page = await repo.loadPublicPage(afterId: cursor);
-   for (final coach in page.items) { if (coach.isPublished) result[coach.id] = coach.fields.displayName; }
-   cursor = page.nextCursor;
-   if (cursor != null && !seen.add(cursor)) throw StateError('Coach directory cursor did not advance.');
-  } while (cursor != null);
-  return result;
- }
- @override
- Widget build(BuildContext context) => SingleChildScrollView(padding: const EdgeInsets.all(24),child: GoogleIntegrationPanel(
-  actions: googleIntegrationPanelActions(live ? context.read<GoogleIntegrationRepository>() : const DisconnectedGoogleIntegrationRepository()),
-  admin: true, demo: !live, loadCoaches: live ? () => _coaches(context) : null,
-  openAuthorization: (url) => launchUrl(url, mode: LaunchMode.externalApplication),
- ));
+  const _GoogleIntegrationTab({required this.live});
+  final bool live;
+  Future<Map<String, String>> _coaches(BuildContext context) async {
+    final repo = context.read<CoachProfileAdminRepository>();
+    final result = <String, String>{}, seen = <String>{};
+    String? cursor;
+    do {
+      final page = await repo.loadPublicPage(afterId: cursor);
+      for (final coach in page.items) {
+        if (coach.isPublished) result[coach.id] = coach.fields.displayName;
+      }
+      cursor = page.nextCursor;
+      if (cursor != null && !seen.add(cursor))
+        throw StateError('Coach directory cursor did not advance.');
+    } while (cursor != null);
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: GoogleIntegrationPanel(
+        actions: googleIntegrationPanelActions(live
+            ? context.read<GoogleIntegrationRepository>()
+            : const DisconnectedGoogleIntegrationRepository()),
+        admin: true,
+        demo: !live,
+        loadCoaches: live ? () => _coaches(context) : null,
+        openAuthorization: (url) =>
+            launchUrl(url, mode: LaunchMode.externalApplication),
+      ));
 }

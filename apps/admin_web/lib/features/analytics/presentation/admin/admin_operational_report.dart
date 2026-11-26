@@ -96,9 +96,11 @@ class AdminOperationalReport extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  Text(state.errorMessage ??
-                      s?.unavailableReason ??
-                      'Operational reports await backend activation.'),
+                  Text(
+                      state.errorMessage ??
+                          s?.unavailableReason ??
+                          'Operational reports await backend activation.',
+                      style: const TextStyle(color: AppColors.danger)),
                   const Text(
                       'No cached sample totals or partial financial aggregates are shown.'),
                   TextButton(

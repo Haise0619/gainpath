@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="GainPath Billing Preview — Android" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/apps/mobile/lib/main_billing_preview.dart" />
+    <method v="2" />
+  </configuration>
+</component>

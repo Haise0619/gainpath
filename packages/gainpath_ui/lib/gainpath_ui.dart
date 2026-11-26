@@ -17,3 +17,5 @@ export 'src/shared/widgets/branch_map.dart';
 export 'src/shared/widgets/gym_branch_switcher_sheet.dart';
 export 'src/shared/widgets/gym_details_screen.dart';
 export 'src/shared/widgets/announcement_card.dart';
+export 'src/shared/widgets/support_requests_page.dart';
+export 'src/shared/widgets/group_classes.dart';

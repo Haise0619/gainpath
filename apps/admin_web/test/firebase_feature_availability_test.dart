@@ -196,6 +196,17 @@ void main() {
     expect(find.text('Active Members'), findsOneWidget);
     expect(find.text('Hafiz Aziz uploaded a certification document'),
         findsNothing);
+    double navY(String label) =>
+        tester.getTopLeft(find.widgetWithText(InkWell, label).first).dy;
+    expect(navY('Operations'), lessThan(navY('Members & Coaches')));
+    expect(navY('Payments'), lessThan(navY('Support Requests')));
+    expect(navY('Support Requests'), lessThan(navY('Content')));
+    await tester.tap(find.text('Operations').first);
+    await tester.pumpAndSettle();
+    expect(navY('Operations Calendar'), lessThan(navY('Group Classes')));
+    expect(navY('Group Classes'), lessThan(navY('Equipment Catalog')));
+    await tester.tap(find.text('Operations').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
     expect(find.text('Connected Member'), findsOneWidget);
@@ -210,7 +221,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Overview Analytics'), findsOneWidget);
     expect(find.text('Reports unavailable'), findsNothing);
-    await tester.tap(find.text('Governance'));
+    await tester.ensureVisible(find.text('Member Engagement').first);
+    await tester.tap(find.text('Member Engagement').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reward Catalog').first);
     await tester.pumpAndSettle();

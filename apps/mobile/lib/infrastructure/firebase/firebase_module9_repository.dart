@@ -165,6 +165,8 @@ MemberNotice parseMemberNotice(Object? raw, String organizationId) {
       createdAt:
           DateTime.fromMillisecondsSinceEpoch(raw['createdAtMillis'] as int),
       bookingId: raw['bookingId'] as String?,
+      groupClassId:
+          raw['groupClassId'] is String ? raw['groupClassId'] as String : null,
       recommendation: raw['recommendation'] == null
           ? null
           : RecommendationNotice.parse(raw['recommendation'], organizationId));

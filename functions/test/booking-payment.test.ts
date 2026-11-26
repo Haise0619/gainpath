@@ -39,12 +39,24 @@ it('preserves the original paid invoice across rescheduling and duplicate callba
   expect(store.documents.get(`orgs/org-1/bookings/${id}`)).toMatchObject({ status: 'cancelled', startAtMillis: newStart });
 });
 it('quotes authoritative minor units and creates only one bill for concurrent/repeated checkout', async () => {
-  const quote = await getBookingPaymentQuote(store, auth(), { schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1', branchId: 'branch-1', durationMinutes: 60 });
+  const quote = await getBookingPaymentQuote(store, auth(), { schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1', branchId: 'branch-1', durationMinutes: 60 }, () => now);
   expect(quote).toMatchObject({ amountMinor: 12000, currency: 'MYR' });
   await Promise.all([createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now), createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now)]);
   expect(creates).toBe(1);
   expect((await createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now)).status).toBe('awaiting_payment');
   expect(creates).toBe(1);
+});
+it('requires a paid entitlement for quotes even in the assigned branch', async () => {
+  const quote = { schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1', branchId: 'branch-1', durationMinutes: 60 };
+  store.documents.delete('orgs/org-1/membershipAccounts/member-1');
+  await expect(getBookingPaymentQuote(store, auth(), quote, () => now))
+    .rejects.toMatchObject({ code: 'permission-denied' });
+  store.documents.set('orgs/org-1/membershipAccounts/member-1', seeds['orgs/org-1/membershipAccounts/member-1']);
+  store.documents.set('orgs/org-1/transactions/paid', {
+    ...seeds['orgs/org-1/transactions/paid'], kind: 'MembershipRenewal', provider: 'xendit',
+  });
+  await expect(getBookingPaymentQuote(store, auth(), quote, () => now))
+    .resolves.toMatchObject({ amountMinor: 12000 });
 });
 it('uses the activity branch for quote and verified clearance outside legacy member assignments', async () => {
   store.documents.get('orgs/org-1/members/member-1')!.branchIds = ['branch-2'];

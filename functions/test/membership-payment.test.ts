@@ -1,4 +1,6 @@
+import { materializeMembershipBill, membershipBillingView } from '../src/modules/commerce/membership-billing';
 import { beforeEach, expect, it } from 'vitest';
+import { xenditBookingReference } from '../src/modules/commerce/xendit-booking';
 import { MemoryStore } from './memory-store';
 import { membershipQuote, createMembershipPayment, settleMembershipPayment, membershipRefund, readMembershipPayment } from '../src/modules/commerce/membership-payment-service';
 import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billplz-sandbox';
@@ -36,6 +38,29 @@ it('reserves one bill across concurrent requests and applies duplicate paid even
   await Promise.all([settleMembershipPayment(store, 'gainpath', id, bill(true), () => now), settleMembershipPayment(store, 'gainpath', id, bill(true), () => now)]);
   expect(store.documents.get('orgs/gainpath/membershipAccounts/member')?.expiresAtMillis).toBe(now + 30 * 86400000);
   expect(store.documents.get(path + id)?.paymentStatus).toBe('cleared');
+});
+it('creates a Xendit membership checkout and settles it through the recorded provider', async () => {
+  let session: SandboxBill;
+  const xendit: BillplzGateway = {
+    provider: 'xendit',
+    create: async checkout => {
+      expect(checkout).toMatchObject({ chooseMethodAtCheckout: true });
+      expect(checkout.selectedPaymentMethodCode).toBeUndefined();
+      session = { ...bill(), id: 'ps-0123456789abcdef01234567', collection_id: 'xendit',
+        reference_1: xenditBookingReference('gainpath', checkout.reference), reference_2: undefined,
+        url: 'https://checkout-staging.xendit.co/sessions/ps-0123456789abcdef01234567' };
+      return session;
+    },
+    get: async () => ({ ...session, paid: true, paid_amount: session.amount, state: 'paid' }),
+  };
+  const payment = await createMembershipPayment(store, auth, input, xendit, () => now);
+  const transactionId = String(payment.transactionId);
+  expect(store.documents.get(path + transactionId)).toMatchObject({ provider: 'xendit' });
+  expect(payment.checkoutUrl).toContain('checkout-staging.xendit.co');
+  const legacy = { get: async () => { throw Error('Wrong gateway'); } };
+  const result = await readMembershipPayment(store, auth, { ...base, transactionId }, legacy, () => now, undefined, xendit);
+  expect(result.paymentStatus).toBe('cleared');
+  expect(store.documents.get('orgs/gainpath/membershipAccounts/member')?.expiresAtMillis).toBe(now + 30 * 86400000);
 });
 it('preserves remaining paid time and serializes multiple renewals', async () => {
   store.documents.set('orgs/gainpath/membershipAccounts/member', { planId: 'basic', expiresAtMillis: now + 50000 });
@@ -153,3 +178,45 @@ it('Admin recovers an unpaid orphan bill with its checkout URL then verifies cle
   expect(store.documents.get('orgs/gainpath/membershipAccounts/member')?.expiresAtMillis).toBe(now + 2000 + 30 * 86400000);
 });
 
+
+it('pays one outstanding bill through the shared checkout and extends once on duplicate confirmation', async () => {
+  const account = 'orgs/gainpath/membershipAccounts/member';
+  const expiry = now - 9 * 86400000;
+  store.documents.set(account, { organizationId: 'gainpath', memberId: 'member', planId: 'basic', expiresAtMillis: expiry });
+  const view = await store.transact(tx => materializeMembershipBill(tx, 'gainpath', 'member', now));
+  expect(view?.bill).toBeDefined();
+  expect(membershipBillingView(view, now)?.status).toBe('past_due');
+  const renewal = { ...input, intent: 'renewal', billingId: view!.bill!.id };
+  const pending = await Promise.all([createMembershipPayment(store, auth, renewal, gateway, () => now),
+    createMembershipPayment(store, auth, { ...renewal, requestId: 'retry' }, gateway, () => now)]);
+  expect(creates).toBe(1);
+  expect(pending[0].transactionId).toEqual(pending[1].transactionId);
+  expect(store.documents.get(account)?.expiresAtMillis).toBe(expiry);
+  const id = String(pending[0].transactionId);
+  await Promise.all([settleMembershipPayment(store, 'gainpath', id, bill(true), () => now),
+    settleMembershipPayment(store, 'gainpath', id, bill(true), () => now)]);
+  expect(store.documents.get(account)?.expiresAtMillis).toBe(now + 30 * 86400000);
+  const paid = await store.transact(tx => materializeMembershipBill(tx, 'gainpath', 'member', now));
+  expect(membershipBillingView(paid, now)).toMatchObject({ status: 'paid', dueAtMillis: now + 30 * 86400000 });
+  await expect(createMembershipPayment(store, auth, { ...renewal, requestId: 'third' }, gateway, () => now)).rejects.toThrow();
+  expect(creates).toBe(1);
+});
+
+it('replaces an expired Xendit checkout only after the provider confirms it is closed', async () => {
+  const { xenditBookingReference } = await import('../src/modules/commerce/xendit-booking');
+  let previous!: SandboxBill;
+  const xendit: BillplzGateway = {
+    provider: 'xendit',
+    create: async checkout => {
+      creates++;
+      return previous = { ...bill(), id: 'session-' + creates, collection_id: 'xendit',
+        reference_1: xenditBookingReference('gainpath', checkout.reference) };
+    },
+    get: async () => ({ ...previous, state: 'deleted' }),
+  };
+  const first = await createMembershipPayment(store, auth, input, xendit, () => now);
+  const second = await createMembershipPayment(store, auth, { ...input, requestId: 'fresh' }, xendit, () => now + 31 * 60_000);
+  expect(creates).toBe(2);
+  expect(second.transactionId).not.toBe(first.transactionId);
+  expect(store.documents.get(path + first.transactionId)?.fulfilmentStatus).toBe('failed');
+});

@@ -89,7 +89,8 @@ class AppCheckInSnapshot {
       'recentClaims',
       'badges'
     };
-    if (raw.length != keys.length ||
+    final hasOffer = raw.containsKey('availablePoints');
+    if (raw.length != keys.length + (hasOffer ? 1 : 0) ||
         !keys.every(raw.containsKey) ||
         raw['schemaVersion'] != 1 ||
         raw['organizationId'] != scope.organizationId ||
@@ -104,6 +105,12 @@ class AppCheckInSnapshot {
         throw const FormatException('Invalid check-in integer');
       }
       return v;
+    }
+
+    final offered = hasOffer ? number(raw['availablePoints']) : 50;
+    if (hasOffer &&
+        (raw['claimedToday'] == true ? offered != 0 : offered < 50)) {
+      throw const FormatException('Invalid check-in points offer');
     }
 
     DateTime day(Object? v) {
@@ -241,7 +248,7 @@ class AppCheckInSnapshot {
         scope: scope,
         policyVersion: raw['policyVersion'] as String,
         timezone: raw['timezone'] as String,
-        pointsPerClaim: 50,
+        pointsPerClaim: offered == 0 ? 50 : offered,
         balance: number(raw['balance']),
         today: raw['today'] as String,
         claimedToday: raw['claimedToday'] as bool,

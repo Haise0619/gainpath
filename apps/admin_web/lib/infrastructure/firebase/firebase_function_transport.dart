@@ -28,7 +28,10 @@ HttpsCallable firebaseCallable(
   if (functions != null) return functions.httpsCallable(name, options: options);
   // New scoped services keep their own fixed region; canonical rollback
   // aliases and endpoint inventory remain unchanged.
-  if (name == 'branchManagementCommand' ||
+  if (name == 'groupClassesCommand' ||
+      name == 'complianceCommand' ||
+      name == 'supportRequestCommand' ||
+      name == 'branchManagementCommand' ||
       name == 'exerciseCatalogCommand' ||
       name == 'fypDatasetCommand' ||
       name == 'fypDatasetSessionCommand') {

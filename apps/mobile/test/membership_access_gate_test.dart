@@ -38,6 +38,35 @@ class _Access implements MembershipAccessRepository {
 }
 
 void main() {
+  testWidgets('game results survive sharing and recheck on new entry',
+      (tester) async {
+    final repo = _Access();
+    Widget game(String id) => MaterialApp(
+          home: MembershipAccessGate(
+            enabled: true,
+            repository: repo,
+            preserveAdmittedRoute: true,
+            feature: MembershipAccessFeature.miniGame,
+            resourceId: id,
+            child: const Text('Finished game result'),
+          ),
+        );
+    await tester.pumpWidget(game('move-catch-v1'));
+    await tester.pumpAndSettle();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(find.text('Finished game result'), findsOneWidget);
+    expect(repo.reads, 1);
+
+    repo.outcome = 'denied';
+    await tester.pumpWidget(game('reach-tap-v1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Finished game result'), findsNothing);
+    expect(repo.reads, 2);
+  });
+
   testWidgets('locked preview is only used for verified Free denial',
       (tester) async {
     for (final outcome in ['allowed', 'denied', 'unknown', 'legacy']) {

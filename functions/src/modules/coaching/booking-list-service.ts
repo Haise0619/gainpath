@@ -25,8 +25,9 @@ export interface PersistedBookingRecord extends Partial<SelectedPaymentMetadata>
   paymentStatus?: 'pending' | 'cleared';
   refundStatus?: 'approved' | 'rejected' | 'processing' | 'uncertain' | 'completed' | 'failed';
   refundReviewRequired?: boolean;
+  refundUnavailable?: boolean;
 }
-export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
+export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor; omittedInvalidRecords?: number }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
 function after(a: BookingCursor, b: BookingCursor) { return a.startAtMillis > b.startAtMillis || (a.startAtMillis === b.startAtMillis && a.bookingId > b.bookingId); }
 function project(row: { path: string; data: DocumentData }, q: BookingQuery, includeCancellationDetails = false, includeMemberChangeDetails = false): PersistedBookingRecord {
@@ -36,8 +37,8 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
       || (q.branchIds && !q.branchIds.includes(d.branchId)) || d.startAtMillis < q.firstStartAtMillis || d.startAtMillis >= q.throughStartAtMillis) throw review();
     const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: d.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
     const { createdBy: _private, ...publicData } = d;
-    if (d.status === 'cancelled' && ((d.resolution === 'coach_cancelled' && !includeCancellationDetails)
-      || (d.resolution === 'member_confirmed_cancelled' && !includeMemberChangeDetails))) {
+    if (d.status === 'refunded' || (d.status === 'cancelled' && ((d.resolution === 'coach_cancelled' && !includeCancellationDetails)
+      || (d.resolution === 'member_confirmed_cancelled' && !includeMemberChangeDetails)))) {
       delete (publicData as any).resolution;
       delete (publicData as any).resolvedAtMillis;
       delete (publicData as any).cancellationReason;
@@ -49,7 +50,8 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails','includeSelectedPaymentMethod']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails','includeSelectedPaymentMethod','allowPartialResults']);
+  if (input.allowPartialResults !== undefined && typeof input.allowPartialResults !== "boolean") throw new InputValidationError("Invalid partial results flag.");
   if(input.includeSelectedPaymentMethod!==undefined&&typeof input.includeSelectedPaymentMethod!=='boolean')throw new InputValidationError('Invalid payment method projection.');
   if (input.includePaymentDetails !== undefined && typeof input.includePaymentDetails !== 'boolean') throw new InputValidationError('includePaymentDetails must be a boolean.');
   if (input.includeMemberChangeDetails !== undefined && typeof input.includeMemberChangeDetails !== 'boolean') throw new InputValidationError('includeMemberChangeDetails must be a boolean.');
@@ -107,14 +109,32 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   if (JSON.stringify(before) !== JSON.stringify(current)) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
   if (!Array.isArray(rows) || rows.length > 21) throw review();
   const includeCancellationDetails = input.includeCancellationDetails === true;
-  const projected = rows.map(r => project(r, q, includeCancellationDetails, input.includeMemberChangeDetails === true));
+  const allowPartial = input.allowPartialResults === true && before.role === 'member';
   const ids = new Set<string>();
-  let previous = cursor;
-  for (const r of projected) {
-    if (ids.has(r.bookingId) || (previous && !after(r, previous))) throw review();
-    ids.add(r.bookingId); previous = r;
+  const records: PersistedBookingRecord[] = [];
+  let previous = cursor, last: BookingCursor | undefined;
+  let omittedInvalidRecords = 0;
+  for (const [index, row] of rows.entries()) {
+    const { bookingId, startAtMillis } = row.data;
+    if (typeof bookingId !== 'string' || typeof startAtMillis !== 'number' ||
+        !Number.isSafeInteger(startAtMillis) || startAtMillis % SLOT ||
+        row.path !== `orgs/${org}/bookings/${bookingId}` ||
+        row.data.organizationId !== org || row.data[q.ownerField] !== q.ownerId ||
+        startAtMillis < q.firstStartAtMillis || startAtMillis >= q.throughStartAtMillis ||
+        (q.branchIds && !q.branchIds.includes(String(row.data.branchId)))) throw review();
+    const key = { startAtMillis, bookingId: requiredIdentifier(bookingId, 'bookingId') };
+    if (ids.has(bookingId) || (previous && !after(key, previous))) throw review();
+    ids.add(bookingId);
+    previous = key;
+    if (index < 20) last = key;
+    try {
+      const record = project(row, q, includeCancellationDetails, input.includeMemberChangeDetails === true);
+      if (index < 20) records.push(record);
+    } catch (error) {
+      if (!allowPartial || !(error instanceof DomainError) || error.code !== 'failed-precondition') throw error;
+      if (index < 20) omittedInvalidRecords++;
+    }
   }
-  const records = projected.slice(0, 20), last = records.at(-1);
   // Related names and transaction fees; private contact/account fields never enter the projection.
   await store.transact(async tx => {
     if (JSON.stringify(before) !== JSON.stringify(await scope(tx))) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
@@ -129,7 +149,8 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
       const name = member?.organizationId === org ? member.displayName : undefined;
       if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
       const payment = values[memberIds.length + i];
-      if(input.includeSelectedPaymentMethod===true&&payment?.schemaVersion===1&&payment.environment==='sandbox'&&['billplz','xendit'].includes(String(payment.provider))&&payment.organizationId===org&&payment.bookingId===record.bookingId&&payment.memberId===record.memberId&&payment.coachId===record.coachId&&payment.branchId===record.branchId)Object.assign(record,selectedPaymentProjection(payment));
+      if (input.allowPartialResults !== undefined && typeof input.allowPartialResults !== "boolean") throw new InputValidationError("Invalid partial results flag.");
+  if(input.includeSelectedPaymentMethod===true&&payment?.schemaVersion===1&&payment.environment==='sandbox'&&['billplz','xendit'].includes(String(payment.provider))&&payment.organizationId===org&&payment.bookingId===record.bookingId&&payment.memberId===record.memberId&&payment.coachId===record.coachId&&payment.branchId===record.branchId)Object.assign(record,selectedPaymentProjection(payment));
       if (payment && Number.isSafeInteger(payment.amountMinor) && Number(payment.amountMinor) >= 0) record.feeMinor = Number(payment.amountMinor);
       if (input.includePaymentDetails === true && payment?.schemaVersion === 1
           && payment.organizationId === org && payment.bookingId === record.bookingId
@@ -137,6 +158,9 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
           && ['pending', 'cleared'].includes(String(payment.paymentStatus))) {
         record.paymentStatus = payment.paymentStatus as 'pending' | 'cleared';
         if (payment.paymentStatus === 'cleared') {
+          if (allowPartial && payment.provider === 'xendit' &&
+              payment.refundStatus === 'failed' && payment.refundFailureCode === 'REFUND_NOT_SUPPORTED')
+            record.refundUnavailable = true;
           if (payment.fulfilmentStatus === 'reconciliation_required' && payment.refundReviewRequired === true) record.refundReviewRequired = true;
           if (['approved', 'rejected', 'processing', 'uncertain', 'completed', 'failed'].includes(String(payment.refundStatus)))
             record.refundStatus = payment.refundStatus as PersistedBookingRecord['refundStatus'];
@@ -148,5 +172,6 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
     });
   });
   return { schemaVersion: 1, serverNowMillis, timeZone: before.policy.timeZone, firstLocalDate, throughLocalDate, records,
-    ...(projected.length > 20 && last ? { nextCursor: { startAtMillis: last.startAtMillis, bookingId: last.bookingId } } : {}) };
+    ...(rows.length > 20 && last ? { nextCursor: last } : {}),
+    ...(omittedInvalidRecords ? { omittedInvalidRecords } : {}) };
 }

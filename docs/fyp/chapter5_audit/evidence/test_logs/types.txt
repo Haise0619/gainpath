@@ -1,0 +1,8 @@
+Run: types
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:44.6972106Z
+Ended UTC: 2026-11-25T14:44:23.1478543Z
+Duration seconds (wall-clock): 38.45
+Child process exit code: 0
+See diagnostic summary.
+

@@ -57,7 +57,7 @@ class HistoryBookings implements BookingListRepository {
 
 void main() {
   testWidgets(
-      'history categories stay on one horizontally scrollable row at large text',
+      'history filter button and modal bottom sheet work at 320 width and scale 2',
       (tester) async {
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
@@ -72,23 +72,17 @@ void main() {
         LiveBookingListView(repository: repo, isCurrent: () => true),
         scale: 2));
     await tester.pumpAndSettle();
-    final row = find.byKey(const ValueKey('booking-history-filters'));
-    expect(row, findsOneWidget);
-    expect(tester.widget<SingleChildScrollView>(row).scrollDirection,
-        Axis.horizontal);
-    final y = tester.getTopLeft(find.byKey(const ValueKey('filter_all'))).dy;
-    for (final key in [
-      'filter_past',
-      'filter_expired',
-      'filter_completed',
-      'filter_cancelled'
-    ]) {
-      expect(tester.getTopLeft(find.byKey(ValueKey(key))).dy, y);
-    }
-    await tester.drag(row, const Offset(-280, 0));
+    final filterButton = find.byKey(const ValueKey('booking-filter-button'));
+    expect(filterButton, findsOneWidget);
+    await tester.tap(filterButton);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('filter_expired')));
-    await tester.tap(find.byKey(const ValueKey('filter_expired')));
+    final filterExpired = find.byKey(const ValueKey('filter_expired'));
+    await tester.ensureVisible(filterExpired);
+    await tester.tap(filterExpired);
+    await tester.pumpAndSettle();
+    final applyBtn = find.text('Apply Filters');
+    await tester.ensureVisible(applyBtn);
+    await tester.tap(applyBtn);
     await tester.pumpAndSettle();
     expect(find.text('Expired'), findsWidgets);
     expect(find.text('Session ended'), findsNothing);

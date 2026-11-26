@@ -1,7 +1,7 @@
 import type { DocumentData, TransactionPort } from '../../platform/firestore/store';
 import { DomainError } from '../../platform/errors';
 import { keyOf } from '../../platform/idempotency';
-import { resolveMembershipEntitlement } from './membership-entitlement';
+import { isSupportedMembershipReceiptProvider, resolveMembershipEntitlement } from './membership-entitlement';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const CYCLE = 30 * 86400000;
@@ -32,7 +32,7 @@ export function premiumCoachVoucherPolicy(d: DocumentData | undefined) {
 }
 function clearedPremium(p: DocumentData | undefined, org: string, uid: string, paymentId: string): p is DocumentData {
   return !!p && p.schemaVersion === 1 && p.organizationId === org && p.memberId === uid && p.transactionId === paymentId
-    && ['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind)) && p.environment === 'sandbox' && p.provider === 'billplz'
+    && ['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind)) && p.environment === 'sandbox' && isSupportedMembershipReceiptProvider(p.provider)
     && p.currency === 'MYR' && p.planId === 'premium' && p.durationDays === 30 && p.paymentStatus === 'cleared'
     && ['confirmed','reconciliation_required'].includes(String(p.fulfilmentStatus)) && id(p.billId) && id(p.collectionId) && Number.isSafeInteger(p.amountMinor)
     && Number(p.amountMinor) > 0 && validTime(p.clearedAtMillis) && validTime(p.expiresAtMillis)

@@ -1,0 +1,9 @@
+Run: gainpath_ui-retry
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:44:21.8158127Z
+Ended UTC: 2026-11-25T14:44:22.1003601Z
+Duration seconds (wall-clock): 0.28
+Child process exit code: -1073741816
+See diagnostic summary.
+Flutter failed to write to a file at "C:/flutter/bin/cache/libimobiledevice.stamp". The flutter tool cannot access the file or directory.
+

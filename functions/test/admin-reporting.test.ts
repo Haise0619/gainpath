@@ -36,9 +36,14 @@ it('schema 2 includes confirmed Xendit coaching and counts uncertain attempts on
   expect(r.receipts).toMatchObject({ confirmedCount: 2, membershipMinor: 8900, coachingMinor: 10000 });
   expect(r.commerce?.membership.coaching).toMatchObject({ confirmedCount: 1, confirmedMinor: 10000,
     statuses: { pending: 1, cleared: 1 } });
-  rows.transactions = [payment('membership', { provider: 'xendit' })];
+  rows.transactions = [
+    payment('membership', { provider: 'xendit', createdAtMillis: start + 100 }),
+    payment('pending-membership', { provider: 'xendit', createdAtMillis: start + 200,
+      paymentStatus: 'pending', billId: undefined }),
+  ];
   await expect(adminReport(store, auth, { ...input, schemaVersion: 2 }, reader, () => now))
-    .rejects.toMatchObject({ code: 'failed-precondition' });
+    .resolves.toMatchObject({ receipts: { membershipMinor: 8900, confirmedCount: 1, coachingMinor: 0 },
+      commerce: { membership: { plans: [{ statuses: { pending: 1, cleared: 1 } }] } } });
 });
 it('Malaysia instants are start-inclusive and end-exclusive; pending never earns',async()=>{
   rows.transactions=[payment('a',{clearedAtMillis:start-1}),payment('b',{clearedAtMillis:start}),payment('c',{clearedAtMillis:end}),payment('d',{paymentStatus:'pending'})];
@@ -48,6 +53,34 @@ it('bookings are created-in-window counts and scheduled starts are separate',asy
   rows.bookings=[{id:'a',data:{schemaVersion:1,organizationId:'gainpath',bookingId:'a',status:'confirmed',createdAtMillis:start,startAtMillis:end+1000}},
     {id:'b',data:{schemaVersion:1,organizationId:'gainpath',bookingId:'b',status:'completed',createdAtMillis:start-1000,startAtMillis:start+1000}}];
   const r=await run();expect(r.bookings.created).toBe(1);expect(r.bookings.scheduledStarts).toBe(1);expect(r.bookings.statuses.confirmed).toBe(1);expect(r.bookings.statuses.completed).toBe(0);
+});
+it('batches consultation and review reads while keeping confirmed activity totals', async () => {
+  const consultationReads: number[] = [];
+  const observedStore = {
+    transact: <T>(work: Parameters<MemoryStore['transact']>[0]) =>
+      store.transact(tx => work({
+        ...tx,
+        getAll: paths => {
+          const current = paths.filter(path => path.includes('/consultation/') || path.includes('/review/'));
+          if (current.length) consultationReads.push(current.length);
+          return Promise.all(paths.map(path => tx.get(path)));
+        },
+      })) as Promise<T>,
+  };
+  const coachId = 'coach', memberId = 'member';
+  rows.bookings = Array.from({length: 55}, (_, i) => {
+    const id = 'b' + String(i).padStart(2, '0');
+    const booking = {schemaVersion: 1, organizationId: 'gainpath', bookingId: id, memberId, coachId,
+      status: 'completed', createdAtMillis: start + 1000, startAtMillis: start + 2000, endAtMillis: start + 4000};
+    const root = `orgs/gainpath/bookings/${id}`;
+    store.documents.set(root + '/consultation/current', {...booking, publishedAtMillis: start+5000, text: 'Fixture'});
+    store.documents.set(root + '/review/current', {...booking, reviewedAtMillis: start+6000, stars: 4});
+    return {id, data: booking};
+  });
+  const report = await adminReport(observedStore, auth, {...input, schemaVersion: 2}, reader, () => now);
+  expect(consultationReads).toEqual([100, 10]);
+  expect(report.bookings.created).toBe(55);
+  expect(report.commerce?.coaches[0]).toMatchObject({coachId, consultations: 55, reviewCount: 55, ratingSum: 220});
 });
 it('rejects Member/staff/unverified/foreign scopes before scans',async()=>{
   for(const role of ['member','staff','coach']){store.documents.set('orgs/gainpath/members/admin',{organizationId:'gainpath',role,status:'active',branchIds:[]});await expect(run()).rejects.toMatchObject({code:'permission-denied'});}

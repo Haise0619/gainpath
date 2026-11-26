@@ -46,7 +46,15 @@ class PaymentsScreenState extends State<PaymentsScreen> {
   PaymentsMode? _overrideMode;
   PaymentsMode get _mode => _overrideMode ?? widget.mode;
   PaymentReviewPage? _page;
-  PaymentReviewDetail? _selected;
+  PaymentReviewDetail? _reviewDetail;
+  PaymentReviewDetail? _quickDrawerDetail;
+
+  PaymentReviewDetail? get _selected => _reviewDetail ?? _quickDrawerDetail;
+
+  bool _shouldOpenReviewPage(PaymentReviewRecord r) {
+    return r.canDecide || r.isPendingRefundReview || r.canCloseRefund || r.isRefundCase;
+  }
+
   String? _error;
   bool _loading = false;
   bool _processing = false;
@@ -59,10 +67,18 @@ class PaymentsScreenState extends State<PaymentsScreen> {
 
   bool get _current => widget.isCurrent?.call() ?? !widget.live;
 
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -95,22 +111,23 @@ class PaymentsScreenState extends State<PaymentsScreen> {
           _loading = false;
         });
         if (widget.initialBookingId != null && _selected == null) {
-          final match = page.records
-              .where((r) => r.id == widget.initialBookingId)
-              .firstOrNull;
-          if (match != null) {
-            _open(match);
-          }
+          await _openId(widget.initialBookingId!);
         }
       }
     } catch (e) {
-      if (_valid(generation)) setState(() => _error = _message(e));
+      if (_valid(generation)) {
+        setState(() =>
+            _error = 'Could not load the payments list. Refresh to try again.');
+      }
     } finally {
       if (_valid(generation)) setState(() => _loading = false);
     }
   }
 
-  Future<void> _open(PaymentReviewRecord record) async {
+  Future<void> _open(PaymentReviewRecord record, {bool? forReview}) =>
+      _openId(record.id, forReview: forReview);
+
+  Future<void> _openId(String id, {bool? forReview}) async {
     if (_processing || _loading || !_current) return;
     final generation = ++_generation;
     setState(() {
@@ -119,8 +136,20 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       _showAllEvents = false;
     });
     try {
-      final detail = await _repository!.detail(record.id);
-      if (_valid(generation)) setState(() => _selected = detail);
+      final detail = await _repository!.detail(id);
+      if (_valid(generation)) {
+        final shouldReview = forReview ??
+            (_mode == PaymentsMode.refunds && _shouldOpenReviewPage(detail.payment));
+        setState(() {
+          if (shouldReview) {
+            _reviewDetail = detail;
+            _quickDrawerDetail = null;
+          } else {
+            _quickDrawerDetail = detail;
+            _reviewDetail = null;
+          }
+        });
+      }
     } catch (e) {
       if (_valid(generation)) setState(() => _error = _message(e));
     } finally {
@@ -135,6 +164,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
   void _switchMode(PaymentsMode newMode) {
     setState(() {
       _overrideMode = newMode;
+      _error = null;
       _filter = 'All';
     });
     widget.onNavigateMode?.call(newMode);
@@ -167,9 +197,22 @@ class PaymentsScreenState extends State<PaymentsScreen> {
           billId: action == 'recover_bill' ? values.$2 : null,
           refundOrderId: action == 'recover_refund' ? values.$2 : null);
       if (!_valid(generation)) return;
-      setState(() => _selected = detail);
-      final page = await _repository.load(afterId: _cursors[_pageIndex]);
-      if (_valid(generation)) setState(() => _page = page);
+      setState(() {
+        if (_reviewDetail != null) {
+          _reviewDetail = detail;
+        } else {
+          _quickDrawerDetail = detail;
+        }
+      });
+      try {
+        final page = await _repository.load(afterId: _cursors[_pageIndex]);
+        if (_valid(generation)) setState(() => _page = page);
+      } catch (_) {
+        if (_valid(generation)) {
+          setState(() => _error =
+              'The payment details were updated. Refresh to reload the payments list.');
+        }
+      }
     } catch (e) {
       if (_valid(generation)) setState(() => _error = _message(e));
     } finally {
@@ -186,27 +229,60 @@ class PaymentsScreenState extends State<PaymentsScreen> {
               child: Text('Payment review requires a current Admin session.')));
     }
     return Scaffold(
-        backgroundColor: Colors.transparent,
-        body: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                    constraints.maxWidth < 600 ? 16 : 28,
-                    20,
-                    constraints.maxWidth < 600 ? 16 : 28,
-                    40),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _header(context),
-                      ..._feedback(),
-                      const SizedBox(height: 14),
-                      if (constraints.maxWidth >= 1200 && _selected != null)
-                        _masterDetailLayout(context, constraints)
-                      else if (_selected != null)
-                        ..._detail(context, _selected!)
-                      else
-                        ..._list(context, constraints),
-                    ]))));
+      backgroundColor: Colors.transparent,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          if (_reviewDetail != null) {
+            return _buildDedicatedReviewPage(
+                context, constraints, _reviewDetail!);
+          }
+
+          final mainList = SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                constraints.maxWidth < 600 ? 16 : 28,
+                20,
+                constraints.maxWidth < 600 ? 16 : 28,
+                40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _header(context),
+                ..._feedback(),
+                const SizedBox(height: 14),
+                ..._list(context, constraints),
+              ],
+            ),
+          );
+
+          if (_quickDrawerDetail != null) {
+            return Stack(
+              children: [
+                mainList,
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _quickDrawerDetail = null),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.35),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width:
+                      constraints.maxWidth < 600 ? constraints.maxWidth : 540,
+                  child: _buildQuickDrawer(
+                      context, constraints, _quickDrawerDetail!),
+                ),
+              ],
+            );
+          }
+
+          return mainList;
+        },
+      ),
+    );
   }
 
   Widget _header(BuildContext context) {
@@ -225,11 +301,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     };
 
     final records = _page?.records ?? [];
-    final pendingRefunds = records
-        .where((r) =>
-            r.text('refundStatus') == 'pending_review' ||
-            (r.needsReview && r.text('paymentStatus') == 'cleared'))
-        .length;
+    final pendingRefunds = records.where((r) => r.isPendingRefundReview).length;
     final reconciliationCount = records.where((r) => r.needsReview).length;
 
     return Column(
@@ -413,8 +485,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
         }
       } else if (_mode == PaymentsMode.refunds) {
         if (_filter == 'Pending Review') {
-          return r.text('refundStatus') == 'pending_review' ||
-              (r.needsReview && r.text('paymentStatus') == 'cleared');
+          return r.isPendingRefundReview;
         }
         if (_filter == 'Approved') return r.text('refundStatus') == 'approved';
         if (_filter == 'Processing / Completed') {
@@ -481,11 +552,8 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     final pendingCheckoutCount =
         records.where((r) => r.text('paymentStatus') == 'pending').length;
     final reconciliationCount = records.where((r) => r.needsReview).length;
-    final pendingRefundsCount = records
-        .where((r) =>
-            r.text('refundStatus') == 'pending_review' ||
-            (r.needsReview && r.text('paymentStatus') == 'cleared'))
-        .length;
+    final pendingRefundsCount =
+        records.where((r) => r.isPendingRefundReview).length;
     final approvedRefundsCount =
         records.where((r) => r.text('refundStatus') == 'approved').length;
     final completedRefundsCount =
@@ -632,6 +700,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
+            controller: _searchController,
             onChanged: (value) => setState(() => _query = value),
             decoration: const InputDecoration(
                 labelText: 'Search records',
@@ -710,7 +779,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                           color: AppColors.inkSoft)),
                 ),
                 SizedBox(
-                  width: 90,
+                  width: 160,
                   child: Text('Action',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -734,8 +803,13 @@ class PaymentsScreenState extends State<PaymentsScreen> {
 
   Widget _tableRow(BuildContext context, PaymentReviewRecord r) {
     final isSelected = _selected?.payment.id == r.id;
+    final isReviewable =
+        r.canDecide || r.isPendingRefundReview || r.canCloseRefund;
     return InkWell(
-      onTap: _loading || _processing ? null : () => _open(r),
+      onTap: _loading || _processing
+          ? null
+          : () => _open(r,
+              forReview: _mode == PaymentsMode.refunds ? isReviewable : false),
       child: Container(
         color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : null,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -849,22 +923,76 @@ class PaymentsScreenState extends State<PaymentsScreen> {
             ),
             // Action
             SizedBox(
-              width: 90,
-              child: OutlinedButton(
-                onPressed: _loading || _processing ? null : () => _open(r),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  minimumSize: const Size(0, 32),
-                ),
-                child: Text(
-                  _mode == PaymentsMode.refunds
-                      ? 'Review'
-                      : _mode == PaymentsMode.reconciliation
-                          ? 'Investigate'
-                          : 'View',
-                  style: const TextStyle(fontSize: 11.5),
-                ),
+              width: 160,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (_mode == PaymentsMode.refunds) ...[
+                    if (isReviewable) ...[
+                      OutlinedButton(
+                        onPressed: _loading || _processing
+                            ? null
+                            : () => _open(r, forReview: true),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          minimumSize: const Size(0, 30),
+                          side: const BorderSide(color: AppColors.primary),
+                        ),
+                        child: const Text('Review',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary)),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.visibility_outlined, size: 16),
+                        tooltip: 'Quick preview',
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(26, 26),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        constraints: const BoxConstraints(
+                            minWidth: 26, minHeight: 26),
+                        onPressed: _loading || _processing
+                            ? null
+                            : () => _open(r, forReview: false),
+                      ),
+                    ] else ...[
+                      OutlinedButton(
+                        onPressed: _loading || _processing
+                            ? null
+                            : () => _open(r, forReview: false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          minimumSize: const Size(0, 30),
+                        ),
+                        child: const Text('View Details',
+                            style: TextStyle(fontSize: 11.5)),
+                      ),
+                    ],
+                  ] else ...[
+                    OutlinedButton(
+                      onPressed:
+                          _loading || _processing ? null : () => _open(r),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: const Size(0, 32),
+                      ),
+                      child: Text(
+                        _mode == PaymentsMode.reconciliation
+                            ? 'Investigate'
+                            : 'View',
+                        style: const TextStyle(fontSize: 11.5),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -881,7 +1009,14 @@ class PaymentsScreenState extends State<PaymentsScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Panel(
-              onTap: _loading || _processing ? null : () => _open(record),
+              onTap: _loading || _processing
+                  ? null
+                  : () => _open(record,
+                      forReview: _mode == PaymentsMode.refunds
+                          ? (record.canDecide ||
+                              record.isPendingRefundReview ||
+                              record.canCloseRefund)
+                          : false),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -989,6 +1124,76 @@ class PaymentsScreenState extends State<PaymentsScreen> {
                       _badge(record.refundLifecycleLabel!, AppColors.danger,
                           AppColors.dangerTint),
                   ]),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (_mode == PaymentsMode.refunds) ...[
+                        if (record.canDecide ||
+                            record.isPendingRefundReview ||
+                            record.canCloseRefund) ...[
+                          OutlinedButton(
+                            onPressed: _loading || _processing
+                                ? null
+                                : () => _open(record, forReview: true),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              minimumSize: const Size(0, 30),
+                              side: const BorderSide(color: AppColors.primary),
+                            ),
+                            child: const Text('Review',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primary)),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            icon: const Icon(Icons.visibility_outlined,
+                                size: 16),
+                            tooltip: 'Quick preview',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                            onPressed: _loading || _processing
+                                ? null
+                                : () => _open(record, forReview: false),
+                          ),
+                        ] else ...[
+                          OutlinedButton(
+                            onPressed: _loading || _processing
+                                ? null
+                                : () => _open(record, forReview: false),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              minimumSize: const Size(0, 30),
+                            ),
+                            child: const Text('View Details',
+                                style: TextStyle(fontSize: 11)),
+                          ),
+                        ],
+                      ] else ...[
+                        OutlinedButton(
+                          onPressed: _loading || _processing
+                              ? null
+                              : () => _open(record),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            minimumSize: const Size(0, 30),
+                          ),
+                          child: Text(
+                            _mode == PaymentsMode.reconciliation
+                                ? 'Investigate'
+                                : 'View',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1030,341 +1235,1108 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  Widget _masterDetailLayout(BuildContext context, BoxConstraints constraints) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 6,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _list(context, constraints),
-          ),
-        ),
-        const SizedBox(width: 18),
-        Expanded(
-          flex: 5,
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.hairline),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
+  Widget _buildDedicatedReviewPage(BuildContext context,
+      BoxConstraints constraints, PaymentReviewDetail detail) {
+    final r = detail.payment;
+    final isDesktop = constraints.maxWidth >= 1024;
+    final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 28.0;
+
+    return SingleChildScrollView(
+      padding:
+          EdgeInsets.fromLTRB(horizontalPadding, 20, horizontalPadding, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildBreadcrumbHeader(r),
+          ..._feedback(),
+          const SizedBox(height: 16),
+          _buildCrossNavigationBanner(r),
+          const SizedBox(height: 14),
+          _buildRefundSummaryCard(r),
+          const SizedBox(height: 14),
+          _buildStatusHierarchyCard(r, detail),
+          const SizedBox(height: 16),
+          if (isDesktop) ...[
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Financial Detail',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => setState(() => _selected = null),
-                      tooltip: 'Close details',
-                    ),
-                  ],
+                // Main column ~65%
+                Expanded(
+                  flex: 65,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildRefundRequestCard(r),
+                      const SizedBox(height: 16),
+                      _buildOriginalPaymentCard(r),
+                      const SizedBox(height: 16),
+                      _buildContextCard(r),
+                      const SizedBox(height: 16),
+                      _buildAuditHistoryCard(detail),
+                    ],
+                  ),
                 ),
-                const Divider(height: 20),
-                ..._detailContent(context, _selected!),
+                const SizedBox(width: 20),
+                // Side column ~35%
+                Expanded(
+                  flex: 35,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildReviewActionsCard(r, detail),
+                      const SizedBox(height: 16),
+                      _buildTechnicalDetailsCard(r, detail),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-        ),
-      ],
+          ] else ...[
+            // Single-column layout for mobile / tablet < 1024
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildReviewActionsCard(r, detail),
+                const SizedBox(height: 16),
+                _buildRefundRequestCard(r),
+                const SizedBox(height: 16),
+                _buildOriginalPaymentCard(r),
+                const SizedBox(height: 16),
+                _buildContextCard(r),
+                const SizedBox(height: 16),
+                _buildTechnicalDetailsCard(r, detail),
+                const SizedBox(height: 16),
+                _buildAuditHistoryCard(detail),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  List<Widget> _detail(BuildContext context, PaymentReviewDetail detail) {
-    final r = detail.payment;
+  Widget _buildBreadcrumbHeader(PaymentReviewRecord r) {
     final backLabel = switch (_mode) {
       PaymentsMode.transactions => 'Transactions',
       PaymentsMode.refunds => 'Refund Requests',
       PaymentsMode.reconciliation => 'Reconciliation',
     };
 
-    return [
-      Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-        TextButton.icon(
-            onPressed: _processing || _loading
-                ? null
-                : () => setState(() {
-                      _selected = null;
-                      _error = null;
-                    }),
-            icon: const Icon(Icons.arrow_back_rounded, size: 16),
-            label: Text('Back to $backLabel')),
-        const SizedBox(width: 8),
-        Text('· ${r.businessTitle} (${r.id})',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-      ]),
-      const SizedBox(height: 14),
-      ..._detailContent(context, detail),
-      const SizedBox(height: 16),
-      OutlinedButton.icon(
-          onPressed: _processing || _loading ? null : () => _open(r),
-          icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Refresh payment')),
-    ];
-  }
-
-  List<Widget> _detailContent(
-      BuildContext context, PaymentReviewDetail detail) {
-    final r = detail.payment;
-    final events = detail.events;
-    final visibleEvents = _showAllEvents ? events : events.take(5).toList();
-
-    return [
-      // Cross-Navigation Banner
-      _buildCrossNavigationBanner(r),
-      const SizedBox(height: 12),
-      // Summary Card
-      Panel(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.spaceBetween,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(r.businessTitle,
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 2),
-                  Wrap(
-                    spacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text('ID: ${r.id}',
-                          style: const TextStyle(
-                              color: AppColors.inkSoft, fontSize: 12)),
-                      IconButton(
-                        tooltip: 'Copy transaction ID',
-                        onPressed: () =>
-                            Clipboard.setData(ClipboardData(text: r.id)),
-                        icon: const Icon(Icons.copy_rounded, size: 16),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            TextButton.icon(
+              onPressed: _processing || _loading
+                  ? null
+                  : () => setState(() {
+                        _reviewDetail = null;
+                        _error = null;
+                      }),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: Text('Back to $backLabel'),
             ),
-            Text(r.amount,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 20)),
+            Text(
+              '· ${r.businessTitle} (${r.id})',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.inkSoft),
+            ),
           ],
         ),
-        const SizedBox(height: 10),
-        Wrap(spacing: 6, runSpacing: 4, children: [
-          _badge(
-              r.paymentLifecycleLabel,
-              r.text('paymentStatus') == 'cleared'
-                  ? const Color(0xFF2E7D32)
-                  : const Color(0xFF1565C0),
-              r.text('paymentStatus') == 'cleared'
-                  ? const Color(0xFFE8F5E9)
-                  : const Color(0xFFE3F2FD)),
-          _badge(
-              r.fulfillmentLifecycleLabel,
-              r.text('fulfilmentStatus') == 'confirmed'
-                  ? AppColors.ink
-                  : const Color(0xFFE65100),
-              r.text('fulfilmentStatus') == 'confirmed'
-                  ? AppColors.surfaceAlt
-                  : const Color(0xFFFFF3E0)),
-          if (r.refundLifecycleLabel != null)
-            _badge(r.refundLifecycleLabel!, AppColors.danger,
-                AppColors.dangerTint),
-        ]),
-        const SizedBox(height: 10),
-        Text(r.refundExplanation,
-            style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
-      ])),
-      const SizedBox(height: 16),
-      const Eyebrow('Payment details'),
-      Panel(
-          child: Column(children: [
-        DetailRow('Member ID', r.text('memberId')),
-        if (r.text('memberDisplayName').isNotEmpty)
-          DetailRow('Member', r.text('memberDisplayName')),
-        const Divider(height: 20),
-        DetailRow('Payment type',
-            r.isMembership ? r.text('kind') : 'CoachingBooking'),
-        const Divider(height: 24),
-        DetailRow(
-            'Payment provider',
-            switch (r.text('provider')) {
-              'xendit' => 'Xendit',
-              'billplz' => 'Billplz',
-              _ => 'Not recorded',
-            }),
-        if (!r.isMembership) ...[
-          const SizedBox(height: 8),
-          const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Preferred payment method')),
-          const SizedBox(height: 8),
-          PaymentMethodSummary(
-              label: r.selectedPaymentMethodLabel,
-              category: r.selectedPaymentMethod == null
-                  ? 'Legacy booking'
-                  : 'Member preference',
-              iconKey: r.selectedPaymentMethod?.choice.iconKey ?? 'unknown'),
-          if (r.selectedPaymentMethod != null) ...[
-            const SizedBox(height: 8),
-            DetailRow(
-                'Selected at', _time(r.selectedPaymentMethod!.selectedAt)),
+        OutlinedButton.icon(
+          onPressed:
+              _processing || _loading ? null : () => _open(r, forReview: true),
+          icon: const Icon(Icons.refresh_rounded, size: 15),
+          label:
+              const Text('Refresh payment', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            minimumSize: const Size(0, 32),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusHierarchyCard(
+      PaymentReviewRecord r, PaymentReviewDetail detail) {
+    final paymentStatusText = r.paymentLifecycleLabel;
+    final isPaymentCleared = r.text('paymentStatus') == 'cleared';
+    final paymentColor =
+        isPaymentCleared ? const Color(0xFF2E7D32) : const Color(0xFF1565C0);
+    final paymentBg =
+        isPaymentCleared ? const Color(0xFFE8F5E9) : const Color(0xFFE3F2FD);
+
+    final serviceStatusText = r.isMembership
+        ? (r.text('membershipStatus').isNotEmpty
+            ? _label(r.text('membershipStatus'))
+            : 'Active')
+        : r.fulfillmentLifecycleLabel;
+    final isServiceCancelled = r.text('bookingStatus') == 'cancelled' ||
+        r.text('fulfilmentStatus') != 'confirmed';
+    final serviceColor =
+        isServiceCancelled ? const Color(0xFFE65100) : const Color(0xFF2E7D32);
+    final serviceBg =
+        isServiceCancelled ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9);
+
+    final reviewStatusText = r.refundLifecycleLabel ?? 'Pending Review';
+    final isApproved = r.text('refundStatus') == 'approved';
+    final isRejected = r.text('refundStatus') == 'rejected';
+    final isCompleted = r.text('refundStatus') == 'completed';
+    final reviewColor = isCompleted
+        ? const Color(0xFF2E7D32)
+        : isApproved
+            ? AppColors.primary
+            : isRejected
+                ? AppColors.danger
+                : const Color(0xFFD32F2F);
+    final reviewBg = isCompleted
+        ? const Color(0xFFE8F5E9)
+        : isApproved
+            ? AppColors.primaryTint
+            : isRejected
+                ? AppColors.dangerTint
+                : const Color(0xFFFFEBEE);
+
+    final rawStatus = r.text('refundStatus');
+    final executionStatusText = switch (rawStatus) {
+      'completed' => 'Transferred / Succeeded',
+      'processing' => 'Submitted to Gateway',
+      'uncertain' => 'Requires Investigation',
+      'approved' => detail.refundExecutionAvailable
+          ? 'Pending Gateway Submission'
+          : 'Approved (Admin Only)',
+      'rejected' => 'Declined (No Payout)',
+      _ => 'Not Initiated',
+    };
+    final executionColor = switch (rawStatus) {
+      'completed' => const Color(0xFF2E7D32),
+      'processing' => const Color(0xFF0288D1),
+      'uncertain' => const Color(0xFFE65100),
+      'approved' => const Color(0xFFF57C00),
+      'rejected' => AppColors.inkSoft,
+      _ => AppColors.inkSoft,
+    };
+    final executionBg = switch (rawStatus) {
+      'completed' => const Color(0xFFE8F5E9),
+      'processing' => const Color(0xFFE1F5FE),
+      'uncertain' => const Color(0xFFFFF3E0),
+      'approved' => const Color(0xFFFFF3E0),
+      _ => AppColors.surfaceAlt,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.hub_outlined, size: 18, color: AppColors.primary),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Status Hierarchy Breakdown',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >= 720;
+              final isTablet = constraints.maxWidth >= 480;
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: isDesktop ? 4 : (isTablet ? 2 : 1),
+                childAspectRatio: isDesktop ? 2.2 : (isTablet ? 2.0 : 3.6),
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                children: [
+                  _statusTile('1. Original Payment', paymentStatusText,
+                      paymentColor, paymentBg, Icons.credit_card_rounded),
+                  _statusTile(
+                      r.isMembership
+                          ? '2. Membership'
+                          : '2. Booking Fulfillment',
+                      serviceStatusText,
+                      serviceColor,
+                      serviceBg,
+                      r.isMembership
+                          ? Icons.badge_outlined
+                          : Icons.event_available_rounded),
+                  _statusTile('3. Refund Review', reviewStatusText, reviewColor,
+                      reviewBg, Icons.gavel_rounded),
+                  _statusTile('4. Refund Execution', executionStatusText,
+                      executionColor, executionBg, Icons.payments_outlined),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFDE7),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFFF59D)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: Color(0xFFF57F17)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Policy Notice: Approving a refund records an administrative authorization. It does not automatically transfer funds. Fund payout occurs during the separate gateway execution phase.',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF5D4037), height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusTile(String step, String status, Color textColor, Color bgColor,
+      IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: AppColors.inkSoft),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  step,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.inkSoft),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              status,
+              style: TextStyle(
+                  color: textColor,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRefundSummaryCard(PaymentReviewRecord r) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      r.businessTitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (r.memberDisplay.isNotEmpty) ...[
+                          Text(r.memberDisplay,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5)),
+                          const Text('·',
+                              style: TextStyle(color: AppColors.hairline)),
+                        ],
+                        Text('ID: ${r.id}',
+                            style: const TextStyle(
+                                color: AppColors.inkSoft, fontSize: 12)),
+                        IconButton(
+                          tooltip: 'Copy transaction ID',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 20, minHeight: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: r.id));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('ID copied to clipboard'),
+                                duration: Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                                width: 240,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 14),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                r.amount,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _badge(
+                  r.paymentLifecycleLabel,
+                  r.text('paymentStatus') == 'cleared'
+                      ? const Color(0xFF2E7D32)
+                      : const Color(0xFF1565C0),
+                  r.text('paymentStatus') == 'cleared'
+                      ? const Color(0xFFE8F5E9)
+                      : const Color(0xFFE3F2FD)),
+              _badge(
+                  r.fulfillmentLifecycleLabel,
+                  r.text('fulfilmentStatus') == 'confirmed'
+                      ? AppColors.ink
+                      : const Color(0xFFE65100),
+                  r.text('fulfilmentStatus') == 'confirmed'
+                      ? AppColors.surfaceAlt
+                      : const Color(0xFFFFF3E0)),
+              if (r.refundLifecycleLabel != null)
+                _badge(r.refundLifecycleLabel!, AppColors.danger,
+                    AppColors.dangerTint),
+            ],
+          ),
+          if (r.refundExplanation.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(r.refundExplanation,
+                style: const TextStyle(
+                    fontSize: 12.5, color: AppColors.inkSoft)),
           ],
         ],
-        if (r.hasPremiumVoucher) ...[
-          const Divider(height: 20),
-          DetailRow('Original booking fee', r.originalAmount),
-          DetailRow('Premium voucher discount', r.voucherDiscount),
+      ),
+    );
+  }
+
+  Widget _buildRefundRequestCard(PaymentReviewRecord r) {
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Eyebrow('Refund request details'),
+          DetailRow('Claim status', r.refundLifecycleLabel ?? 'Pending Review'),
+          if (r.text('refundReason').isNotEmpty)
+            DetailRow('Member reason', r.text('refundReason'))
+          else
+            const DetailRow('Member reason', 'No reason specified by member'),
+          if (r.text('refundNotes').isNotEmpty)
+            DetailRow('Member notes', r.text('refundNotes')),
+          if (r.data['cancelledAtMillis'] != null)
+            DetailRow('Cancelled · MYT', _time(r.data['cancelledAtMillis'])),
+          if (r.text('cancellationReason').isNotEmpty)
+            DetailRow('Cancellation reason', r.text('cancellationReason')),
+          if (r.refundClosed)
+            DetailRow('Closure reason', r.text('refundClosureReason')),
+          if (r.text('refundReference').isNotEmpty)
+            DetailRow('Refund reference', r.text('refundReference')),
+          if (r.text('reviewReason').isNotEmpty)
+            DetailRow('Review note', r.text('reviewReason')),
+          if (r.text('resolutionReason').isNotEmpty)
+            DetailRow('Resolution reason', r.text('resolutionReason')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOriginalPaymentCard(PaymentReviewRecord r) {
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Eyebrow('Original payment details'),
+          DetailRow('Payment status', r.paymentLifecycleLabel),
           DetailRow(
               r.text('paymentStatus') == 'cleared'
                   ? 'Amount collected'
                   : 'Checkout amount',
               r.amount),
-          DetailRow('Voucher finance', r.voucherFinanceReference),
-          const SizedBox(height: 4),
-          const Text(
-              'Refund review uses the amount collected. Voucher reinstatement is unavailable.',
-              style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
-        ],
-        const Divider(height: 20),
-        Eyebrow(r.isMembership ? 'Membership' : 'Booking'),
-        DetailRow(r.isMembership ? 'Membership plan' : 'Booked session',
-            r.isMembership ? r.text('planName') : r.sessionSchedule),
-        if (r.text('bookingStatus').isNotEmpty)
-          DetailRow('Booking status', _label(r.text('bookingStatus'))),
-        if (r.text('cancellationReason').isNotEmpty)
-          DetailRow('Cancellation reason', r.text('cancellationReason')),
-        if (r.data['cancelledAtMillis'] != null)
-          DetailRow('Cancelled · MYT', _time(r.data['cancelledAtMillis'])),
-        if (!r.isMembership)
-          DetailRow('Coach / branch',
-              '${r.text('coachName')} / ${r.text('branchName')}'),
-        const Divider(height: 20),
-        const Eyebrow('Timeline & references'),
-        DetailRow('Transaction created · MYT', r.formattedDate),
-        if (r.data['paymentConfirmedAtMillis'] != null)
-          DetailRow('Payment confirmed · MYT',
-              _time(r.data['paymentConfirmedAtMillis'])),
-        DetailRow('Last updated · MYT', _time(r.data['updatedAtMillis'])),
-        if (r.data['reviewedAtMillis'] != null)
-          DetailRow('Admin decision', _time(r.data['reviewedAtMillis'])),
-        if (r.data['refundReservedAtMillis'] != null)
+          DetailRow('Payment type',
+              r.isMembership ? r.text('kind') : 'CoachingBooking'),
           DetailRow(
-              'Refund attempted', _time(r.data['refundReservedAtMillis'])),
-        if (r.text('refundReference').isNotEmpty)
-          DetailRow('Refund reference', r.text('refundReference')),
-        if (r.text('refundProviderStatus').isNotEmpty)
-          DetailRow('Provider status', r.text('refundProviderStatus')),
-        const Divider(height: 20),
-        if (r.isMembership) DetailRow('Scope', 'Organization-wide'),
-        if (r.text('refundReason').isNotEmpty)
-          DetailRow('Member reason', r.text('refundReason')),
-        if (r.text('refundNotes').isNotEmpty)
-          DetailRow('Member notes', r.text('refundNotes')),
-        const Divider(height: 20),
-        DetailRow('Provider reference',
-            r.text('billId').isEmpty ? 'Not recorded' : r.text('billId')),
-        if (r.text('refundOrderId').isNotEmpty)
-          DetailRow('Payment Order ID', r.text('refundOrderId')),
-        const Divider(height: 20),
-        DetailRow(
-            'Resolution reason',
-            r.text('resolutionReason').isEmpty
-                ? 'None recorded'
-                : r.text('resolutionReason')),
-        if (r.text('reviewReason').isNotEmpty) ...[
-          const Divider(height: 20),
-          DetailRow('Review note', r.text('reviewReason'))
+              'Payment provider',
+              switch (r.text('provider')) {
+                'xendit' => 'Xendit',
+                'billplz' => 'Billplz',
+                _ => 'Not recorded',
+              }),
+          DetailRow('Provider reference',
+              r.text('billId').isEmpty ? 'Not recorded' : r.text('billId')),
+          DetailRow('Transaction created · MYT', r.formattedDate),
+          if (r.data['paymentConfirmedAtMillis'] != null)
+            DetailRow('Payment confirmed · MYT',
+                _time(r.data['paymentConfirmedAtMillis'])),
+          if (!r.isMembership) ...[
+            const SizedBox(height: 8),
+            const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Preferred payment method',
+                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft))),
+            const SizedBox(height: 8),
+            PaymentMethodSummary(
+                label: r.selectedPaymentMethodLabel,
+                category: r.selectedPaymentMethod == null
+                    ? 'Legacy booking'
+                    : 'Member preference',
+                iconKey: r.selectedPaymentMethod?.choice.iconKey ?? 'unknown'),
+            if (r.selectedPaymentMethod != null) ...[
+              const SizedBox(height: 8),
+              DetailRow(
+                  'Selected at', _time(r.selectedPaymentMethod!.selectedAt)),
+            ],
+          ],
+          if (r.hasPremiumVoucher) ...[
+            const Divider(height: 20),
+            DetailRow('Original booking fee', r.originalAmount),
+            DetailRow('Premium voucher discount', r.voucherDiscount),
+            DetailRow('Voucher finance', r.voucherFinanceReference),
+            const SizedBox(height: 4),
+            const Text(
+                'Refund review uses the amount collected. Voucher reinstatement is unavailable.',
+                style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
+          ],
         ],
-      ])),
-      const SizedBox(height: 16),
-      // Safe Action Buttons
-      Wrap(spacing: 10, runSpacing: 10, children: [
-        if (r.text('provider') != 'xendit' && r.text('billId').isNotEmpty)
-          _button(
-              'Verify payment',
-              () => _action('verify', 'Verify payment',
-                  'Read provider status and reconcile this payment. This does not create another bill.')),
-        if (r.text('provider') != 'xendit' &&
-            r.text('billId').isEmpty &&
-            r.text('paymentStatus') == 'pending')
-          _button(
-              'Recover bill',
-              () => _action('recover_bill', 'Recover bill',
-                  'Attach an existing provider bill only after the server verifies its transaction reference, collection and amount. This never creates another bill.',
-                  reason: true, identifier: 'Provider bill ID')),
-        if (r.canDecide) ...[
-          if (r.text('refundStatus') != 'approved')
-            _button(
-                'Approve refund',
-                () => _action('approve_refund', 'Approve refund',
-                    'Record approval for this paid reconciliation case. Approval alone does not issue a refund or change membership access.',
-                    reason: true)),
-          _button(
-              'Reject refund',
-              () => _action('reject_refund', 'Reject refund',
-                  'Record rejection and its reason. The paid booking remains in reconciliation for follow-up.',
-                  reason: true)),
-        ],
-        if (r.text('refundStatus') == 'approved' &&
-            detail.refundExecutionAvailable)
-          _button(
-              'Execute sandbox refund',
-              () => _action('execute_refund', 'Execute sandbox refund',
-                  'Create a Sandbox Payment Order using dummy-bank details. This simulates a refund and never moves real money. Do not repeat while the outcome is uncertain.',
-                  reason: true)),
-        if (['processing', 'uncertain'].contains(r.text('refundStatus'))) ...[
-          if (r.text('refundOrderId').isNotEmpty)
-            _button(
-                'Check refund status',
-                () => _action('check_refund', 'Check refund status',
-                    'Read the existing Payment Order status without creating another refund.')),
-          if (r.text('refundOrderId').isEmpty)
-            _button(
-                'Recover Payment Order',
-                () => _action('recover_refund', 'Recover Payment Order',
-                    'Attach an existing Sandbox Payment Order. The server verifies the collection, refund reference, full amount and dummy destination before checking status.',
-                    reason: true, identifier: 'Provider Payment Order ID')),
-        ],
-      ]),
-      if (!detail.refundExecutionAvailable)
-        const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-                'Sandbox refund execution is not configured. Approval records a decision only.',
-                style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft))),
-      const SizedBox(height: 20),
-      // Audit Timeline
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      ),
+    );
+  }
+
+  Widget _buildContextCard(PaymentReviewRecord r) {
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Eyebrow('Payment audit history'),
-          if (events.length > 5)
-            TextButton(
-              onPressed: () => setState(() => _showAllEvents = !_showAllEvents),
-              child: Text(_showAllEvents
-                  ? 'Show recent 5'
-                  : 'View all (${events.length})'),
+          Eyebrow(r.isMembership ? 'Membership context' : 'Booking context'),
+          DetailRow(r.isMembership ? 'Membership plan' : 'Booked session',
+              r.isMembership ? r.text('planName') : r.sessionSchedule),
+          if (r.text('memberDisplayName').isNotEmpty)
+            DetailRow('Member', r.text('memberDisplayName')),
+          DetailRow('Member ID', r.text('memberId')),
+          if (!r.isMembership) ...[
+            DetailRow('Coach / branch',
+                '${r.text('coachName')} / ${r.text('branchName')}'),
+          ],
+          if (r.text('bookingStatus').isNotEmpty)
+            DetailRow('Booking status', _label(r.text('bookingStatus'))),
+          DetailRow('Scope', 'Organization-wide'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewActionsCard(
+      PaymentReviewRecord r, PaymentReviewDetail detail) {
+    final canDecide = r.canDecide;
+    final canSubmitRefund =
+        r.text('refundStatus') == 'approved' && detail.refundExecutionAvailable;
+    final isProcessingOrUncertain =
+        ['processing', 'uncertain'].contains(r.text('refundStatus'));
+    final canClose = r.canCloseRefund;
+    final hasBillplzVerify =
+        r.text('provider') != 'xendit' && r.text('billId').isNotEmpty;
+    final hasBillplzRecover = r.text('provider') != 'xendit' &&
+        r.text('billId').isEmpty &&
+        r.text('paymentStatus') == 'pending';
+    final hasAnyAction = canDecide ||
+        canSubmitRefund ||
+        isProcessingOrUncertain ||
+        canClose ||
+        hasBillplzVerify ||
+        hasBillplzRecover;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: canDecide
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : AppColors.hairline),
+        boxShadow: canDecide
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.admin_panel_settings_outlined,
+                size: 18,
+                color: canDecide ? AppColors.primary : AppColors.inkSoft,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Review Actions',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: canDecide ? AppColors.primary : AppColors.ink,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            canDecide
+                ? 'Action required: Review this refund claim and record an administrative decision.'
+                : 'Available administrative and payment recovery actions for this record.',
+            style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+          ),
+          const Divider(height: 20, color: AppColors.hairline),
+          if (!hasAnyAction) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded,
+                      size: 16, color: Color(0xFF2E7D32)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No administrative actions pending. Record status: ${r.refundLifecycleLabel ?? r.paymentLifecycleLabel}.',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.inkSoft),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            if (canDecide) ...[
+              if (r.text('refundStatus') != 'approved' ||
+                  r.text('provider') == 'xendit') ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _processing || _loading
+                        ? null
+                        : () => _action(
+                              'approve_refund',
+                              'Approve refund',
+                              r.text('provider') == 'xendit'
+                                  ? 'Approve and request a refund through Xendit. Membership or booking status changes after Xendit confirms success.'
+                                  : 'Record approval for this paid reconciliation case.',
+                              reason: true,
+                            ),
+                    icon: const Icon(Icons.check_circle_outline_rounded,
+                        size: 16),
+                    label: const Text('Approve refund'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2E7D32),
+                      side: const BorderSide(
+                          color: Color(0xFF2E7D32), width: 1.5),
+                      minimumSize: const Size(0, 42),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _processing || _loading
+                      ? null
+                      : () => _action(
+                            'reject_refund',
+                            'Reject refund',
+                            'Record rejection and its reason. The paid booking remains in reconciliation for follow-up.',
+                            reason: true,
+                          ),
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: const Text('Reject refund'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
+                    minimumSize: const Size(0, 42),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (canSubmitRefund) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _processing || _loading
+                      ? null
+                      : () => _action(
+                            'execute_refund',
+                            'Submit refund',
+                            'Submit the approved refund to the payment provider. Check its status before taking another action.',
+                            reason: true,
+                          ),
+                  icon: const Icon(Icons.send_rounded, size: 16),
+                  label: const Text('Submit refund'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary, width: 1.5),
+                    minimumSize: const Size(0, 42),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (isProcessingOrUncertain) ...[
+              if (r.text('refundOrderId').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _processing || _loading
+                          ? null
+                          : () => _action(
+                                'check_refund',
+                                'Check refund status',
+                                'Read the existing provider refund status without creating another refund.',
+                              ),
+                      icon: const Icon(Icons.sync_rounded, size: 16),
+                      label: const Text('Check refund status'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 42)),
+                    ),
+                  ),
+                ),
+              if (r.text('refundOrderId').isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _processing || _loading
+                          ? null
+                          : () => _action(
+                                'recover_refund',
+                                'Recover refund',
+                                'Attach the existing provider refund ID to verify its status and match it to the original payment.',
+                                reason: true,
+                                identifier: r.text('provider') == 'xendit'
+                                    ? 'Xendit refund ID'
+                                    : 'Provider Payment Order ID',
+                              ),
+                      icon: const Icon(Icons.build_circle_outlined, size: 16),
+                      label: const Text('Recover refund'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 42)),
+                    ),
+                  ),
+                ),
+            ],
+            if (canClose) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _processing || _loading
+                      ? null
+                      : () => _action(
+                            'close_refund',
+                            'Close refund request',
+                            'Record why this request is closed. The original payment will remain unrefunded.',
+                            reason: true,
+                          ),
+                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                  label: const Text('Close refund request'),
+                  style:
+                      OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (hasBillplzVerify) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _processing || _loading
+                      ? null
+                      : () => _action(
+                            'verify',
+                            'Verify payment',
+                            'Read provider status and reconcile this payment. This does not create another bill.',
+                          ),
+                  icon: const Icon(Icons.verified_outlined, size: 16),
+                  label: const Text('Verify payment'),
+                  style:
+                      OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (hasBillplzRecover) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _processing || _loading
+                      ? null
+                      : () => _action(
+                            'recover_bill',
+                            'Recover bill',
+                            'Attach an existing provider bill only after the server verifies its transaction reference, collection and amount. This never creates another bill.',
+                            reason: true,
+                            identifier: 'Provider bill ID',
+                          ),
+                  icon: const Icon(Icons.build_outlined, size: 16),
+                  label: const Text('Recover bill'),
+                  style:
+                      OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+          if (!detail.refundExecutionAvailable && r.text('provider') != 'xendit')
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Refund submission is unavailable for this payment.',
+                style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+              ),
             ),
         ],
       ),
-      Panel(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (events.isEmpty)
-          const Text('No payment events recorded.')
-        else
-          for (var i = 0; i < visibleEvents.length; i++)
-            _timelineEvent(visibleEvents[i], i == visibleEvents.length - 1),
-      ])),
-    ];
+    );
+  }
+
+  Widget _buildTechnicalDetailsCard(
+      PaymentReviewRecord r, PaymentReviewDetail detail) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          title: const Row(
+            children: [
+              Icon(Icons.code_rounded, size: 18, color: AppColors.inkSoft),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Technical Details',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+              ),
+            ],
+          ),
+          subtitle: const Text('Internal IDs, references, and timestamps',
+              style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            const Divider(height: 1, color: AppColors.hairline),
+            const SizedBox(height: 12),
+            _copyableTechnicalRow('Booking / Payment ID', r.id),
+            _copyableTechnicalRow('Member ID', r.text('memberId')),
+            if (r.text('billId').isNotEmpty)
+              _copyableTechnicalRow(
+                  'Provider Reference (Bill ID)', r.text('billId')),
+            if (r.text('refundOrderId').isNotEmpty)
+              _copyableTechnicalRow('Refund Order ID', r.text('refundOrderId')),
+            if (r.text('refundReference').isNotEmpty)
+              _copyableTechnicalRow('Refund Reference', r.text('refundReference')),
+            if (r.text('refundFailureCode').isNotEmpty)
+              _copyableTechnicalRow(
+                  'Failure Code', r.text('refundFailureCode')),
+            const Divider(height: 16, color: AppColors.hairline),
+            DetailRow('Transaction created', r.formattedDate),
+            if (r.data['paymentConfirmedAtMillis'] != null)
+              DetailRow('Payment confirmed',
+                  _time(r.data['paymentConfirmedAtMillis'])),
+            DetailRow('Last updated', _time(r.data['updatedAtMillis'])),
+            if (r.data['reviewedAtMillis'] != null)
+              DetailRow(
+                  'Admin decision date', _time(r.data['reviewedAtMillis'])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _copyableTechnicalRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'monospace'),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy_rounded,
+                    size: 14, color: AppColors.inkSoft),
+                tooltip: 'Copy $label',
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 24, minHeight: 24),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: value));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$label copied to clipboard'),
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                      width: 280,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAuditHistoryCard(PaymentReviewDetail detail) {
+    final events = detail.events;
+    final visibleEvents = _showAllEvents ? events : events.take(5).toList();
+
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Eyebrow('Payment audit history'),
+              if (events.length > 5)
+                TextButton(
+                  onPressed: () =>
+                      setState(() => _showAllEvents = !_showAllEvents),
+                  child: Text(_showAllEvents
+                      ? 'Show recent 5'
+                      : 'View all (${events.length})'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (events.isEmpty)
+            const Text('No payment events recorded.',
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 12))
+          else
+            for (var i = 0; i < visibleEvents.length; i++)
+              _timelineEvent(visibleEvents[i], i == visibleEvents.length - 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickDrawer(BuildContext context, BoxConstraints constraints,
+      PaymentReviewDetail detail) {
+    final r = detail.payment;
+    final isReviewable =
+        r.canDecide || r.isPendingRefundReview || r.canCloseRefund;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(-4, 0),
+          ),
+        ],
+        border: const Border(left: BorderSide(color: AppColors.hairline)),
+      ),
+      child: Column(
+        children: [
+          // Drawer Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.hairline)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _mode == PaymentsMode.refunds
+                            ? 'Refund Request Preview'
+                            : 'Financial Detail',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        r.businessTitle,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.inkSoft),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_mode == PaymentsMode.refunds || isReviewable) ...[
+                  if (constraints.maxWidth < 450)
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      tooltip: 'Open Full Review',
+                      onPressed: () {
+                        setState(() {
+                          _reviewDetail = detail;
+                          _quickDrawerDetail = null;
+                        });
+                      },
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _reviewDetail = detail;
+                          _quickDrawerDetail = null;
+                        });
+                      },
+                      icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                      label: const Text('Open Full Review',
+                          style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: const Size(0, 32),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  tooltip: 'Close details',
+                  onPressed: () => setState(() => _quickDrawerDetail = null),
+                ),
+              ],
+            ),
+          ),
+          // Drawer Body
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildCrossNavigationBanner(r),
+                  const SizedBox(height: 12),
+                  _buildStatusHierarchyCard(r, detail),
+                  const SizedBox(height: 14),
+                  _buildRefundSummaryCard(r),
+                  const SizedBox(height: 14),
+                  _buildRefundRequestCard(r),
+                  const SizedBox(height: 14),
+                  _buildOriginalPaymentCard(r),
+                  const SizedBox(height: 14),
+                  _buildContextCard(r),
+                  const SizedBox(height: 14),
+                  _buildReviewActionsCard(r, detail),
+                  const SizedBox(height: 14),
+                  _buildTechnicalDetailsCard(r, detail),
+                  const SizedBox(height: 14),
+                  _buildAuditHistoryCard(detail),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCrossNavigationBanner(PaymentReviewRecord r) {
@@ -1568,11 +2540,6 @@ class PaymentsScreenState extends State<PaymentsScreen> {
       .split('_')
       .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}')
       .join(' ');
-
-  Widget _button(String label, VoidCallback onPressed) => OutlinedButton(
-      onPressed: _processing || _loading ? null : onPressed,
-      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
-      child: Text(label));
 
   String _time(dynamic millis) =>
       PaymentReviewRecord.formatMalaysiaTimestamp(millis);

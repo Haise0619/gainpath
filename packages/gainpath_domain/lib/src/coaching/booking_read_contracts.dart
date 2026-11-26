@@ -232,7 +232,8 @@ class PersistedBookingRecord {
       this.paymentStatus,
       this.selectedPaymentMethod,
       this.refundStatus,
-      this.refundReviewRequired}) {
+      this.refundReviewRequired,
+      this.refundUnavailable = false}) {
     if (paymentStatus != null &&
         !const ['pending', 'cleared'].contains(paymentStatus)) {
       invalidBookingData();
@@ -279,7 +280,8 @@ class PersistedBookingRecord {
       if (resolvedAtMillis! < createdAtMillis) {
         invalidBookingData();
       }
-      if (status == BookingStatus.cancelled) {
+      if (status == BookingStatus.cancelled ||
+          (status == BookingStatus.refunded && resolution != 'hold_expired')) {
         if (resolution == 'member_cancelled') {
           if (resolvedAtMillis! >= holdExpiresAtMillis) invalidBookingData();
         } else if (resolution == 'member_confirmed_cancelled') {
@@ -294,7 +296,8 @@ class PersistedBookingRecord {
         } else if (resolution != null) {
           invalidBookingData();
         }
-      } else if (status == BookingStatus.expired) {
+      } else if (status == BookingStatus.expired ||
+          status == BookingStatus.refunded) {
         if (resolution != 'hold_expired' ||
             resolvedAtMillis! < holdExpiresAtMillis) {
           invalidBookingData();
@@ -336,6 +339,7 @@ class PersistedBookingRecord {
   final String? paymentStatus, refundStatus;
   final SelectedBookingPaymentMethod? selectedPaymentMethod;
   final bool? refundReviewRequired;
+  final bool refundUnavailable;
   final int? feeMinor;
   final int? reviewStars;
   int get schemaVersion => 1;
@@ -382,11 +386,16 @@ class PersistedBookingRecord {
       'selectedPaymentMethodIconKey',
       'selectedAt',
       'refundStatus',
-      'refundReviewRequired'
+      'refundReviewRequired',
+      'refundUnavailable'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
         (data.containsKey('resolution') && data['resolution'] is! String)) {
+      invalidBookingData();
+    }
+    if (data.containsKey('refundUnavailable') &&
+        data['refundUnavailable'] is! bool) {
       invalidBookingData();
     }
     if (data['refundReviewRequired'] != null &&
@@ -436,6 +445,7 @@ class PersistedBookingRecord {
             ? null
             : bookingText(data['refundStatus']),
         refundReviewRequired: data['refundReviewRequired'] as bool?,
+        refundUnavailable: data['refundUnavailable'] == true,
         feeMinor:
             data['feeMinor'] == null ? null : bookingInt(data['feeMinor']),
         reviewStars: data['reviewStars'] == null
@@ -468,6 +478,7 @@ class PersistedBookingRecord {
         if (paymentStatus != null) 'paymentStatus': paymentStatus,
         ...?selectedPaymentMethod?.toJson(),
         if (refundStatus != null) 'refundStatus': refundStatus,
+        if (refundUnavailable) 'refundUnavailable': true,
         if (refundReviewRequired != null)
           'refundReviewRequired': refundReviewRequired,
         if (feeMinor != null) 'feeMinor': feeMinor,
@@ -505,7 +516,8 @@ class BookingPage {
       required this.firstLocalDate,
       required this.throughLocalDate,
       required List<PersistedBookingRecord> records,
-      this.nextCursor})
+      this.nextCursor,
+      this.omittedInvalidRecords = 0})
       : records = List.unmodifiable(records) {
     bookingInt(serverNowMillis);
     bookingTimeZone(timeZone);
@@ -514,7 +526,10 @@ class BookingPage {
     final days = DateTime.parse('${throughLocalDate}T00:00:00Z')
         .difference(DateTime.parse('${firstLocalDate}T00:00:00Z'))
         .inDays;
-    if (days < 0 || days > 30 || records.length > 20) {
+    if (days < 0 ||
+        days > 30 ||
+        omittedInvalidRecords < 0 ||
+        records.length + omittedInvalidRecords > 20) {
       invalidBookingData();
     }
     final ids = <String>{};
@@ -529,7 +544,8 @@ class BookingPage {
       }
       previous = record;
     }
-    if (nextCursor != null &&
+    if (omittedInvalidRecords == 0 &&
+        nextCursor != null &&
         (records.isEmpty ||
             nextCursor!.bookingId != records.last.bookingId ||
             nextCursor!.startAtMillis != records.last.startAtMillis)) {
@@ -540,6 +556,7 @@ class BookingPage {
   final String timeZone, firstLocalDate, throughLocalDate;
   final List<PersistedBookingRecord> records;
   final BookingCursor? nextCursor;
+  final int omittedInvalidRecords;
   int get schemaVersion => 1;
   factory BookingPage.fromJson(Map<String, dynamic> data,
       {String? expectedOrganizationId,
@@ -558,7 +575,8 @@ class BookingPage {
       'throughLocalDate',
       'records'
     ], [
-      'nextCursor'
+      'nextCursor',
+      'omittedInvalidRecords'
     ]);
     bookingVersion(data['schemaVersion']);
     final records = bookingList(data['records'],
@@ -591,6 +609,9 @@ class BookingPage {
         firstLocalDate: first,
         throughLocalDate: through,
         records: records,
+        omittedInvalidRecords: data.containsKey('omittedInvalidRecords')
+            ? bookingInt(data['omittedInvalidRecords'])
+            : 0,
         nextCursor: data.containsKey('nextCursor')
             ? BookingCursor.fromJson(bookingMap(data['nextCursor']))
             : null);
@@ -602,6 +623,8 @@ class BookingPage {
         'firstLocalDate': firstLocalDate,
         'throughLocalDate': throughLocalDate,
         'records': records.map((record) => record.toJson()).toList(),
+        if (omittedInvalidRecords > 0)
+          'omittedInvalidRecords': omittedInvalidRecords,
         if (nextCursor != null) 'nextCursor': nextCursor!.toJson()
       };
 }

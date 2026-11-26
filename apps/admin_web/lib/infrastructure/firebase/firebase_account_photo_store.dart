@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:http/http.dart' as http;
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -12,14 +13,17 @@ class FirebaseAccountPhotoStore implements AccountPhotoStore {
       required this.isCurrent,
       FirebaseStorage? storage,
       FirebaseAuth? auth,
+      Future<String?> Function()? appCheckToken,
       http.Client? client})
       : _storage = storage ?? FirebaseStorage.instance,
         _auth = auth ?? FirebaseAuth.instance,
+        _appCheckToken = appCheckToken ?? (() => FirebaseAppCheck.instance.getToken()),
         _client = client;
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseStorage _storage;
   final FirebaseAuth _auth;
+  final Future<String?> Function() _appCheckToken;
   final http.Client? _client;
   bool _invalidated = false;
   void _check() {
@@ -78,6 +82,16 @@ class FirebaseAccountPhotoStore implements AccountPhotoStore {
           queryParameters: {'alt': 'media'});
       final request = http.Request('GET', uri)..followRedirects = false;
       request.headers['Authorization'] = 'Firebase $token';
+      String? appCheck;
+      try {
+        appCheck = await _appCheckToken();
+      } catch (_) {
+        // Local configurations can run without App Check.
+      }
+      _check();
+      if (appCheck != null && appCheck.isNotEmpty) {
+        request.headers['X-Firebase-AppCheck'] = appCheck;
+      }
       final response =
           await client.send(request).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200 ||

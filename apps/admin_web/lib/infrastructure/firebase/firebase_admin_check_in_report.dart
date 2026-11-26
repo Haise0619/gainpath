@@ -72,7 +72,8 @@ AdminCheckInReport parseAdminCheckInReport(
       active = coverage['activeMembers']!,
       claimants = totals['claimingMembers']!;
   if (totals['claims']! > coverage['claimsScanned']! ||
-      totals['pointsAwarded'] != totals['claims']! * 50 ||
+      totals['pointsAwarded']! < totals['claims']! * 50 ||
+      (totals['claims'] == 0 && totals['pointsAwarded'] != 0) ||
       claimants > totals['claims']! ||
       claimants > coverage['profiles']! ||
       (totals['claims'] == 0) != (claimants == 0)) {
@@ -124,7 +125,7 @@ AdminCheckInReport parseAdminCheckInReport(
           unique > count ||
           unique > active ||
           unique > claimants ||
-          points != count * 50 ||
+          points < count * 50 ||
           (!weekly && unique != count)) {
         throw const FormatException('Check-in period totals mismatch');
       }
@@ -134,7 +135,9 @@ AdminCheckInReport parseAdminCheckInReport(
           claimingMembers: unique,
           pointsAwarded: points));
     }
-    if (rows.fold<int>(0, (n, r) => n + r.claims) != totals['claims']) {
+    if (rows.fold<int>(0, (n, r) => n + r.claims) != totals['claims'] ||
+        rows.fold<int>(0, (n, r) => n + r.pointsAwarded) !=
+            totals['pointsAwarded']) {
       throw const FormatException('Check-in period sum mismatch');
     }
     return rows;
@@ -158,6 +161,7 @@ AdminCheckInReport parseAdminCheckInReport(
     final days = weeks[w.date];
     if (days == null ||
         days.fold<int>(0, (n, d) => n + d.claims) != w.claims ||
+        days.fold<int>(0, (n, d) => n + d.pointsAwarded) != w.pointsAwarded ||
         days.any((d) => d.claimingMembers > w.claimingMembers)) {
       throw const FormatException('Check-in daily/week mismatch');
     }

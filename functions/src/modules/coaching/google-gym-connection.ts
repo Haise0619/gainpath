@@ -39,9 +39,23 @@ export class GymGoogleConnection {
  }
  async begin(auth:GoogleActor,org:string){
   if(!this.config.clientId||!this.config.gymEmail||!this.config.redirectUri.startsWith('https://'))throw new DomainError('failed-precondition','Admin must configure Google OAuth first.');
+  const previous=await this.store.transact(async tx=>{
+   await this.authorize(tx,auth,org);
+   return tx.get(gymConnectionPath(org));
+  });
+  let expiredSecretId:string|undefined;
+  if(previous?.status==='needs_reconnect'&&typeof previous.secretId==='string'&&previous.revocationPending!==true&&previous.exchangeInFlight!==true){
+   const stored=await this.vault.read(previous.secretId);
+   try{await this.provider.refresh(stored.refreshToken);}
+   catch(error){
+    if(!(error instanceof DomainError)||error.code!=='failed-precondition')throw error;
+    expiredSecretId=previous.secretId;
+   }
+  }
   const state=randomBytes(32).toString('base64url'),verifier=randomBytes(48).toString('base64url'),attempt=randomUUID(),now=this.clock();
   await this.store.transact(async tx=>{await this.authorize(tx,auth,org);const old=await tx.get(gymConnectionPath(org));
-   if(old?.status==='connected'||old?.revocationPending===true||old?.exchangeInFlight===true||old?.status==='needs_reconnect'&&typeof old.secretId==='string')throw new DomainError('failed-precondition','Disconnect or resolve the existing Google grant first.');
+   const replacingExpired=expiredSecretId!==undefined&&old?.status==='needs_reconnect'&&old.secretId===expiredSecretId&&old.attempt===previous?.attempt;
+   if(old?.status==='connected'||old?.revocationPending===true||old?.exchangeInFlight===true||old?.status==='needs_reconnect'&&typeof old.secretId==='string'&&!replacingExpired)throw new DomainError('failed-precondition','Disconnect or resolve the existing Google grant first.');
    if(old?.status==='connecting'&&Number(old.expiresAtMillis)>now)throw new DomainError('failed-precondition','Finish the current Google connection or wait for it to expire.');
    tx.set(gymConnectionPath(org),{...old,status:'connecting',attempt,pendingExchangeAttempt:'',exchangeInFlight:false,expiresAtMillis:now+600000});
    tx.create(`system/googleOAuth/states/${digest(state)}`,{org,uid:auth!.uid,authTime:auth!.token.auth_time??0,verifier,attempt,status:'pending',expiresAtMillis:now+600000});
@@ -66,8 +80,9 @@ export class GymGoogleConnection {
    issuedRefresh=grant.refreshToken||grant.accessToken;
    const scopes=new Set(grant.scope.split(' ').filter(Boolean).map(s=>s==='https://www.googleapis.com/auth/userinfo.email'?'email':s));
    if(!grant.emailVerified||grant.email.toLowerCase()!==this.config.gymEmail.toLowerCase()||!grant.subject||!grant.refreshToken||scopes.size!==GOOGLE_SCOPES.length||GOOGLE_SCOPES.some(s=>!scopes.has(s)))throw denied();
-   await this.store.transact(async tx=>{await this.authorize(tx,{uid:String(pending.uid),token:{email_verified:true,auth_time:pending.authTime}},org);const c=await tx.get(gymConnectionPath(org));if(!c||c.attempt!==pending.attempt||c.status!=='connecting'||(c.subject&&c.subject!==grant.subject))throw denied();});
+   const previousSecret=await this.store.transact(async tx=>{await this.authorize(tx,{uid:String(pending.uid),token:{email_verified:true,auth_time:pending.authTime}},org);const c=await tx.get(gymConnectionPath(org));if(!c||c.attempt!==pending.attempt||c.status!=='connecting'||(c.subject&&c.subject!==grant.subject))throw denied();return c.secretId;});
    written=true;await this.vault.put(secretId,{refreshToken:grant.refreshToken});
+   if(typeof previousSecret==='string'&&previousSecret!==secretId)await this.vault.destroy(previousSecret);
    await this.store.transact(async tx=>{await this.authorize(tx,{uid:String(pending.uid),token:{email_verified:true,auth_time:pending.authTime}},org);const c=await tx.get(gymConnectionPath(org));if(!c||c.attempt!==pending.attempt||c.status!=='connecting')throw denied();
     tx.set(gymConnectionPath(org),{...c,schemaVersion:1,status:'connected',subject:grant.subject,senderEmail:grant.email,secretId,connectedAtMillis:this.clock(),scopes:GOOGLE_SCOPES,revocationPending:false,exchangeInFlight:false});});
   }catch(error){
@@ -85,7 +100,8 @@ export class GymGoogleConnection {
    const abandoned=c?.exchangeInFlight===true&&Number.isSafeInteger(c.exchangeLeaseUntilMillis)&&Number(c.exchangeLeaseUntilMillis)<=this.clock();
    const state=abandoned||c?.status==='connecting'&&Number(c.expiresAtMillis)<=this.clock()?'needs_reconnect':String(c?.status??'disconnected');
    const automation=googleAutomationConfig(),automationEnabled=automation.organizationId===org&&automaticScopeConfigured(automation);
-   return{schemaVersion:1,connectionStatus:state,calendarStatus:String(calendar?.status??'not_created'),revocationPending:c?.revocationPending===true||abandoned,automationEnabled,automationStatus:String(c?.automaticLastStatus??'not_started'),emailSyncStatus:String(calendar?.lastEmailDeliveryStatus??'not_sent'),
+   const calendarAutomationEnabled=automation.organizationId===org&&automation.calendarEnabled===true&&Number.isSafeInteger(automation.activatedAtMillis)&&automation.activatedAtMillis>0;
+   return{schemaVersion:1,connectionStatus:state,calendarStatus:String(calendar?.status??'not_created'),revocationPending:c?.revocationPending===true||abandoned,automationEnabled,calendarAutomationEnabled,automationStatus:String(c?.automaticLastStatus??'not_started'),emailSyncStatus:String(calendar?.lastEmailDeliveryStatus??'not_sent'),
     syncStatus:String(calendar?.lastDeliveryStatus??'not_synced'),...(m.role==='admin'&&c?.senderEmail?{senderEmail:String(c.senderEmail)}:{}),...(calendar?.lastSyncedAtMillis?{lastSyncedAtMillis:calendar.lastSyncedAtMillis}:{})};
   });
  }

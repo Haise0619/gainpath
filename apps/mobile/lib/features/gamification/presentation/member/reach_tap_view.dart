@@ -362,6 +362,12 @@ class ReachTapView extends StatelessWidget {
     final c = controller;
     return MoveCatchResultPanel(
       gameTitle: 'Reach & Tap',
+      completedAt: c.completedRound?.completedAt,
+      activeMillis: c.completedRound?.activeMicros == null
+          ? null
+          : c.completedRound!.activeMicros ~/ 1000,
+      isShareCurrent: () =>
+          c.current && c.engine.phase == ReachTapPhase.finished,
       competitionStatus: competitionStatus,
       onLeaderboard: onLeaderboard,
       hitsOnly: true,

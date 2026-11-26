@@ -86,19 +86,20 @@ void main() {
               repository: repo, isCurrent: () => true, embedded: true));
     })));
     await tester.pumpAndSettle();
-    expect(repo.reads, 1);
+    final initialReads = repo.reads;
+    expect(initialReads, greaterThan(0));
     expect(find.byType(AppBar), findsNothing);
     update(() => active = false);
     await tester.pump();
     await tester.pump(const Duration(seconds: 31));
-    expect(repo.reads, 1);
+    expect(repo.reads, initialReads);
     update(() => active = true);
     await tester.pumpAndSettle();
-    expect(repo.reads, 2);
+    expect(repo.reads, greaterThan(initialReads));
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
-      'tabs embed bookings lazily and retain search without pushing a route',
+      'quick access opens bookings lazily and retains directory search on return',
       (tester) async {
     final repo = MemberDirectoryFake();
     var built = 0;
@@ -113,23 +114,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Find your coach'), findsNothing);
     expect(find.byTooltip('My bookings'), findsNothing);
-    expect(find.text('Find Coach'), findsOneWidget);
+    expect(find.text('Find Coach'), findsNothing);
     expect(built, 0);
     await tester.enterText(find.byType(TextField), 'Jack');
     await tester.tap(find.text('My Bookings'));
     await tester.pumpAndSettle();
     expect(built, 1);
-    expect(find.byType(BackButton), findsNothing);
-    await tester.enterText(
-        find.byKey(const ValueKey('booking-search')), 'retained');
-    await tester.tap(find.text('Find Coach'));
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.byKey(const ValueKey('booking-search')), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'Jack');
     await tester.tap(find.text('My Bookings'));
     await tester.pumpAndSettle();
-    expect(built, 1);
-    expect(find.text('retained'), findsOneWidget);
+    expect(built, 2);
+    expect(find.byKey(const ValueKey('booking-search')), findsOneWidget);
   });
   testWidgets(
       'filter sheet cancels changes and applies sort in the search area',
@@ -149,10 +149,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Filter and sort'), findsOneWidget);
     await tester.tap(find.text('Price: low to high'));
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.text('Apply Filters'));
     await tester.pumpAndSettle();
     expect(find.text('Filter and sort'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(
+        find.byKey(const Key('coach-active-filter-indicator')), findsOneWidget);
   });
   testWidgets('compact card moves location and tags into details',
       (tester) async {

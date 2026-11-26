@@ -137,7 +137,7 @@ void main() {
         await t.tap(find.text('Jackson Alexander'), warnIfMissed: false);
         expect(opened, outcome == 'allowed' ? 1 : 0);
       }
-      await t.tap(find.text('My Bookings'));
+      await t.tap(find.byKey(const Key('coaches-my-bookings-button')));
       await t.pumpAndSettle();
       expect(find.text('Existing bookings'), findsOneWidget);
     });

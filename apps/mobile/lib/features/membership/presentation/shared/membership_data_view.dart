@@ -101,7 +101,7 @@ class PaymentEnvironmentDetails extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(sandbox
-                ? 'This demonstration uses Billplz Sandbox. Payments here do not move real money.'
+                ? 'This demonstration uses Xendit Test Mode. Payments here do not move real money.'
                 : 'This preview simulates payments. No money is collected.'),
           ),
         ],
@@ -154,6 +154,9 @@ String membershipPaymentLabel(Map<String, dynamic> p) {
       'rejected' => 'Refund request declined',
       'processing' => 'Refund processing',
       'completed' => 'Refunded',
+      'failed' => 'Refund failed · ' +
+          (p['refundFailureCode']?.toString() ?? 'Contact support'),
+      'uncertain' => 'Refund outcome needs verification',
       _ => 'Refund status needs verification',
     };
   }

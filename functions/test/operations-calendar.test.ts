@@ -144,6 +144,18 @@ function seeds(): Record<string, Data> {
 }
 
 describe('Operations Calendar reads', () => {
+  it('keeps a valid refunded booking visible without marking its source unavailable', async () => {
+    const fixture = seeds();
+    fixture[`${root}/bookings/refunded`] = booking('refunded', {
+      status: 'refunded', resolution: 'coach_cancelled', resolvedAtMillis: from + 1000,
+    });
+    const { db } = firestore(fixture);
+    const result = await readOperationsCalendar(db, auth, { ...request, types: ['booking'] }, () => now);
+    expect(result).toMatchObject({ unavailable: [], events: expect.arrayContaining([
+      expect.objectContaining({ sourceId: 'refunded', status: 'refunded' }),
+    ]) });
+  });
+
   it('uses actual booking branches, projects confirmed and pending payments, and includes valid announcement overlaps once', async () => {
     const { db, reads, transactions } = firestore(seeds());
     const result = await readOperationsCalendar(db, auth, { ...request, branchId: 'west' }, () => now);

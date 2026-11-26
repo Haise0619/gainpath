@@ -18,6 +18,7 @@ import 'my_rewards_screen.dart';
 import 'leaderboard_screen.dart';
 import 'points_history_screen.dart';
 import 'member_achievements_screen.dart';
+import 'training_achievement_preview.dart';
 
 /// P1A: composition only; existing check-in/earning/game/redemption services own state.
 class AppCheckInDashboard extends StatefulWidget {
@@ -85,6 +86,14 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
       MaterialPageRoute<void>(
           builder: (_) => RewardsFeatureHost(
               builder: (repo) => PointsHistoryScreen(repository: repo))));
+  Future<void> _shop(BuildContext context) => Navigator.of(context).push<void>(
+        MaterialPageRoute(
+            builder: (_) => RewardShopScreen(
+                  connected: true,
+                  onBalanceChanged: onRefresh,
+                )),
+      );
+
   void _rankings(BuildContext context) => Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -263,121 +272,124 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 26),
                       AppCheckInCard(
                         state: state,
                         onClaim: onClaim,
                         onRefresh: onRefresh,
                         homeDense: true,
                       ),
-                      const SizedBox(height: 18),
-                      const MemberSectionHeader(title: 'Training achievements'),
-                      Panel(
-                        padding: EdgeInsets.zero,
-                        child: achievements != null
-                            ? ListenableBuilder(
-                                listenable: achievements,
-                                builder: (_, __) {
-                                  final badges = achievements.snapshot?.badges
-                                      .where((badge) =>
-                                          badge.category == 'workout')
-                                      .toList();
-                                  final confirmed =
-                                      achievements.snapshot?.complete == true;
-                                  return _Shortcut(
-                                      icon: Icons.military_tech_outlined,
-                                      title: 'Badges',
-                                      subtitle: badges == null || !confirmed
-                                          ? 'View your training goals and badge progress'
-                                          : '${badges.where((badge) => badge.unlocked).length} / ${badges.length} training badges unlocked',
-                                      onTap: () => _badges(context));
-                                })
-                            : _Shortcut(
-                                icon: Icons.military_tech_outlined,
-                                title: 'Badges',
-                                subtitle: 'View your check-in badges',
-                                onTap: () => _badges(context)),
+                      const SizedBox(height: 26),
+                      TrainingAchievementPreview(
+                        controller: achievements,
+                        onViewAll: () => _badges(context),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 26),
                       widget.gamesSection ??
                           FitnessArcadeHost(
                               key: ValueKey('games-$_gamesRevision'),
                               onReturn: _afterGame),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 26),
                       widget.weeklyRankSection ??
                           FitnessArcadeRankHost(
                               key: ValueKey('rank-$_rankRevision'),
                               onTap: () => _rankings(context)),
-                      const SizedBox(height: 12),
-                      const MemberSectionHeader(title: 'Points and vouchers'),
+                      const SizedBox(height: 26),
+                      Row(children: [
+                        const Expanded(
+                            child: MemberSectionHeader(
+                                title: 'Points & vouchers', padded: false)),
+                        TextButton(
+                          onPressed: () => _shop(context),
+                          child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Shop'),
+                                SizedBox(width: 4),
+                                Icon(Icons.arrow_forward, size: 16),
+                              ]),
+                        ),
+                      ]),
                       widget.rewardGoalSection ??
                           RewardGoalHost(
-                              key: ValueKey('goal-$_rankRevision'),
-                              onShop: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute<void>(
-                                      builder: (_) => RewardShopScreen(
-                                          connected: true,
-                                          onBalanceChanged: onRefresh))),
-                              fallback: Panel(
-                                  padding: EdgeInsets.zero,
-                                  child: ListTile(
-                                      leading: const Icon(
-                                          Icons.card_giftcard_rounded,
-                                          color: AppColors.primary),
-                                      title: const Text('Redeem points'),
-                                      subtitle:
-                                          const Text('Find your next reward'),
-                                      trailing: const Icon(Icons.chevron_right),
-                                      onTap: () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute<void>(
-                                              builder: (_) => RewardShopScreen(
-                                                  connected: true,
-                                                  onBalanceChanged:
-                                                      onRefresh)))))),
-                      const SizedBox(height: 12),
-                      Panel(
-                          padding: EdgeInsets.zero,
-                          child: Column(children: [
-                            _Shortcut(
-                                icon: Icons.confirmation_number_outlined,
-                                title: 'My Rewards',
-                                onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            const MyRewardsScreen()))),
-                            _Shortcut(
-                                icon: Icons.history_rounded,
-                                title: 'Points History',
-                                onTap: () => _history(context)),
-                            _Shortcut(
-                                icon: Icons.leaderboard_outlined,
-                                title: 'Leaderboards',
-                                onTap: () => _rankings(context)),
-                          ])),
+                            key: ValueKey('goal-$_rankRevision'),
+                            onShop: () => _shop(context),
+                            onBalanceChanged: onRefresh,
+                            fallback: const SizedBox.shrink(),
+                          ),
+                      const SizedBox(height: 26),
+                      LayoutBuilder(builder: (context, constraints) {
+                        final actions = [
+                          _WalletAction(
+                            icon: Icons.confirmation_number_outlined,
+                            label: 'My Rewards',
+                            onTap: () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                  builder: (_) => const MyRewardsScreen()),
+                            ),
+                          ),
+                          _WalletAction(
+                            icon: Icons.history_rounded,
+                            label: 'Points History',
+                            onTap: () => _history(context),
+                          ),
+                        ];
+                        final scale =
+                            MediaQuery.textScalerOf(context).scale(14);
+                        if (constraints.maxWidth < 285 || scale > 23) {
+                          return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                actions.first,
+                                const SizedBox(height: 8),
+                                actions.last,
+                              ]);
+                        }
+                        return Row(children: [
+                          Expanded(child: actions.first),
+                          const SizedBox(width: 10),
+                          Expanded(child: actions.last),
+                        ]);
+                      }),
                     ]))));
   }
 }
 
-class _Shortcut extends StatelessWidget {
-  const _Shortcut(
-      {required this.icon,
-      required this.title,
-      required this.onTap,
-      this.subtitle});
+class _WalletAction extends StatelessWidget {
+  const _WalletAction(
+      {required this.icon, required this.label, required this.onTap});
+
   final IconData icon;
-  final String title;
-  final String? subtitle;
+  final String label;
   final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) => ListTile(
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap);
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Panel(
+      padding: const EdgeInsets.all(12),
+      onTap: onTap,
+      child: Row(children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.primaryTint,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon, color: theme.colorScheme.primary, size: 20),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+            child: Text(label,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600))),
+        Icon(Icons.chevron_right,
+            size: 16, color: theme.colorScheme.onSurfaceVariant),
+      ]),
+    );
+  }
 }
 
 class _BadgeProgress extends StatelessWidget {

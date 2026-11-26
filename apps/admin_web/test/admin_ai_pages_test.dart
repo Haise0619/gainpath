@@ -404,7 +404,7 @@ void main() {
     await tester.tap(find.text('North Gym').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'fixture');
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Search members'));
+    await tester.tap(find.byTooltip('Search members'));
     await tester.pumpAndSettle();
     expect(listScopes, [null, 'north']);
     expect(searchScopes, ['north']);
@@ -532,13 +532,17 @@ void main() {
     await capture(t, key, 'exercise-expanded');
     expect(t.takeException(), isNull);
   });
-  for (final (failed, width) in [
-    (true, 1400.0),
-    (false, 1400.0),
-    (false, 420.0)
+  for (final (failed, width, scale) in [
+    (true, 1400.0, 1.0),
+    (false, 1400.0, 1.0),
+    (false, 420.0, 1.3),
+    (false, 1024.0, 1.0),
+    (false, 1280.0, 1.0),
+    (false, 1366.0, 1.25),
+    (false, 1536.0, 1.5),
   ]) {
     testWidgets(
-        'Outreach search outside Top 10, goal labels and generation $failed at $width',
+        'Outreach search outside Top 10, goal labels and generation $failed at $width (scale $scale)',
         (t) async {
       var generations = 0, sends = 0;
       final repo = AdminAiRepository(
@@ -600,10 +604,9 @@ void main() {
           });
       final key = GlobalKey();
       await open(t, AiMemberOutreachPage(repository: repo),
-          key: key, width: width, scale: width < 600 ? 1.3 : 1);
+          key: key, width: width, scale: scale);
       await t.enterText(find.byType(TextField).first, 'Module 13 TEST');
-      final searchButton =
-          find.widgetWithText(OutlinedButton, 'Search members');
+      final searchButton = find.byTooltip('Search members');
       await t.ensureVisible(searchButton);
       await t.tap(searchButton);
       await t.pumpAndSettle();

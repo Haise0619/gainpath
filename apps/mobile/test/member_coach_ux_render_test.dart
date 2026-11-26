@@ -25,7 +25,7 @@ void main() {
       await loader.load();
     }
   });
-  for (final width in [320.0, 360.0]) {
+  for (final width in [320.0, 360.0, 393.0, 430.0]) {
     for (final scale in [1.0, 2.0]) {
       for (final dark in [false, true]) {
         testWidgets('member coach render $width $scale dark=$dark',
@@ -90,16 +90,20 @@ void main() {
               live: true,
               liveRepository: MemberDirectoryFake(),
               isCurrent: () => true,
+              loadBranches: () async => {
+                'branch_internal_42': 'GainPath Main',
+                'branch_2': 'GainPath Downtown',
+              },
               bookingsBuilder: (_) => const BookingScheduleScreen(
                   persistedBookings: [], embedded: true),
               onOpenPublished: (_) {})));
           await capture('directory');
           await tester.tap(find.byTooltip('Filter and sort coaches'));
           await capture('filters');
-          expect(find.text('Apply').hitTestable(), findsOneWidget);
+          expect(find.text('Apply Filters').hitTestable(), findsOneWidget);
           await tester.tap(find.byTooltip('Close filters'));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('My Bookings'));
+          await tester.tap(find.byKey(const Key('coaches-my-bookings-button')));
           await capture('bookings');
         });
       }

@@ -7,14 +7,14 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../booking_details_screen.dart';
 import '../../shared/booking_coach_info.dart';
-import '../../shared/member_coach_presentation.dart';
 import '../../shared/persisted_booking_presentation.dart';
 
 /// Compact, modern Member appointment card (approximately 150–190dp height)
 /// displaying only essential booking information:
-/// Coach photo/name, status badge (Expired distinct from Cancelled), session
-/// type & duration, date & time, branch/location (never raw IDs), and price
-/// (omitted if missing/zero, never RM 0 or Free).
+/// Coach photo/name, single status badge (Expired distinct from Cancelled), session
+/// type & duration, appointment date & time in MYT, actual recorded branch/location
+/// (omitted if not recorded, never placeholder), and price (omitted if missing/zero,
+/// never RM 0 or Free).
 ///
 /// Tapping anywhere on the card or tapping "View details" opens the dedicated
 /// [BookingDetailsScreen] with comprehensive 6-section booking information.
@@ -30,7 +30,7 @@ class BookingCard extends StatelessWidget {
   final String? coachSpecialty;
   final VoidCallback? onViewDetails;
   final VoidCallback? onReschedule;
-  final VoidCallback? onCancel;
+  final void Function(BuildContext)? onCancel;
   final VoidCallback? onMessage;
   final VoidCallback? onRate;
   final VoidCallback? onBookAgain;
@@ -75,7 +75,7 @@ class BookingCard extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BookingDetailsScreen(
+        builder: (detailsContext) => BookingDetailsScreen(
           booking: booking,
           record: record,
           live: live,
@@ -85,7 +85,7 @@ class BookingCard extends StatelessWidget {
           coachPhoto: photo,
           coachInfoFuture: coachInfoFuture,
           coachSpecialty: coachSpecialty,
-          onCancel: onCancel,
+          onCancel: onCancel == null ? null : () => onCancel!(detailsContext),
           onReschedule: onReschedule,
           onMessage: onMessage,
           onReview: onRate,
@@ -99,13 +99,15 @@ class BookingCard extends StatelessWidget {
 
   Widget _buildStatusChip(String status) {
     final lower = status.toLowerCase();
-    if (lower.contains('pending')) {
+    if (lower.contains('pending') || lower.contains('awaiting payment')) {
       return StatusChip(status,
           color: AppColors.warning, background: AppColors.accentTint);
-    }
-    if (lower == 'expired' || lower == 'hold_expired') {
+    } else if (lower == 'expired' || lower == 'hold_expired') {
       return const StatusChip('Expired',
           color: AppColors.inkSoft, background: AppColors.surfaceAlt);
+    } else if (lower.contains('refund')) {
+      return StatusChip(status,
+          color: AppColors.primary, background: AppColors.primaryTint);
     }
     return statusPill(status);
   }
@@ -116,32 +118,46 @@ class BookingCard extends StatelessWidget {
     final coachName =
         resolveCoachName(booking.coachName, fallback: coach?.name);
     final initial = coachName.isNotEmpty ? coachName[0].toUpperCase() : 'C';
-    final location = locationLabel ?? resolveBranchLocation(booking.branch);
+    final rawLocation = locationLabel ?? resolveBranchLocation(booking.branch);
+    final hasRecordedLocation = rawLocation.isNotEmpty &&
+        rawLocation != '-' &&
+        rawLocation != 'Location confirmed when booking';
     final feeText = resolveBookingFee(booking.fee, feeMinor: record?.feeMinor);
     final refundStatus = memberBookingRefundStatus(record);
-    final statusText = resolveStatusLabel(
+    final hasActualRefundProgress =
+        refundStatus != null && refundStatus != 'Refund unavailable';
+    final resolvedStatus = resolveStatusLabel(
       booking.status,
       rawStatus: record?.rawStatus,
       labelOverride: statusLabel,
       resolution: record?.resolution,
     );
+    // Do not confuse refund eligibility with booking status: keep actual booking
+    // status unless there is active/completed refund progress.
+    final displayStatus =
+        hasActualRefundProgress ? refundStatus : resolvedStatus;
+    final specialty = (coachSpecialty != null && coachSpecialty!.isNotEmpty)
+        ? coachSpecialty
+        : (coach != null && coach.specialty.isNotEmpty
+            ? coach.specialty
+            : null);
 
     return Panel(
       onTap: () => _openDetails(context),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header: Coach photo/initials, name, session type & duration, date & branch
+          // Header: Coach photo/initials (50x50), Name, Specialty/duration, and primary Status badge
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 child: SizedBox(
-                  width: 46,
-                  height: 46,
+                  width: 50,
+                  height: 50,
                   child: photo ??
                       (coach != null && coach.imageUrl.isNotEmpty
                           ? networkAvatar(coach.imageUrl)
@@ -152,7 +168,7 @@ class BookingCard extends StatelessWidget {
                                   initial,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 17,
+                                    fontSize: 18,
                                     color: AppColors.primary,
                                   ),
                                 ),
@@ -165,95 +181,136 @@ class BookingCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      coachName,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            coachName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15.5,
+                                  color: AppColors.ink,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          _buildStatusChip(displayStatus),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      '1-on-1 Consultation · ${booking.durationMin} min',
+                      specialty != null && specialty.isNotEmpty
+                          ? '$specialty · ${booking.durationMin} min'
+                          : '1-on-1 Consultation · ${booking.durationMin} min',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.inkSoft,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_rounded,
-                          size: 12,
-                          color: AppColors.inkSoft,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            _formatDate(booking.start),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontSize: 12.5),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(location,
-                        style: memberCoachTypography(context)
-                            .bodySmall
-                            ?.copyWith(color: AppColors.inkSoft)),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
-          // Status & Price row
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
+          // Metadata rows: clean separated Date/Time, Location (if recorded), and Price
+          const SizedBox(height: 10),
+          Row(
             children: [
-              _buildStatusChip(statusText),
-              if (feeText != null)
-                Text(
-                  feeText,
+              const Icon(
+                Icons.calendar_today_rounded,
+                size: 13.5,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  _formatDate(booking.start),
                   style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
                   ),
                 ),
+              ),
             ],
           ),
-          if (refundStatus != null) ...[
-            const SizedBox(height: 8),
-            Text(refundStatus,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, color: AppColors.primary)),
+          if (hasRecordedLocation) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 14,
+                  color: AppColors.inkSoft,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    rawLocation,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.inkSoft,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ],
-          if (statusText == 'Session ended') ...[
+          if (feeText != null) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Icon(
+                  Icons.payments_outlined,
+                  size: 14,
+                  color: AppColors.inkSoft,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    feeText,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (displayStatus == 'Session ended') ...[
             const SizedBox(height: 8),
             const Text(
-                'Awaiting your coach’s session notes. Completion has not been recorded.',
-                style: TextStyle(color: AppColors.inkSoft)),
+              'Awaiting your coach’s session notes. Completion has not been recorded.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+            ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           const Divider(height: 1, color: AppColors.hairline),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
 
-          // Actions row: "View details" on left, primary action on right
+          // Actions row: "View details" on left, quick contextual action on right
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
-            runSpacing: 4,
+            runSpacing: 6,
             children: [
               TextButton.icon(
                 style: TextButton.styleFrom(
@@ -268,7 +325,7 @@ class BookingCard extends StatelessWidget {
                   style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
               ),
-              _buildQuickAction(context, statusText),
+              _buildQuickAction(context, displayStatus),
             ],
           ),
         ],
@@ -279,13 +336,37 @@ class BookingCard extends StatelessWidget {
   Widget _buildQuickAction(BuildContext context, String statusText) {
     final lower = statusText.toLowerCase();
     if (memberBookingRefundStatus(record) != null && onPayment != null) {
-      return FilledButton(
-          onPressed: onPayment, child: const Text('View Refund Details'));
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.35)),
+          visualDensity: VisualDensity.compact,
+          minimumSize: const Size(0, 34),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        onPressed: onPayment,
+        child: const Text('Refund Details',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      );
     }
     if (booking.status == BookingStatus.pending) {
       return !lower.contains('elapsed') && onPayment != null
           ? FilledButton(
-              onPressed: onPayment, child: const Text('Continue to Payment'))
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: onPayment,
+              child: const Text('Continue to Payment',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            )
           : const SizedBox.shrink();
     }
 
@@ -293,7 +374,7 @@ class BookingCard extends StatelessWidget {
     if (booking.status == BookingStatus.completed || lower == 'completed') {
       if (booking.rated) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: AppColors.accentTint,
             borderRadius: BorderRadius.circular(6),
@@ -303,12 +384,15 @@ class BookingCard extends StatelessWidget {
             children: [
               const Icon(Icons.star_rounded, size: 14, color: AppColors.accent),
               const SizedBox(width: 4),
-              const Text(
-                'You reviewed this session',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.accentDark,
+              const Flexible(
+                child: Text(
+                  'You reviewed this session',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accentDark,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (booking.reviewStars != null)
@@ -325,12 +409,12 @@ class BookingCard extends StatelessWidget {
         );
       }
       if (onRate != null) {
-        return FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+        return OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: BorderSide(color: AppColors.primary.withValues(alpha: 0.35)),
             visualDensity: VisualDensity.compact,
-            minimumSize: const Size(0, 44),
+            minimumSize: const Size(0, 34),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
@@ -350,8 +434,8 @@ class BookingCard extends StatelessWidget {
         return OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             visualDensity: VisualDensity.compact,
-            minimumSize: const Size(0, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -384,6 +468,7 @@ class BookingCard extends StatelessWidget {
     ];
     final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
     final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]} ${d.year}  ·  $h:$m ${d.hour >= 12 ? 'PM' : 'AM'}';
+    final period = d.hour >= 12 ? 'PM' : 'AM';
+    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m $period MYT';
   }
 }

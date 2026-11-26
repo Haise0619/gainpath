@@ -61,12 +61,17 @@ class AppCheckInCubit extends Cubit<AppCheckInState> {
       if (result.snapshot.scope != repository.scope) {
         throw const FormatException('Check-in scope changed');
       }
+      final awardedPoints = claim && result.awarded
+          ? result.snapshot.recentClaims
+              .firstWhere((receipt) => receipt.date == result.snapshot.today)
+              .points
+          : null;
       emit(AppCheckInState(
           status: AppCheckInStatus.ready,
           snapshot: result.snapshot,
           message: claim
               ? (result.awarded
-                  ? '+${result.snapshot.pointsPerClaim} points · app check-in saved'
+                  ? '+$awardedPoints points · app check-in saved'
                   : 'Already claimed today')
               : null));
       if (claim && result.awarded) onAwarded?.call();

@@ -10,7 +10,7 @@ import { billplzSandboxReturn, paymentWebhook,getBookingPaymentCommand } from '.
 import { XenditBookingGateway, xenditBookingReference } from '../src/modules/commerce/xendit-booking';
 
 vi.mock('firebase-functions/v2/https',()=>({onCall:(_opts:unknown,handler:unknown)=>handler,onRequest:(opts:unknown,handler:unknown)=>typeof opts==='function'?opts:handler,HttpsError:class extends Error{}}));
-vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key==='XENDIT_BOOKING_ENABLED'?'false':key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
+vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key==='XENDIT_BOOKING_CHANNELS'?'CIMB_FPX,TOUCHNGO,CARDS':key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
 vi.mock('firebase-admin/firestore',()=>({getFirestore:()=>db}));
 vi.mock('../src/modules/coaching/coach-identity-reader',()=>({readCoachIdentity:async()=>({exists:true,disabled:false,emailVerified:true})}));
 let memory:MemoryStore,id:string;
@@ -83,7 +83,7 @@ it('existing protected payment-read callable discovers preference choices withou
   const methods=vi.spyOn(BillplzSandboxGateway.prototype,'paymentMethods').mockRejectedValue(Error('must not need a new gateway'));
   const before=[...memory.documents];
   const result=await getBookingPaymentCommand({auth:{uid:'member-1',token:{email_verified:true}},data:{schemaVersion:1,organizationId:'org-1',bookingId:id,includeSelectionMethods:true}} as never,undefined as never) as unknown as {selectionMethods:{code:string}[]};
-  expect(result.selectionMethods.map(m=>m.code)).toContain('grabpay');expect(methods).not.toHaveBeenCalled();expect([...memory.documents]).toEqual(before);
+  expect(result.selectionMethods.map(m=>m.code)).toContain('visa_mastercard');expect(methods).not.toHaveBeenCalled();expect([...memory.documents]).toEqual(before);
 });
 it('existing payment-read requests still verify the original bill',async()=>{
   const get=vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill());

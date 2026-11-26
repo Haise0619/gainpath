@@ -1,0 +1,49 @@
+Run: mobile-portable
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:45:54.6147445Z
+Ended UTC: 2026-11-25T14:53:43.7720079Z
+Duration seconds (wall-clock): 469.16
+Child process exit code: 1
+Observed outcomes: 2450 pass / 41 fail / 53 skip across 433 files.
+Suite-load errors: 25.
+apps/mobile/test/app_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/backend_startup_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coaching_mock_presentation_continuity_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coach_availability_flow_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coaching_navigation_redesign_test.dart | GainPath Coaches & My Bookings Navigation Refinement Coaches opens Find Coach directly, navigates to standalone My Bookings with underline tabs, preserves tab/filter/search state, and renders compact BookingCards | assertion did not find the expected value or widget
+apps/mobile/test/coach_directory_flow_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coach_directory_state_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coach_module8_route_composition_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/coach_session_identity_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/emulator/fyp_ordinary_member_emulator_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/firebase_auth_error_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/firebase_startup_error_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/fitness_profile_flow_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/legacy/app/app_smoke_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/legacy/app/shells_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/live_booking_composition_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/membership_access_live_child_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/member_bookings_ux_test.dart | BookingScheduleScreen UI/UX optimizations tapping History tab reveals sub-filters (All, Completed, Cancelled) and shows history | assertion did not find the expected value or widget
+apps/mobile/test/member_bookings_ux_test.dart | BookingScheduleScreen UI/UX optimizations filtering History by Completed shows only completed sessions | assertion did not find the expected value or widget
+apps/mobile/test/member_bookings_ux_test.dart | BookingScheduleScreen UI/UX optimizations filtering History by Cancelled shows only cancelled sessions | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_tabs_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 320.0 1.0 dark=false | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 320.0 1.0 dark=true | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 320.0 2.0 dark=false | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 320.0 2.0 dark=true | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 360.0 1.0 dark=false | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 360.0 1.0 dark=true | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 360.0 2.0 dark=false | assertion did not find the expected value or widget
+apps/mobile/test/member_coach_ux_render_test.dart | member coach render 360.0 2.0 dark=true | assertion did not find the expected value or widget
+apps/mobile/test/member_equipment_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/member_local_progress_flow_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/member_login_redesign_render_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/member_routine_discovery_flow_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/mobile_auth_lifetime_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/move_and_catch_view_test.dart | active countdown tracking-loss and result controls scroll at large text | required element missing, multiple Flutter exceptions
+apps/mobile/test/move_and_catch_view_test.dart | state controls preserve viewport while showing real round results | assertion did not find the expected value or widget, multiple Flutter exceptions
+apps/mobile/test/password_reset_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/routine_history_ui_test.dart | history filters attempts and omits Day 1 for single-day plans | assertion did not find the expected value or widget
+apps/mobile/test/routine_history_ui_test.dart | history opens exact saved attempt and detail offers next day and repeat | assertion did not find the expected value or widget
+apps/mobile/test/workout_backup_integration_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'
+apps/mobile/test/workout_prep_composition_test.dart | suite load | lib/app/shells/member_shell.dart:609:11: No named parameter with the name 'onOpenGroupClasses'

@@ -30,7 +30,8 @@ void main() {
     expect(find.text('Rewards & Check-in'), findsNothing);
     await t.ensureVisible(find.text('My Rewards'));
     expect(find.text('My Rewards'), findsOneWidget);
-    expect(find.text('Badges'), findsOneWidget);
+    expect(find.byKey(const ValueKey('training-achievements-view-all')),
+        findsOneWidget);
     expect(find.text('Points History'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
     await t.runAsync(auth.close);

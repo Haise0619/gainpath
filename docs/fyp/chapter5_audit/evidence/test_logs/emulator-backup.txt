@@ -1,0 +1,19 @@
+Run: emulator-backup
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:45:52.6820787Z
+Ended UTC: 2026-11-25T14:46:21.5421892Z
+Duration seconds (wall-clock): 28.86
+Child process exit code: 0
+Observed outcomes: 5 pass / 0 fail / 0 skip across 1 files.
+Running backup: 1 files on demo-gainpath-backup
+ ✓ emulator/workout-backup.test.ts (5 tests) 16910ms
+   ✓ concurrent retries store one head and one immutable revision without acceptance 4643ms
+   ✓ competing payloads cannot silently replace a saved session 2906ms
+   ✓ pagination restores all records with stable IDs and excludes other owners 943ms
+   ✓ unchanged Rules deny direct client backup reads and writes including the owner 1061ms
+   ✓ pages sessions before routines without a composite index or descending scan 347ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Duration  18.88s (transform 174ms, setup 0ms, collect 1.35s, tests 16.91s, environment 0ms, prepare 248ms)
++  Script exited successfully (code 0)
+

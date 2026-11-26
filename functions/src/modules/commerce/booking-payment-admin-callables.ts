@@ -1,3 +1,5 @@
+import { XenditRefundGateway } from './xendit-refund';
+import { xenditKey } from './xendit-payment-config';
 import { getFirestore, FieldPath } from 'firebase-admin/firestore';
 import { onCall } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
@@ -24,11 +26,13 @@ function deps(withSecrets = false): PaymentAdminDependencies {
     const db = getFirestore();
     const unavailable = async () => { throw new DomainError('unavailable', 'Provider access unavailable for this command.'); };
     const project = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
+    const legacyEnabled = enabled.value() === 'true';
     return {
         collectionId: collection.value(), refundCollectionId: refundCollection.value(), readIdentity: readCoachIdentity,
-        refundExecutionConfigured: refundConfigured(),
-        bills: withSecrets ? new BillplzSandboxGateway({ apiKey: apiKey.value(), collectionId: collection.value(), callbackUrl: `https://us-central1-${project}.cloudfunctions.net/paymentWebhook` }) : { create: unavailable, get: unavailable },
-        ...(withSecrets && refundConfigured() ? { refunds: new BillplzSandboxRefundGateway({ apiKey: apiKey.value(), signatureKey: signature.value(), collectionId: refundCollection.value() }) } : {}),
+        refundExecutionConfigured: legacyEnabled && refundConfigured(),
+        ...(withSecrets ? { xenditRefunds: new XenditRefundGateway(xenditKey.value()) } : {}),
+        bills: withSecrets && legacyEnabled ? new BillplzSandboxGateway({ apiKey: apiKey.value(), collectionId: collection.value(), callbackUrl: `https://us-central1-${project}.cloudfunctions.net/paymentWebhook` }) : { create: unavailable, get: unavailable },
+        ...(withSecrets && legacyEnabled && refundConfigured() ? { refunds: new BillplzSandboxRefundGateway({ apiKey: apiKey.value(), signatureKey: signature.value(), collectionId: refundCollection.value() }) } : {}),
         reader: {
             list: async (organization, afterId) => { const ledger = db.collection(`orgs/${organization}/transactions`);
                 let query = ledger.orderBy('createdAtMillis', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(21);
@@ -59,7 +63,7 @@ export const getAdminBookingPaymentCommand = onCall({ enforceAppCheck: true, pre
 catch (e) {
     throw coachCommandError(e);
 } });
-export const manageAdminBookingPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey, signature] }, async (r) => { try {
+export const manageAdminBookingPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey, signature, xenditKey] }, async (r) => { try {
     check(r.data);
     return await manageAdminBookingPayment(new FirestoreStore(getFirestore()), r.auth, r.data, deps(true));
 }

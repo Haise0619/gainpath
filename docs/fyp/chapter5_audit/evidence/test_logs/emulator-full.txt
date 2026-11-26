@@ -1,0 +1,262 @@
+Run: emulator-full
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:47:28.4154723Z
+Ended UTC: 2026-11-25T14:56:36.7365986Z
+Duration seconds (wall-clock): 548.32
+Child process exit code: 0
+Observed outcomes: 312 pass / 0 fail / 2 skip across 57 files.
+Running core: 44 files on demo-gainpath
+ ✓ emulator/firestore-rules.test.ts (22 tests) 24401ms
+   ✓ allows only owner get of server consent for verified active ordinary members 3635ms
+   ✓ preserves private workout owner/admin reads and forbids all client acceptance writes 1179ms
+   ✓ stores only a verified member’s own bounded preferences 1677ms
+   ✓ allows a verified member to create, read and edit only their private fitness profile 840ms
+   ✓ rejects unauthenticated, unverified, suspended, non-member and cross-organization profiles 584ms
+   ✓ validates fitness profile fields and forbids privilege injection 788ms
+   ✓ denies private Member records after canonical reassignment despite the old active membership 320ms
+   ✓ allows an owner and rejects another member, unauthenticated and cross-organization reads 323ms
+   ✓ protects server-owned writes even from admin client SDKs 439ms
+   ✓ published tutorial snapshots retain member scope without exposing staff catalog or drafts 346ms
+   ✓ allows Admin and Staff to create, list, and update exercises and routine blueprints without hard delete 651ms
+   ✓ denies member, coach, unverified, cross-organization, malformed, and published-content writes 592ms
+   ✓ booking-only reads reject leftover membership after current organization drift 331ms
+   ✓ booking-only reads require membership organization and active organization 312ms
+   ✓ booking-only reads require canonical owner role and active Coach/Staff branch assignment 482ms
+   ✓ booking-only owner reads remain for branchless Member and withdrawn Coach, while writes stay denied 367ms
+ ✓ emulator/module1-profile-goals-lifecycle.test.ts (14 tests) 11954ms
+   ✓ legacy profile edits preserve age and unknown historical creation; explicit bracket upgrade deletes exact age 849ms
+   ✓ new profiles require trusted immutable completion metadata and reject invented legacy history 403ms
+   ✓ profile schema rejects invalid measurements, bracket, enums, dual ages and injected privileged fields 956ms
+   ✓ private profile and goal access rejects wrong owner, org, role, unverified and signed-out callers 658ms
+   ✓ numeric goals create, update and archive with stable IDs and immutable matching revisions 687ms
+   ✓ requires atomic history, sequential revision, immutable category/unit/period/creation and genuine change 619ms
+   ✓ goal category numeric units and periods reject unsupported or imprecise values 643ms
+   ✓ pending deletion denies private state and old tokens; fresh login can resolve recovery identity only 825ms
+   ✓ reactivation never restores old-token Module 1 access; malformed lifecycle fails closed 558ms
+   ✓ Storage denies pending and stale sessions while retaining existing immutable Member objects 1350ms
+   ✓ Storage accepts restored sessions with epoch-sized whole timestamps and rejects fractional lifecycle facts 1067ms
+ ✓ emulator/booking-payment.test.ts (7 tests) 40918ms
+   ✓ member preference is persisted once in the original invoice independently of gateway and verified success 12031ms
+   ✓ direct method discovery and concurrent checkout retain one immutable bill and confirm exactly once 8202ms
+   ✓ concurrent checkout creates one bill; concurrent verified callbacks confirm exactly once 7504ms
+   ✓ expiry racing with paid verification never resurrects the booking or steals replacement locks 969ms
+   ✓ exact Rules deny direct financial/audit reads and writes for provisioned clients 2769ms
+   ✓ concurrent Admin refund execution reserves one provider order and preserves expired booking 4605ms
+   ✓ changed reviewed fee produces no transaction or bill; unchanged concurrent retries reserve one bill 4809ms
+ ✓ emulator/coach-directory.test.ts (4 tests) 5997ms
+   ✓ Coach saves → Admin reviews/publishes → Member reads; draft edits stay private and public-only deactivation withdraws 2113ms
+   ✓ denies other-role drafts/direct writes, stale assignments, unverification and former-Coach inactive access 1479ms
+   ✓ real contention and a deterministic callback retry keep the original revision 385ms
+ ✓ emulator/catalog-edit-transactions.test.ts (28 tests) 7769ms
+   ✓ authors can save rich instructions and clear optional fields 325ms
+   ✓ authors can create an exercise with 12 steps and signed image URLs 759ms
+   ✓ web SDK retries with unchanged original baseline and rejects intervening write 1184ms
+ ✓ emulator/membership-payment.test.ts (6 tests) 28380ms
+   ✓ reads Free then verified paid then expired entitlement without mutating paid facts 1745ms
+   ✓ reserves one provider bill during real Firestore transaction contention 11052ms
+   ✓ allocates the final promo capacity to at most one concurrent Member 3666ms
+   ✓ serializes distinct cleared renewals without losing remaining time 3587ms
+   ✓ persists the issued quote and schedules a paid Premium term once under contention 7011ms
+   ✓ existing Rules deny direct financial writes and cross-account ledger reads 1304ms
+ ✓ emulator/transactions.test.ts (7 tests) 20446ms
+   ✓ replaces existing expired locks using the real Firestore adapter 948ms
+   ✓ serializes competing overlapping holds from different members 3721ms
+   ✓ serializes the daily cap across disjoint slots 4094ms
+   ✓ deduplicates concurrent retries with one receipt and booking 3388ms
+   ✓ serializes same-slot members, rejects a different-branch request, and persists options from those exact locks 4311ms
+   ✓ replays a concurrent committed receipt after Auth lookup failure and rejects actor scope drift 643ms
+   ✓ persists verified payment payloads at a valid Firestore document path once 3323ms
+ ✓ emulator/member-booking-change.test.ts (4 tests) 12890ms
+   ✓ serializes replacement against another Member taking the target 1684ms
+   ✓ allows only one concurrent edit of the displayed baseline 4258ms
+   ✓ serializes cancellation against rescheduling without orphan reservations 3490ms
+   ✓ serializes the same Member taking overlapping times with different Coaches when multiple sessions are allowed 3446ms
+ ✓ emulator/coach-management-rules.test.ts (7 tests) 6653ms
+   ✓ owner Coach creates immutable documents and Admin reads only without mutation 1056ms
+   ✓ denies Members, Staff, other Coach, anonymous and unverified Storage reads 589ms
+   ✓ denies wrong canonical org, inactive membership and foreign paths 552ms
+   ✓ enforces extension-independent MIME, random IDs and byte bounds 1114ms
+   ✓ private certification, summary and audit are owner/Admin readable and server-write-only 892ms
+   ✓ retains existing equipment and Admin photo policy 549ms
+ ✓ emulator/member-profile-photo.test.ts (6 tests) 5240ms
+   ✓ Member saves, reopens, replaces and clears a private reference while preserving identity 503ms
+   ✓ foreign actors, other roles, unverified and anonymous cannot use Member photos 766ms
+   ✓ only bounded owned paths and photo-only identity patches are allowed 368ms
+   ✓ inactive, wrong role and canonical organization drift revoke reads, uploads and reference writes 698ms
+   ✓ rejects unsafe types and byte boundaries; retains immutable objects without list/delete 1064ms
+   ✓ preserves Admin photo and Equipment policy and denies unrelated Storage paths 634ms
+ ✓ emulator/workouts.test.ts (6 tests) 4470ms
+   ✓ deduplicates real concurrent consent transactions 3283ms
+ ✓ emulator/read-performance.test.ts (4 tests) 2429ms
+   ✓ US and Singapore handlers return identical persisted aggregates and identical scope failures 1912ms
+ ✓ emulator/pair-conversation.test.ts (4 tests) 11515ms
+   ✓ uses transactional compound queries, deduplicates simultaneous sends and preserves booking records 10423ms
+   ✓ replays only the emulator closed-transaction status, once, without duplicating a committed send 458ms
+   ✓ pages equal-timestamp legacy history and never rewrites the source documents 462ms
+ ✓ emulator/exercise-media-storage.test.ts (6 tests) 8096ms
+   ✓ Admin and Staff upload covers/MP4s; active Members read without listing 1122ms
+   ✓ rejects unauthorized roles, unverified callers, wrong uploader and organization 1034ms
+   ✓ rejects unsupported types, invalid object IDs and empty uploads 769ms
+   ✓ enforces the 5 MB cover and 100 MB video bounds 2382ms
+   ✓ replacement/removal cannot overwrite or delete existing media objects 546ms
+   ✓ stale assignments, inactive members and mismatched memberships lose access 500ms
+ ✓ emulator/equipment-image-storage.test.ts (6 tests | 1 skipped) 3649ms
+   ✓ Admin and Staff create scoped images; active Members read metadata, not lists 458ms
+   ✓ denies unverified, other-role, other-owner and cross-organization uploads 489ms
+   ✓ rejects oversized or unsupported images and preserves existing objects 575ms
+   ✓ denies stale organization assignments, inactive and mismatched membership 330ms
+   ✓ equipment tutorial permits scoped MP4 upload and member read; denies other roles, type, overwrite, delete and cross-org 638ms
+ ✓ emulator/premium-coach-voucher.test.ts (2 tests) 9616ms
+   ✓ serializes distinct checkout contention on one voucher and consumes exactly once under callback retries 7099ms
+   ✓ denies direct client reads and writes of voucher policy, earned terms, heads and reservations 2502ms
+ ✓ emulator/booking-read.test.ts (5 tests) 4138ms
+   ✓ reads the writer’s same persisted ID for Member/Coach/Admin through real SDK queries, without protected writes 770ms
+   ✓ keeps branchless Member and unpublished Coach reads but excludes reassigned/inactive Coach branches 986ms
+   ✓ denies stale organization/Staff and discards a real query after Coach assignment changes 568ms
+   ✓ uses exact member/Coach/admin queries and SDK startAfter document-ID ties for 20+1 pages 1243ms
+   ✓ fails closed for malformed persisted data and invalid cursor without protected mutations 558ms
+ ✓ emulator/verified-rewards.test.ts (2 tests) 17257ms
+   ✓ real Firestore retries award duplicates once and allocate the last stock to one owner 15061ms
+   ✓ Members and Admin cannot bypass commands to read or forge trusted reward paths 2185ms
+ ✓ emulator/coach-roster.test.ts (4 tests) 3717ms
+   ✓ serializes capacity across different members taking different slots without extra accounting 579ms
+   ✓ serializes exception creation against an overlapping new hold 683ms
+   ✓ pins the real old dated baseline when a weekly edit races an allocation 950ms
+   ✓ protects the private aggregate from direct client reads and writes 688ms
+ ✓ emulator/compliance-documents.test.ts (3 tests) 1867ms
+   ✓ creates a draft, edits, archives, restores and reloads immutable versions 311ms
+   ✓ preserves Admin-only authority and denies other roles, unverified, foreign and inactive assignments 444ms
+ ✓ emulator/coach-availability.test.ts (4 tests) 6392ms
+   ✓ persists Coach CRUD and the same scoped Member/Admin schedule; direct clients remain denied 1007ms
+   ✓ serializes concurrent immutable-baseline edits with one winner 3631ms
+   ✓ serializes concurrent hold/removal so incompatible schedule and reservation cannot both win 423ms
+   ✓ callback retry never adopts a changed revision; scope drift prevents receipt replay 449ms
+ ✓ emulator/operations-calendar.test.ts (1 test) 465ms
+   ✓ projects real indexed Firestore records and reconciles Malaysia Time metric buckets with Branch Reports 465ms
+ ✓ emulator/published-routine-discovery.test.ts (1 test) 2078ms
+   ✓ trusted fixture publication -> bounded Member discovery/select-by-ID -> refresh, with scope denial 684ms
+ ✓ emulator/coach-direct-reads.test.ts (14 tests) 4425ms
+   ✓ allows only own Coach scope and own credentials, or scoped Admin review 866ms
+ ✓ emulator/chatbot-disclaimer.test.ts (3 tests) 1807ms
+   ✓ creates inactive, edits, activates, deactivates and reloads immutable versions 316ms
+   ✓ preserves Admin/Staff authority and denies other roles, unverified, foreign and inactive assignments 379ms
+ ✓ emulator/announcements.test.ts (3 tests) 1645ms
+   ✓ Admin draft -> edit -> publish -> scoped Member refresh -> deactivate, preserving identity 320ms
+ ✓ emulator/member-display-name.test.ts (5 tests) 1912ms
+   ✓ Member saves/reopens both identity names while preserving contacts, photo, choices and goals 310ms
+ ✓ emulator/equipment-catalog.test.ts (4 tests) 1731ms
+   ✓ Admin create/edit/activate -> scoped Member browse -> deactivate, preserving identity and metadata 310ms
+ ✓ emulator/reward-media-storage.test.ts (4 tests) 5211ms
+   ✓ only verified active organization Admin creates images; active members get without list 1153ms
+   ✓ enforces immutable JPG/PNG/WebP images, anonymous IDs and 5MB size 1334ms
+   ✓ organization reassignment, suspension and stale reactivated sessions lose access 677ms
+   ✓ inactive and missing organizations cannot upload or read reward images 830ms
+ ✓ emulator/booking-lifecycle.test.ts (3 tests) 10169ms
+   ✓ real transaction contention converges on one expiry and all roles read the same persisted terminal ID 6113ms
+   ✓ cancellation and replacement allocation serialize without releasing the replacement 3423ms
+   ✓ batch scans only due supported jobs, expires holds, quarantines corrupt ownership, and is repeatable 621ms
+ ✓ emulator/admin-crud-authority.test.ts (5 tests) 1433ms
+ ✓ emulator/profile-photo-storage.test.ts (5 tests | 1 skipped) 3051ms
+   ✓ verified owner uploads and reads bytes; other Admin, Member, Coach and anonymous reads are denied 494ms
+   ✓ denies foreign owner/org, unverified, non-Admin, empty/oversize and unsupported uploads 747ms
+   ✓ retains immutable objects; overwrite, deletion and enumeration are denied 329ms
+   ✓ canonical org, membership status and membership org drift revoke photo access 469ms
+ ✓ emulator/reward-catalog-metadata.test.ts (4 tests) 2331ms
+   ✓ Member, Coach, Staff, anonymous and unverified users cannot read or author metadata 346ms
+ ✓ emulator/member-contact-details.test.ts (4 tests) 2042ms
+ ✓ emulator/read-batch2.test.ts (3 tests) 1568ms
+   ✓ reads real payment snapshots and event projections without writing or invoking a provider 1209ms
+ ✓ emulator/admin-notification-preferences.test.ts (4 tests) 1596ms
+ ✓ emulator/facility-name-settings.test.ts (4 tests) 1674ms
+ ✓ emulator/booking-communication.test.ts (2 tests) 1387ms
+   ✓ serializes concurrent duplicate sends and preserves booking/lock documents byte-for-byte 859ms
+   ✓ denies other roles and revoked memberships without writing messages 520ms
+ ✓ emulator/admin-account-contact.test.ts (3 tests) 1406ms
+ ✓ emulator/admin-member-directory.test.ts (5 tests) 1567ms
+ ✓ emulator/coach-provisioning.test.ts (1 test) 493ms
+   ✓ sets up a real emulator Coach auth account, private draft and password reset 492ms
+ ✓ emulator/branch-operations.test.ts (1 test) 3235ms
+   ✓ deduplicates concurrent physical visit calls with real Firestore transactions 3234ms
+ ✓ emulator/booking-communication-rules.test.ts (1 test) 1628ms
+   ✓ clients cannot bypass the callable to read or overwrite messages or sequence state 575ms
+ ✓ emulator/storage-rules.test.ts (2 tests) 1378ms
+ Test Files  44 passed (44)
+      Tests  231 passed | 2 skipped (233)
+   Duration  331.54s (transform 2.73s, setup 0ms, collect 24.98s, tests 292.03s, environment 8ms, prepare 5.72s)
++  Script exited successfully (code 0)
+Running backup: 1 files on demo-gainpath-backup
+ ✓ emulator/workout-backup.test.ts (5 tests) 14891ms
+   ✓ concurrent retries store one head and one immutable revision without acceptance 3879ms
+   ✓ competing payloads cannot silently replace a saved session 3557ms
+   ✓ pagination restores all records with stable IDs and excludes other owners 552ms
+   ✓ unchanged Rules deny direct client backup reads and writes including the owner 619ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Duration  15.87s (transform 113ms, setup 0ms, collect 679ms, tests 14.89s, environment 0ms, prepare 116ms)
++  Script exited successfully (code 0)
+Running checkin: 1 files on demo-gainpath-checkin
+ ✓ emulator/app-check-in.test.ts (5 tests) 10548ms
+   ✓ real concurrent retries issue one receipt and one 50-point shared balance credit 4138ms
+   ✓ unchanged Rules reject direct profile/receipt/balance reads and writes 513ms
+   ✓ projects legacy claims and an owned idempotent workout backup without exposing progress writes 1354ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Duration  11.55s (transform 136ms, setup 0ms, collect 732ms, tests 10.55s, environment 0ms, prepare 100ms)
++  Script exited successfully (code 0)
+Running reporting: 8 files on demo-gainpath-reporting
+ ✓ emulator/reward-journey.test.ts (5 tests) 27669ms
+   ✓ actual daily claim → wallet → redemption → My Rewards → Admin inspection → once-only collection 8820ms
+   ✓ expired vouchers remain spent and stock stays reserved; neither points nor collection can be forged 3461ms
+   ✓ competing last-stock requests and retried publisher stock additions stay atomic 6555ms
+   ✓ one direct save creates a redeemable reward without an intermediate draft and rejected fields leave no partial item 3966ms
+   ✓ points-only save needs no conversion policy; concurrent last-stock redemption stays once-only and client catalog writes are denied 4855ms
+ ✓ emulator/admin-check-in-reporting.test.ts (6 tests) 11323ms
+   ✓ uses actual immutable receipts and profiles without touching wallet balances or source versions 1328ms
+   ✓ reads complete real document-id pages and reconciles more than 100 claim days 8002ms
+   ✓ a valid concurrent claim fails closed instead of mixing profile and receipt revisions 309ms
+   ✓ schema two aggregates real redemption and game documents while leaving wallets and receipts unchanged 464ms
+   ✓ schema two rejects a foreign source and authority drift during actual extended reads 593ms
+   ✓ schema three reports real observable events, distinct Members and historical recency without writes 619ms
+ ✓ emulator/workout-rewards.test.ts (3 tests) 9273ms
+   ✓ real transactions version only disabled draft and hardhold never writes Member points 4191ms
+   ✓ explicitly injected future gate handles concurrent duplicates and different-attempt daily cap atomically 3845ms
+   ✓ existing Rules deny client-written policies, releases, accepted attempt receipts and reward caps 1222ms
+ ✓ emulator/admin-reporting.test.ts (4 tests) 1609ms
+   ✓ real document-id pages include every account exactly once without writes 1182ms
+ ✓ emulator/admin-workout-reporting.test.ts (3 tests) 1299ms
+   ✓ reads all latest backups across real pages, ignores revision subcollections and performs no writes 1021ms
+ ✓ emulator/branch-report.test.ts (1 test) 182ms
+ ✓ emulator/reward-cover-upload.test.ts (1 test) 216ms
+ ✓ emulator/mini-game-rewards.test.ts (1 test) 1726ms
+   ✓ existing Rules keep mini-game policy, trusted evidence and shared counters server-only 1725ms
+ Test Files  8 passed (8)
+      Tests  24 passed (24)
+   Duration  59.47s (transform 686ms, setup 0ms, collect 4.19s, tests 53.30s, environment 1ms, prepare 781ms)
++  Script exited successfully (code 0)
+Running rounds: 1 files on demo-gainpath-mini-game-rounds
+ ✓ emulator/mini-game-rounds.test.ts (3 tests) 26259ms
+   ✓ real transactions enforce one active Member round across concurrent device starts 7532ms
+   ✓ real concurrent checkpoints and finish retries create one pending receipt and never reward evidence 15921ms
+   ✓ existing Rules deny client reads/writes of timing leases, sessions and immutable command receipts 2795ms
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Duration  27.20s (transform 94ms, setup 0ms, collect 652ms, tests 26.26s, environment 0ms, prepare 107ms)
++  Script exited successfully (code 0)
+Running participation: 1 files on demo-gainpath-participation
+ ✓ emulator/mini-game-participation.test.ts (3 tests) 15516ms
+   ✓ full server-issued round to spendable credit is retry-safe 9802ms
+   ✓ simultaneous completed sessions on different devices cannot bypass per-game allowance 3006ms
+   ✓ existing Rules prohibit client creation or alteration of demo balances awards and shared caps 2697ms
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Duration  16.41s (transform 97ms, setup 0ms, collect 641ms, tests 15.52s, environment 0ms, prepare 96ms)
++  Script exited successfully (code 0)
+Running catalogstatus: 1 files on demo-gainpath-catalog-status
+ ✓ emulator/exercise-catalog-status.test.ts (41 tests) 10093ms
+   ✓ admin can deactivate, archive and restore CLI-authored records preserving all metadata 1464ms
+   ✓ staff can deactivate, archive and restore CLI-authored records preserving all metadata 337ms
+ Test Files  1 passed (1)
+      Tests  41 passed (41)
+   Duration  10.55s (transform 30ms, setup 0ms, collect 220ms, tests 10.09s, environment 0ms, prepare 91ms)
++  Script exited successfully (code 0)
+

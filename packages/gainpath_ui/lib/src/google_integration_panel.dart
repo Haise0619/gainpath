@@ -9,6 +9,7 @@ class GoogleIntegrationPanelStatus {
       this.senderEmail,
       this.lastSyncedAtMillis,
       this.automationEnabled = false,
+      this.calendarAutomationEnabled = false,
       this.automationStatus = 'not_started',
       this.emailSyncStatus = 'not_sent',
       this.revocationPending = false});
@@ -16,6 +17,7 @@ class GoogleIntegrationPanelStatus {
   final String? senderEmail;
   final int? lastSyncedAtMillis;
   final bool automationEnabled, revocationPending;
+  final bool calendarAutomationEnabled;
   final String automationStatus, emailSyncStatus;
   bool get connected => connectionStatus == 'connected';
 }
@@ -183,7 +185,9 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
     } catch (_) {
       if (mounted && n == _generation) {
         setState(() => _error =
-            'Google connection could not start. Check OAuth configuration and Admin access.');
+            _status?.connectionStatus == 'needs_reconnect'
+                ? 'Reconnect could not start. Refresh the connection status and resolve any pending Google grant.'
+                : 'Google connection could not start. Check OAuth configuration and Admin access.');
       }
     } finally {
       if (mounted && n == _generation) setState(() => _busy = false);
@@ -272,9 +276,12 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
               if (status != null) ...[
                 const SizedBox(height: 12),
                 Text('Gym connection: ${_label(status.connectionStatus)}'),
+                Text(status.calendarAutomationEnabled
+                    ? 'Automatic Calendar sync: ${status.connected ? 'Enabled' : 'Waiting for Google connection'}'
+                    : 'Automatic Calendar sync: Off for general bookings'),
                 Text(status.automationEnabled
-                    ? 'Automatic delivery: Enabled for approved test recipients'
-                    : 'Automatic delivery: Disabled'),
+                    ? 'Test delivery: Enabled for approved recipients'
+                    : 'Test delivery: Disabled'),
                 if (['needs_review', 'email_needs_review']
                     .contains(status.automationStatus))
                   const Text(
@@ -412,8 +419,10 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                     const Divider(height: 32),
                     Text('Booking delivery',
                         style: Theme.of(context).textTheme.titleSmall),
-                    Text(status.automationEnabled
-                        ? 'Confirmed paid bookings, reschedules and cancellations synchronize automatically for approved test recipients. Use manual Calendar reconciliation only when needed.'
+                    Text(status.calendarAutomationEnabled
+                        ? 'Confirmed paid bookings, reschedules and cancellations sync to the coach calendar. Older bookings can be reconciled here.'
+                        : status.automationEnabled
+                        ? 'Automatic delivery is limited to approved tests. Other confirmed bookings can be synchronized here.'
                         : 'After confirmation, rescheduling or cancellation, reconcile the current booking here. No automatic background delivery is enabled.'),
                     const SizedBox(height: 12),
                     TextField(

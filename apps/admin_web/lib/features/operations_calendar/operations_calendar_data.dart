@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:gainpath_ui/gainpath_ui.dart' show ClassCall, classRows;
 
-enum CalendarEventType { booking, availability, announcement }
+enum CalendarEventType { booking, availability, announcement, groupClass }
 
 @immutable
 class OperationsEvent {
@@ -120,9 +121,10 @@ typedef OperationsCalendarRequest = Future<Map<String, dynamic>> Function(
 /// Uses the same authenticated branch callable as the existing Admin module.
 class FirebaseOperationsCalendarRepository
     implements OperationsCalendarRepository {
-  const FirebaseOperationsCalendarRepository(this.request);
+  const FirebaseOperationsCalendarRepository(this.request, {this.groupClasses});
 
   final OperationsCalendarRequest request;
+  final ClassCall? groupClasses;
 
   @override
   Future<List<CalendarBranch>> loadBranches() async {
@@ -158,11 +160,15 @@ class FirebaseOperationsCalendarRepository
     String? branchId,
   }) async {
     if (types.isEmpty) return const CalendarEventsResult([], {});
-    final data = await request({
-      'action': 'calendarEvents',
-      ..._range(start, end, branchId),
-      'types': types.map((type) => type.name).toList(),
-    });
+    final standard =
+        types.where((type) => type != CalendarEventType.groupClass);
+    final data = standard.isEmpty
+        ? <String, dynamic>{'events': [], 'unavailable': []}
+        : await request({
+            'action': 'calendarEvents',
+            ..._range(start, end, branchId),
+            'types': standard.map((type) => type.name).toList(),
+          });
     final events = <String, OperationsEvent>{};
     for (final json in (data['events'] as List).cast<Map>()) {
       final event = OperationsEvent.fromJson(json);
@@ -179,11 +185,38 @@ class FirebaseOperationsCalendarRepository
       }
       events[event.id] = event;
     }
+    final unavailable = (data['unavailable'] as List)
+        .map((type) => CalendarEventType.values.byName(_text(type)))
+        .toSet();
+    if (types.contains(CalendarEventType.groupClass) && groupClasses != null) {
+      try {
+        final result = await groupClasses!('calendar', {
+          if (branchId != null) 'branchId': branchId,
+          'startAtMillis': start.millisecondsSinceEpoch,
+          'endAtMillis': end.millisecondsSinceEpoch,
+        });
+        for (final row in classRows(result['classes'])) {
+          final id = row['id'] as String;
+          events['groupClass-$id'] = OperationsEvent(
+            id: 'groupClass-$id',
+            sourceId: id,
+            title: row['title'] as String,
+            type: CalendarEventType.groupClass,
+            start: _instant(row['startAtMillis']),
+            end: _instant(row['endAtMillis']),
+            status: row['status'] as String,
+            branchId: row['branchId'] as String,
+            coachId: row['coachId'] as String?,
+            description:
+                '${row['instructor']} · ${row['activeCount']}/${row['capacity']} registered',
+          );
+        }
+      } catch (_) {
+        unavailable.add(CalendarEventType.groupClass);
+      }
+    }
     return CalendarEventsResult(
-      List.unmodifiable(events.values),
-      Set.unmodifiable((data['unavailable'] as List)
-          .map((type) => CalendarEventType.values.byName(_text(type)))),
-    );
+        List.unmodifiable(events.values), Set.unmodifiable(unavailable));
   }
 
   @override

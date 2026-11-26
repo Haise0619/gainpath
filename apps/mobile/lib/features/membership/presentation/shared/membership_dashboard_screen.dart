@@ -7,7 +7,10 @@ import '../member/billing_history_screen.dart';
 import '../member/premium_upgrade_screen.dart';
 import '../member/refund_request_screen.dart';
 import '../member/renew_screen.dart';
+import '../member/widgets/membership_components.dart';
 import 'membership_data_view.dart';
+import 'membership_billing_panel.dart';
+import '../../application/membership_billing_repository.dart';
 
 class MembershipDashboardScreen extends StatelessWidget {
   const MembershipDashboardScreen(
@@ -41,176 +44,179 @@ class MembershipDashboardScreen extends StatelessWidget {
           if (context.mounted) refresh();
         }
 
-        final tier = e.effectiveTier?.label;
-        final title = !e.isResolved
-            ? 'Verification required'
-            : e.historicalOnly
-                ? 'Last verified tier · $tier'
-                : expired
-                    ? 'Membership Expired'
-                    : '$tier Membership';
-        final action = !verified
-            ? 'Verify Membership'
-            : expired
-                ? 'Renew Membership'
-                : paid
-                    ? 'Renew ${e.paidTier!.label}'
-                    : 'Explore Membership Plans';
+        final hasBilling = repo is MembershipBillingRepository &&
+            data['billing'] is Map &&
+            data['billing']['status'] != null;
+
         return [
-          const SizedBox(height: 8),
-          Panel(
-              background: AppColors.primaryTint,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      const Icon(Icons.card_membership_rounded,
-                          color: AppColors.primary, size: 26),
-                      const SizedBox(width: 10),
-                      Expanded(
-                          child: Text(
-                              paid
-                                  ? 'GYM MEMBERSHIP · ALL BRANCHES'
-                                  : 'YOUR MEMBERSHIP',
-                              style: const TextStyle(
-                                  color: AppColors.primaryDark,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8))),
-                    ]),
-                    const SizedBox(height: 16),
-                    Text(title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                                color: AppColors.ink,
-                                fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    Text(
-                        !e.isResolved
-                            ? 'Connect to verify your paid membership. Your saved fitness records remain available.'
-                            : expired
-                                ? 'Your paid membership has expired. Digital fitness and saved points remain yours.'
-                                : e.historicalOnly
-                                    ? 'Historical record · Refresh online before using paid benefits.'
-                                    : paid
-                                        ? 'Paid membership active'
-                                        : 'Full digital fitness, always available.',
-                        style: const TextStyle(
-                            color: AppColors.inkSoft, height: 1.5)),
-                    if (e.paidExpiresAtMillis != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                          '${expired ? 'Expired' : e.historicalOnly ? 'Last recorded expiry' : 'Expires'} ${membershipDate(e.paidExpiresAtMillis)}',
+          if (repo is MembershipBillingRepository)
+            MembershipBillingPanel(
+              repository: repo,
+              billingRepository: repo as MembershipBillingRepository,
+              data: data,
+              refresh: refresh,
+            ),
+          if (hasBilling) const SizedBox(height: 12),
+
+          // 1. Compact Current Plan Card (Target: ~220–280dp height)
+          MembershipStatusCard(
+            entitlement: e,
+            scheduledUpgrade: scheduled,
+            onPrimaryAction: !verified
+                ? refresh
+                : () => open(expired || paid
+                    ? RenewScreen(repository: repo)
+                    : BrowsePlansScreen(repository: repo)),
+            onUpgradeAction: premium != null
+                ? () =>
+                    open(PremiumUpgradeScreen(repository: repo, plan: premium))
+                : null,
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Compact 2-Column Membership Benefits Grid
+          MembershipBenefitsGrid(entitlement: e),
+
+          // 3. Retained previous facts for expired members
+          if (expired && e.paidTier != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.hairline),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_rounded,
+                      size: 20, color: AppColors.inkSoft),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Previous paid membership',
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.ink,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${e.paidTier!.label} · Expired ${membershipDate(e.paidExpiresAtMillis)}',
                           style: const TextStyle(
-                              color: AppColors.ink,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                    if (!paid && !expired && e.isResolved)
-                      const Padding(
-                          padding: EdgeInsets.only(top: 10),
-                          child: Text('No expiry · No membership charge')),
-                    if (paid && !e.historicalOnly && scheduled == null)
-                      const Padding(
-                          padding: EdgeInsets.only(top: 10),
-                          child: Text(
-                              'Renew anytime. Your remaining membership time will be preserved.')),
-                    if (scheduled != null) ...[
-                      const SizedBox(height: 16),
-                      Text('Premium scheduled',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      Text(
-                          'Starts ${membershipDate(scheduled['startsAtMillis'])}'),
-                      Text(
-                          'Expires ${membershipDate(scheduled['expiresAtMillis'])}'),
-                    ] else ...[
-                      const SizedBox(height: 18),
-                      SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                              onPressed: !verified
-                                  ? refresh
-                                  : () => open(expired || paid
-                                      ? RenewScreen(repository: repo)
-                                      : BrowsePlansScreen(repository: repo)),
-                              child: Text(action))),
-                    ],
-                    if (premium != null) ...[
-                      const SizedBox(height: 8),
-                      SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () => open(PremiumUpgradeScreen(
-                                repository: repo, plan: premium)),
-                            child: const Text('Upgrade to Premium'),
-                          )),
-                    ],
-                    const SizedBox(height: 10),
-                    const Text('No automatic renewal or recurring charge.',
-                        style:
-                            TextStyle(color: AppColors.inkSoft, fontSize: 12)),
-                  ])),
-          const SizedBox(height: 22),
-          Text(
-              paid && !e.historicalOnly
-                  ? 'Included with ${e.effectiveTier!.label}'
-                  : 'Your digital fitness',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 10),
-          Text(paid && !e.historicalOnly
-              ? 'Gym entry, coach booking, Mini Games and eligible regular physical rewards.'
-              : 'AI workouts, tutorials, training programs, history, reports and PDF export remain available under your account permissions.'),
-          const SizedBox(height: 10),
-          const Text(
-              'Daily check-in points stay in your wallet. Physical reward redemption requires active Basic or Premium membership.'),
-          if (paid && e.effectiveTier == MembershipTier.premium)
-            const Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: Text(
-                    'Premium-exclusive rewards are available only where configured in the rewards catalogue. Additional check-in bonuses and coach offers are shown only when enabled.')),
-          if (expired) ...[
-            const SizedBox(height: 18),
-            Text('Previous paid membership',
-                style: Theme.of(context).textTheme.titleMedium),
-            Text(
-                '${e.paidTier!.label} · Expired ${membershipDate(e.paidExpiresAtMillis)}'),
-            const Text(
-                'Your previous paid period, bookings and billing history are retained.'),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-          const SizedBox(height: 14),
-          TextButton.icon(
-              onPressed: () => open(BrowsePlansScreen(repository: repo)),
-              icon: const Icon(Icons.compare_arrows_rounded),
-              label: const Text('Compare membership plans')),
+
           const SizedBox(height: 18),
-          Text('Billing & support',
-              style: Theme.of(context).textTheme.titleLarge),
+
+          // 4. Compact Billing, Plans & Support Navigation
+          Text(
+            'Billing & Plans',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+          ),
           const SizedBox(height: 8),
           if (membershipRows(data['transactions']).isEmpty)
             const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text('No membership payments yet.')),
-          Panel(
-              padding: EdgeInsets.zero,
-              child: Column(children: [
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'No membership payments yet.',
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+              ),
+            ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.hairline),
+            ),
+            child: Column(
+              children: [
                 ListTile(
-                    leading: const Icon(Icons.receipt_long_outlined),
-                    title: const Text('Billing history'),
-                    subtitle:
-                        const Text('Payments, invoices and payment recovery'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => open(BillingHistoryScreen(repository: repo))),
-                const Divider(height: 1),
+                  dense: true,
+                  leading: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.compare_arrows_rounded,
+                        size: 18, color: AppColors.primary),
+                  ),
+                  title: const Text('Compare membership plans',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13.5)),
+                  subtitle: const Text(
+                      'View and compare Free, Basic and Premium',
+                      style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.inkSoft),
+                  onTap: () => open(BrowsePlansScreen(repository: repo)),
+                ),
+                const Divider(height: 1, color: AppColors.hairline),
                 ListTile(
-                    leading: const Icon(Icons.help_outline_rounded),
-                    title: const Text('Refund requests and status'),
-                    subtitle:
-                        const Text('Review a payment or request assistance'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => open(RefundRequestScreen(repository: repo))),
-              ])),
-          const SizedBox(height: 12),
+                  dense: true,
+                  leading: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.receipt_long_outlined,
+                        size: 18, color: AppColors.primary),
+                  ),
+                  title: const Text('Billing history',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13.5)),
+                  subtitle: const Text(
+                      'Payments, invoices and payment recovery',
+                      style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.inkSoft),
+                  onTap: () => open(BillingHistoryScreen(repository: repo)),
+                ),
+                const Divider(height: 1, color: AppColors.hairline),
+                ListTile(
+                  dense: true,
+                  leading: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.help_outline_rounded,
+                        size: 18, color: AppColors.primary),
+                  ),
+                  title: const Text('Refund requests and status',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13.5)),
+                  subtitle: const Text('Review a payment or request assistance',
+                      style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.inkSoft),
+                  onTap: () => open(RefundRequestScreen(repository: repo)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
         ];
       });
 }

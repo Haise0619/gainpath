@@ -1,0 +1,8 @@
+Run: gainpath_ui
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:47:26.8338634Z
+Ended UTC: 2026-11-25T14:48:07.3015382Z
+Duration seconds (wall-clock): 40.47
+Child process exit code: 0
+Observed outcomes: 26 pass / 0 fail / 0 skip across 6 files.
+

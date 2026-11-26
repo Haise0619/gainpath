@@ -24,7 +24,8 @@ class AccountSettingsScreen extends StatefulWidget {
       this.verifyCurrentPassword,
       this.saveNewPassword,
       this.module9Repository,
-      this.isSessionCurrent});
+      this.isSessionCurrent,
+      this.legalPrivacyBuilder});
 
   final MemberPreferencesRepository? repository;
   final AuthSession? contactSession;
@@ -35,6 +36,7 @@ class AccountSettingsScreen extends StatefulWidget {
   final Future<void> Function(String)? saveNewPassword;
   final Module9Repository? module9Repository;
   final bool Function()? isSessionCurrent;
+  final WidgetBuilder? legalPrivacyBuilder;
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
@@ -412,7 +414,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                     context, FeatureNavigation.workoutPrivacy,
                                     arguments: WorkoutPrivacyArguments(
                                         scope: scope,
-                                        isCurrent: () => mounted &&
+                                        isCurrent: () =>
+                                            mounted &&
                                             _workoutSettingsCurrent(scope)));
                               },
                             ),
@@ -520,6 +523,18 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                               () => true,
                                         ))),
                           ),
+                          if (widget.legalPrivacyBuilder case final legal?) ...[
+                            const _GroupDivider(),
+                            ListTile(
+                              leading: const Icon(Icons.policy_outlined),
+                              title: const Text('Legal & Privacy'),
+                              subtitle: const Text(
+                                  'Current documents and versions you agreed to'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context)
+                                  .push(MaterialPageRoute(builder: legal)),
+                            ),
+                          ],
                         ],
                       ),
                     ),

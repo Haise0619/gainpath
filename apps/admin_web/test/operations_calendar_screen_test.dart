@@ -370,8 +370,8 @@ void main() {
     final repository = _Repository()
       ..unavailableEvents.add(CalendarEventType.availability);
     await _Harness(repository).mount(tester, width: 1024, height: 768);
-    expect(find.textContaining('Coach availability could not load'),
-        findsOneWidget);
+    final error = find.textContaining('Coach availability could not load');
+    expect(tester.widget<Text>(error).style?.color, AppColors.danger);
     await _tap(tester, find.byTooltip('Event filters'));
     await _tap(
         tester,

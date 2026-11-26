@@ -7,7 +7,8 @@ import 'package:gainpath_mobile/features/gamification/domain/app_check_in.dart';
 import 'package:gainpath_mobile/features/gamification/application/app_check_in_cubit.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/app_check_in_dashboard.dart';
 
-Map<String, dynamic> snapshotJson(SessionScope scope, {bool claimed = false}) {
+Map<String, dynamic> snapshotJson(SessionScope scope,
+    {bool claimed = false, bool premium = false}) {
   final now = DateTime.utc(2026, 10, 26, 4).millisecondsSinceEpoch,
       today = DateTime.utc(2026, 10, 26);
   return {
@@ -17,7 +18,8 @@ Map<String, dynamic> snapshotJson(SessionScope scope, {bool claimed = false}) {
     'policyVersion': 'app-check-in-v1',
     'timezone': 'Asia/Kuala_Lumpur',
     'pointsPerClaim': 50,
-    'balance': claimed ? 50 : 0,
+    'balance': claimed ? (premium ? 75 : 50) : 0,
+    if (premium) 'availablePoints': claimed ? 0 : 75,
     'today': '2026-10-26',
     'claimedToday': claimed,
     'currentStreak': claimed ? 1 : 0,
@@ -42,7 +44,12 @@ Map<String, dynamic> snapshotJson(SessionScope scope, {bool claimed = false}) {
               'organizationId': scope.organizationId,
               'memberId': scope.userId,
               'date': '2026-10-26',
-              'points': 50,
+              'points': premium ? 75 : 50,
+              if (premium) ...{
+                'basePoints': 50,
+                'premiumBonusPoints': 25,
+                'premiumBonusPolicyVersion': 'premium-25-v1',
+              },
               'claimedAtMillis': now,
               'policyVersion': 'app-check-in-v1',
               'source': 'app_check_in'
@@ -69,7 +76,7 @@ class FakeCheckIn implements AppCheckInRepository {
   FakeCheckIn(this.scope);
   @override
   final SessionScope scope;
-  bool claimed = false, offline = false;
+  bool claimed = false, offline = false, premium = false;
   int claims = 0;
   Completer<void>? pending, overviewDelay;
   @override
@@ -78,7 +85,7 @@ class FakeCheckIn implements AppCheckInRepository {
     if (offline) throw StateError('offline');
     return AppCheckInResult(
         AppCheckInSnapshot.fromJson(
-            snapshotJson(scope, claimed: claimed), scope),
+            snapshotJson(scope, claimed: claimed, premium: premium), scope),
         awarded: false);
   }
 
@@ -90,7 +97,8 @@ class FakeCheckIn implements AppCheckInRepository {
     final awarded = !claimed;
     claimed = true;
     return AppCheckInResult(
-        AppCheckInSnapshot.fromJson(snapshotJson(scope, claimed: true), scope),
+        AppCheckInSnapshot.fromJson(
+            snapshotJson(scope, claimed: true, premium: premium), scope),
         awarded: awarded);
   }
 }
@@ -98,6 +106,17 @@ class FakeCheckIn implements AppCheckInRepository {
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
+  test('shows the Premium offer and confirms the amount on the receipt',
+      () async {
+    final repo = FakeCheckIn(scope)..premium = true;
+    final cubit = AppCheckInCubit(repository: repo, activeScope: () => scope);
+    await cubit.refresh();
+    expect(cubit.state.snapshot!.pointsPerClaim, 75);
+    await cubit.claim();
+    expect(cubit.state.snapshot!.balance, 75);
+    expect(cubit.state.message, '+75 points · app check-in saved');
+    await cubit.close();
+  });
   test(
       'duplicate taps share one request and points change only after server response',
       () async {
@@ -166,8 +185,10 @@ void main() {
     await tester.tap(find.text('Claim +50'));
     await tester.pumpAndSettle();
     expect(find.text('Claimed today'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Badges'), 180);
-    await tester.tap(find.text('Badges'));
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('training-achievements-view-all')), 180);
+    await tester
+        .tap(find.byKey(const ValueKey('training-achievements-view-all')));
     await tester.pumpAndSettle();
     expect(find.text('First check-in'), findsOneWidget);
     expect(tester.takeException(), isNull);

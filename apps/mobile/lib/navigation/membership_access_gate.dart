@@ -22,10 +22,12 @@ class MembershipAccessGate extends StatelessWidget {
       this.repository,
       this.repositoryFactory,
       this.freePreviewBuilder,
+      this.preserveAdmittedRoute = false,
       required this.feature,
       required this.resourceId,
       required this.child});
   final bool enabled;
+  final bool preserveAdmittedRoute;
   final MembershipAccessRepository? repository;
   final MembershipAccessRepositoryFactory? repositoryFactory;
   final Widget Function(BuildContext, Future<void> Function())?
@@ -45,6 +47,7 @@ class MembershipAccessGate extends StatelessWidget {
     if (repository != null) {
       return _AccessCheck(
           repository: repository!,
+          preserveAdmittedRoute: preserveAdmittedRoute,
           freePreviewBuilder: freePreviewBuilder,
           feature: feature,
           resourceId: resourceId,
@@ -64,6 +67,7 @@ class MembershipAccessGate extends StatelessWidget {
               repository: repositoryFactory?.call(session.scope, current) ??
                   FirebaseMembershipAccessRepository(
                       scope: session.scope, isCurrent: current),
+              preserveAdmittedRoute: preserveAdmittedRoute,
               freePreviewBuilder: freePreviewBuilder,
               feature: feature,
               resourceId: resourceId,
@@ -77,10 +81,12 @@ class _AccessCheck extends StatefulWidget {
       {super.key,
       required this.repository,
       this.freePreviewBuilder,
+      required this.preserveAdmittedRoute,
       required this.feature,
       required this.resourceId,
       required this.child});
   final MembershipAccessRepository repository;
+  final bool preserveAdmittedRoute;
   final Widget Function(BuildContext, Future<void> Function())?
       freePreviewBuilder;
   final MembershipAccessFeature feature;
@@ -93,7 +99,7 @@ class _AccessCheck extends StatefulWidget {
 class _AccessCheckState extends State<_AccessCheck>
     with WidgetsBindingObserver {
   Future<MembershipAccessDecision>? _decision;
-  bool _exerciseAdmitted = false;
+  bool _routeAdmitted = false;
   @override
   void initState() {
     super.initState();
@@ -104,8 +110,10 @@ class _AccessCheckState extends State<_AccessCheck>
   @override
   void didUpdateWidget(_AccessCheck old) {
     super.didUpdateWidget(old);
-    if (old.feature != widget.feature || old.resourceId != widget.resourceId) {
-      _exerciseAdmitted = false;
+    if (old.feature != widget.feature ||
+        old.resourceId != widget.resourceId ||
+        old.preserveAdmittedRoute != widget.preserveAdmittedRoute) {
+      _routeAdmitted = false;
       _load();
     }
   }
@@ -118,7 +126,7 @@ class _AccessCheckState extends State<_AccessCheck>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted && !_exerciseAdmitted) {
+    if (state == AppLifecycleState.resumed && mounted && !_routeAdmitted) {
       setState(_load);
     }
   }
@@ -144,15 +152,14 @@ class _AccessCheckState extends State<_AccessCheck>
           return const Center(
               child: Text('Membership access unavailable for this session.'));
         }
-        // An entry decision never tears down an ongoing exercise's complete safety feedback.
-        if (_exerciseAdmitted) return widget.child;
+        // Keep admitted gameplay and results mounted when a system sheet closes.
+        if (_routeAdmitted) return widget.child;
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
         final decision = snapshot.data;
         if (decision?.outcome == MembershipAccessOutcome.allowed) {
-          _exerciseAdmitted =
-              widget.feature == MembershipAccessFeature.exercise;
+          _routeAdmitted = widget.preserveAdmittedRoute;
           return widget.child;
         }
         final denied = decision?.outcome == MembershipAccessOutcome.denied;

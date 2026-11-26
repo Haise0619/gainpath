@@ -9,6 +9,7 @@ import '../../application/booking_bloc.dart';
 import '../member/booking_details_screen.dart' show resolveBranchLocation;
 import 'coach_session_details_screen.dart';
 import '../shared/coach_session_presentation.dart';
+import '../shared/persisted_booking_presentation.dart';
 import '../shared/booking_status_clock.dart';
 
 /// Available status filters for coach appointment schedule.
@@ -215,7 +216,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   List<Booking> _getRawBookings(bool live) {
     if (widget.persistedBookings != null) {
-      return widget.persistedBookings!;
+      return visiblePersistedBookings(
+          widget.persistedBookings!, widget.recordFor);
     }
     if (live) {
       return const <Booking>[];
@@ -915,7 +917,13 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
       return _matchesDateScope(b, CoachDateScope.selectedDay, _selectedDate);
     }).toList();
 
-    final total = daySessions.length;
+    final total = daySessions
+        .where((b) => const {
+              CoachSessionPhase.confirmed,
+              CoachSessionPhase.inProgress,
+              CoachSessionPhase.pendingHold,
+            }.contains(_phase(b)))
+        .length;
     final completed = daySessions.where((b) {
       final record = widget.recordFor?.call(b.id);
       return record?.rawStatus == 'completed' ||

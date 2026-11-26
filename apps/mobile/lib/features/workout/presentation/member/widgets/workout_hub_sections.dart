@@ -43,7 +43,7 @@ class _WorkoutHubLayoutState extends State<WorkoutHubLayout>
   Widget section(int index, Widget child) => WorkoutHubEntrance(
       animation: _entrance,
       index: index,
-      child: Padding(padding: const EdgeInsets.only(bottom: 24), child: child));
+      child: Padding(padding: const EdgeInsets.only(bottom: 26), child: child));
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

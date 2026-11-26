@@ -27,6 +27,11 @@ class AchievementSharePlugin : FlutterPlugin, ActivityAware {
         "I unlocked the Routine Finisher badge in GainPath!"
     )
 
+    private val gameResults = setOf(
+        "My Move & Catch result in GainPath!",
+        "My Reach & Tap result in GainPath!"
+    )
+
     private val pngSignature = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10)
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -39,7 +44,8 @@ class AchievementSharePlugin : FlutterPlugin, ActivityAware {
                 val arguments = call.arguments as? Map<*, *>
                 val text = arguments?.get("text") as? String
                 val current = activity
-                if (current == null || text == null || text !in allowed) {
+                val gameResult = call.method == "shareImage" && text != null && text in gameResults
+                if (current == null || text == null || (text !in allowed && !gameResult)) {
                     result.error("unavailable", "Achievement sharing unavailable.", null)
                     return@setMethodCallHandler
                 }
@@ -51,7 +57,7 @@ class AchievementSharePlugin : FlutterPlugin, ActivityAware {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, text)
                     }
-                    current.startActivity(Intent.createChooser(send, "Share achievement"))
+                    current.startActivity(Intent.createChooser(send, if (gameResult) "Share result" else "Share achievement"))
                     result.success(null)
                 } catch (_: Exception) { result.error("unavailable", "Achievement sharing unavailable.", null) }
             }
@@ -74,7 +80,7 @@ class AchievementSharePlugin : FlutterPlugin, ActivityAware {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_TEXT, text)
-            clipData = ClipData.newUri(activity.contentResolver, "GainPath achievement", uri)
+            clipData = ClipData.newUri(activity.contentResolver, "GainPath share card", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

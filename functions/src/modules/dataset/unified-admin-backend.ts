@@ -147,11 +147,19 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
    // Identity overlap invalidates the merge rather than silently counting it twice.
    const [existingMembers,fypMembers]=await Promise.all([reader.rows('members','existing'),reader.rows('members','fyp')]);const ids=new Set(existingMembers.map(r=>r.id));if(fypMembers.some(r=>ids.has(r.id)))throw deny();
    if(e.operation==='admin.unified.report'){
-    const [existing,fyp,sample]=await Promise.all([adminReport(canonical,request.auth,input,{identity:freshIdentity,page:(kind:ReportCollection,after,limit)=>page(`orgs/gainpath/${kind}`,after,limit)},clock),call('module/adminReportingCommand',input) as Promise<OperationalReport>,readUnifiedSampleBusiness(c.store,window,clock())]);
+    const programQuery={schemaVersion:1,organizationId:'gainpath',action:'adminList'};
+    const [existing,fyp,sample,canonicalPrograms,fypPrograms,existingContent,fypContent]=await Promise.all([
+      adminReport(canonical,request.auth,input,{identity:freshIdentity,page:(kind:ReportCollection,after,limit)=>page(`orgs/gainpath/${kind}`,after,limit)},clock),
+      // The merge keeps canonical commerce detail and uses only FYP account counts.
+      call('module/adminReportingCommand',{...input,schemaVersion:1}) as Promise<OperationalReport>,
+      readUnifiedSampleBusiness(c.store,window,clock()),
+      workoutPrograms(canonical,request.auth,programQuery,{clock,freshAuth:async()=>{await cohort.adminReadContext(request);}}),
+      call('module/workoutProgramCommand',programQuery) as Promise<{programs:unknown[]}>,
+      reader.rows('content','existing'),
+      reader.rows('content','fyp'),
+    ]);
     const merged=mergeUnifiedOperationalReports(existing,fyp,sample.summary),growth=new Map<string,{date:string;existing:number;fyp:number;total:number}>();
     for(const r of [...existingMembers,...fypMembers]){const at=r.record.createdAtMillis;if(r.record.role!=='member'||!Number.isSafeInteger(at)||Number(at)<window.startAtMillis||Number(at)>=window.endAtMillis||Number(at)>clock())continue;const date=new Date(Number(at)+8*3600000).toISOString().slice(0,10),bucket=growth.get(date)??{date,existing:0,fyp:0,total:0};bucket[r.source]++;bucket.total++;growth.set(date,bucket);}
-    const programQuery={schemaVersion:1,organizationId:'gainpath',action:'adminList'};
-    const [canonicalPrograms,fypPrograms,existingContent,fypContent]=await Promise.all([workoutPrograms(canonical,request.auth,programQuery,{clock,freshAuth:async()=>{await cohort.adminReadContext(request);}}),call('module/workoutProgramCommand',programQuery) as Promise<{programs:unknown[]}>,reader.rows('content','existing'),reader.rows('content','fyp')]);
     const publishedRoutines=(rows:typeof existingContent)=>rows.filter(r=>r.record.kind==='routine'&&r.record.status==='published'&&r.record.archived!==true).length;
     result={...merged,unified:{...merged.unified,catalogCounts:{existingPrograms:canonicalPrograms.programs.length,fypPrograms:fypPrograms.programs.length,existingTutorials:publishedRoutines(existingContent),fypTutorials:publishedRoutines(fypContent)},directoryTotals:{existingMembers:existingMembers.filter(r=>r.record.role==='member').length,fypMembers:fypMembers.filter(r=>r.record.role==='member').length,existingCoaches:existingMembers.filter(r=>r.record.role==='coach').length,fypCoaches:fypMembers.filter(r=>r.record.role==='coach').length},recordCreationTrend:[...growth.values()].sort((a,b)=>a.date.localeCompare(b.date)),definition:'Current eligible account census combines sources; directory totals include inactive administrative records. Record-creation trend includes fictional provisioning, not login activity. Existing financial/booking metrics retain their original source definitions.'}};
    }else{

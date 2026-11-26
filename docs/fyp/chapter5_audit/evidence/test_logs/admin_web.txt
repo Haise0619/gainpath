@@ -1,0 +1,9 @@
+Run: admin_web
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:45.0623185Z
+Ended UTC: 2026-11-25T14:43:45.8207999Z
+Duration seconds (wall-clock): 0.76
+Child process exit code: -1073741816
+See diagnostic summary.
+Flutter failed to open a file at "C:/flutter/bin/cache/lockfile". The flutter tool cannot access the file or directory.
+

@@ -12,6 +12,11 @@ const tier = isSupportedPaidPlan;
 const denied = () => new DomainError('permission-denied', 'Current verified Member access is required.');
 const termMillis = 30 * 86400000;
 
+/** New checkout uses Xendit. Previously cleared Billplz receipts are still valid evidence. */
+export function isSupportedMembershipReceiptProvider(provider: unknown): boolean {
+  return provider === 'xendit' || provider === 'billplz';
+}
+
 export function scheduledMembershipUpgrade(account: DocumentData | undefined) {
   const scheduled = account?.scheduledUpgrade as DocumentData | undefined;
   if (!scheduled || account?.planId !== 'basic' || scheduled.planId !== 'premium'
@@ -85,7 +90,7 @@ export async function readMembershipTermReceipt(tx: TransactionPort, org: string
   const p = await tx.get(`orgs/${org}/transactions/${id}`);
   if (!p || p.schemaVersion !== 1 || p.organizationId !== org || p.memberId !== uid || p.transactionId !== id
       || !['MembershipPurchase', 'MembershipRenewal'].includes(String(p.kind)) || p.planId !== account.planId
-      || p.environment !== 'sandbox' || p.provider !== 'billplz' || p.currency !== 'MYR' || p.paymentStatus !== 'cleared'
+      || p.environment !== 'sandbox' || !isSupportedMembershipReceiptProvider(p.provider) || p.refundStatus === 'completed' || p.currency !== 'MYR' || p.paymentStatus !== 'cleared'
       || !['confirmed', 'reconciliation_required'].includes(String(p.fulfilmentStatus))
       || !text(p.billId) || !text(p.collectionId) || !Number.isSafeInteger(p.amountMinor) || Number(p.amountMinor) < 1
       || !Number.isSafeInteger(p.durationDays) || Number(p.durationDays) < 1 || Number(p.durationDays) > 3660

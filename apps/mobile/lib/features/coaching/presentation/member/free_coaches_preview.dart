@@ -24,7 +24,6 @@ class FreeCoachesPreview extends StatelessWidget {
   Widget build(BuildContext context) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: LockedRewardsPreview(
-          sectionTitle: 'Find your coach',
           title: 'Your next step, with expert support',
           description:
               'Unlock coach profiles and booking with Basic or Premium membership.',

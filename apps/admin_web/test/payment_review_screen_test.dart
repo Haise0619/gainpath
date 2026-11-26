@@ -41,6 +41,28 @@ class ReviewFake implements PaymentReviewRepository {
 }
 
 void main() {
+  testWidgets('paid coaching cancellation appears in the refund review queue',
+      (tester) async {
+    final repo = ReviewFake();
+    repo.record = PaymentReviewRecord({
+      ...repo.record.data,
+      'provider': 'xendit',
+      'resolutionReason': 'member_cancelled',
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: PaymentsScreen(
+      live: true,
+      repository: repo,
+      isCurrent: () => true,
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refund Requests').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pending Review').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Refund requested · Pending review'), findsOneWidget);
+  });
+
   testWidgets('initial booking cross-link opens its payment detail',
       (tester) async {
     final repo = ReviewFake();

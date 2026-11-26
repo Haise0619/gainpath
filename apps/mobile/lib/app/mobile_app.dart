@@ -35,6 +35,9 @@ import '../features/workout/domain/program_enrollment.dart';
 import '../features/workout/domain/routine_journey.dart';
 import '../features/identity/presentation/member/fitness_profile_gate.dart';
 import '../features/identity/presentation/member/account_settings_screen.dart';
+import '../features/identity/presentation/member/member_legal_privacy_page.dart';
+import '../infrastructure/firebase/firebase_function_transport.dart'
+    show firebaseCallable;
 
 class GainPathMobileApp extends StatelessWidget {
   /// Normal execution always uses the connected Firebase repositories.
@@ -113,6 +116,7 @@ class GainPathMobileApp extends StatelessWidget {
               !identical(previous.session, current.session),
           builder: (context, state) {
             final home = _MobileAuthGate(
+                requireCompliance: authRepository == null,
                 datasetTransportFactory: datasetTransportFactory,
                 profileRepositoryFactory: profileRepositoryFactory,
                 routineLoaderFactory: routineLoaderFactory,
@@ -204,7 +208,8 @@ class _MobileAuthGate extends StatefulWidget {
       this.memberRewardsBuilder,
       this.passwordResetSender,
       this.accountLifecycleFactory,
-      this.memberSettingsBuilder});
+      this.memberSettingsBuilder,
+      required this.requireCompliance});
   final FypDatasetTransportFactory? datasetTransportFactory;
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
@@ -229,6 +234,7 @@ class _MobileAuthGate extends StatefulWidget {
   final MemberAccountLifecycleRepository Function(AuthSession, bool Function())?
       accountLifecycleFactory;
   final WidgetBuilder? memberSettingsBuilder;
+  final bool requireCompliance;
   final WidgetBuilder? memberRewardsBuilder;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
@@ -303,7 +309,47 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                           gateway: FlutterFitnessProfileGateway(
                               isSessionCurrent: isCurrentMember));
             }
-            return FitnessProfileGate(
+            Future<Map<String, dynamic>> callCompliance(
+                String action, Map<String, dynamic> input) async {
+              if (!isCurrentMember())
+                throw StateError('Compliance session changed.');
+              final response = await firebaseCallable('complianceCommand')
+                  .call<Map<String, dynamic>>({
+                ...input,
+                'schemaVersion': 1,
+                'organizationId': scope.organizationId,
+                'action': action,
+              });
+              if (!isCurrentMember())
+                throw StateError('Compliance session changed.');
+              return response.data;
+            }
+
+            final complianceEnabled =
+                widget.requireCompliance && scope.datasetScope == null;
+            Widget buildAccountSettings(BuildContext context) {
+              final actions = FirebasePasswordActions(scope: scope);
+              return AccountSettingsScreen(
+                contactSession: capturedSession,
+                repository: FirebaseMemberPreferencesRepository(
+                    scope: scope, isSessionCurrent: isCurrentMember),
+                module9Repository: FirebaseModule9Repository(
+                    scope: scope, isCurrent: isCurrentMember),
+                isSessionCurrent: isCurrentMember,
+                verifyCurrentPassword: actions.verifyCurrent,
+                saveNewPassword: actions.saveNew,
+                lifecycleRepository: widget.accountLifecycleFactory
+                        ?.call(capturedSession, isCurrentMember) ??
+                    FirebaseMemberAccountLifecycleRepository(
+                        scope: scope, isCurrent: isCurrentMember),
+                onAccountDeactivated: () => auth.add(const LoggedOut()),
+                legalPrivacyBuilder: complianceEnabled
+                    ? (_) => MemberLegalPrivacyPage(call: callCompliance)
+                    : null,
+              );
+            }
+
+            final memberArea = FitnessProfileGate(
                 key: ObjectKey(_profileRepository),
                 session: capturedSession,
                 repository: _profileRepository!,
@@ -338,31 +384,18 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                                       scope: catalogScope,
                                       loader: () => widget
                                           .routineLoaderFactory!(catalogScope)),
-                      memberSettingsBuilder: widget.memberSettingsBuilder ??
-                          (_) {
-                            final actions =
-                                FirebasePasswordActions(scope: scope);
-                            return AccountSettingsScreen(
-                              contactSession: state.session!,
-                              repository: FirebaseMemberPreferencesRepository(
-                                  scope: scope,
-                                  isSessionCurrent: isCurrentMember),
-                              module9Repository: FirebaseModule9Repository(
-                                  scope: scope, isCurrent: isCurrentMember),
-                              isSessionCurrent: isCurrentMember,
-                              verifyCurrentPassword: actions.verifyCurrent,
-                              saveNewPassword: actions.saveNew,
-                              lifecycleRepository:
-                                  widget.accountLifecycleFactory?.call(
-                                          capturedSession, isCurrentMember) ??
-                                      FirebaseMemberAccountLifecycleRepository(
-                                          scope: scope,
-                                          isCurrent: isCurrentMember),
-                              onAccountDeactivated: () =>
-                                  auth.add(const LoggedOut()),
-                            );
-                          },
+                      memberSettingsBuilder:
+                          widget.memberSettingsBuilder ?? buildAccountSettings,
                     ));
+            if (!complianceEnabled) return memberArea;
+            return MemberComplianceGate(
+              key: ObjectKey(capturedSession),
+              call: callCompliance,
+              child: memberArea,
+              accountSettings:
+                  widget.memberSettingsBuilder ?? buildAccountSettings,
+              onSignOut: () => auth.add(const LoggedOut()),
+            );
           }
           return buildFirebaseCoachShell(state.session!,
               factory: widget.coachProfileFactory,

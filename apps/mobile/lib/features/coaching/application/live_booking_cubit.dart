@@ -192,11 +192,15 @@ class BookingListState {
 
 class BookingListCubit extends Cubit<BookingListState> {
   BookingListCubit(
-      {required this.repository, required this.isCurrent, this.coachId})
+      {required this.repository,
+      required this.isCurrent,
+      this.coachId,
+      this.loadMemberOverview = false})
       : super(const BookingListState());
   final BookingListRepository repository;
   final bool Function() isCurrent;
   final String? coachId;
+  final bool loadMemberOverview;
   int _generation = 0;
   bool _current(int generation) {
     if (isClosed) return false;
@@ -218,10 +222,84 @@ class BookingListCubit extends Cubit<BookingListState> {
       .substring(0, 10);
   Future<void> showRecentHistory(bool recent) async {
     if (state.busy || _todayLocalDate == null) return;
+    if (loadMemberOverview) {
+      recentHistory = recent;
+      emit(BookingListState(
+          page: state.page, records: state.records, message: state.message));
+      return;
+    }
     await _load(false, history: recent);
   }
 
-  Future<void> refresh() => _load(false);
+  Future<void> refresh() =>
+      loadMemberOverview ? _refreshMemberOverview() : _load(false);
+
+  Future<void> _refreshMemberOverview() async {
+    if (state.busy || !_current(_generation)) return;
+    final generation = ++_generation;
+    final previous = state;
+    emit(BookingListState(
+        page: previous.page, records: previous.records, busy: true));
+    try {
+      final upcoming = await repository.load(dayCount: 30);
+      if (!_current(generation)) return;
+      final historyStart = _historyStart(upcoming.firstLocalDate);
+      final records = <String, PersistedBookingRecord>{};
+      var incomplete = false;
+
+      Future<void> collect(BookingPage page, String first) async {
+        while (_current(generation)) {
+          incomplete = incomplete || page.omittedInvalidRecords > 0;
+          for (final record in page.records) {
+            records[record.bookingId] = record;
+          }
+          final cursor = page.nextCursor;
+          if (cursor == null) return;
+          final next = await repository.load(
+              firstLocalDate: first, dayCount: 30, cursor: cursor);
+          if (next.nextCursor case final nextCursor?
+              when nextCursor.startAtMillis < cursor.startAtMillis ||
+                  (nextCursor.startAtMillis == cursor.startAtMillis &&
+                      nextCursor.bookingId.compareTo(cursor.bookingId) <= 0)) {
+            throw const BookingException('failed-precondition');
+          }
+          page = next;
+        }
+      }
+
+      // The ranges meet at today's date. The upcoming read wins when an ID
+      // appears in both ranges.
+      final history =
+          await repository.load(firstLocalDate: historyStart, dayCount: 30);
+      await collect(history, historyStart);
+      await collect(upcoming, upcoming.firstLocalDate);
+      if (!_current(generation)) return;
+      _todayLocalDate = upcoming.firstLocalDate;
+      final sorted = records.values.toList()
+        ..sort((a, b) {
+          final order = a.startAtMillis.compareTo(b.startAtMillis);
+          return order == 0 ? a.bookingId.compareTo(b.bookingId) : order;
+        });
+      emit(BookingListState(
+          page: BookingPage(
+              serverNowMillis: history.serverNowMillis,
+              timeZone: upcoming.timeZone,
+              firstLocalDate: upcoming.firstLocalDate,
+              throughLocalDate: upcoming.throughLocalDate,
+              records: const []),
+          records: List.unmodifiable(sorted),
+          message: incomplete
+              ? 'Some booking records could not be displayed.'
+              : null));
+    } catch (error) {
+      if (!_current(generation)) return;
+      emit(BookingListState(
+          page: previous.page,
+          records: previous.records,
+          message: 'Could not refresh your bookings. Pull down to try again.'));
+    }
+  }
+
   Future<void> loadMore() => _load(true);
   Future<void> _load(bool more, {bool? history}) async {
     if (state.busy ||

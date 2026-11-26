@@ -1,0 +1,10 @@
+Run: dart-pose
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:45.0499982Z
+Ended UTC: 2026-11-25T14:44:31.8592210Z
+Duration seconds (wall-clock): 46.81
+Child process exit code: -1073741816
+Observed outcomes: 404 pass / 3 fail / 0 skip across 29 files.
+packages/gainpath_pose/test/floor_push_up_fixture_evaluator_test.dart | CLI reports count errors and rejects invalid inputs with bounded output | Expected: <2>
+packages/gainpath_pose/test/squat_fixture_cli_test.dart | CLI produces aggregate-only JSON and nonzero exit for mismatched labels | Expected: <2>
+packages/gainpath_pose/test/squat_fixture_cli_test.dart | malformed, oversized, missing and wrong-argument input fails with bounded diagnostics | Expected: <65>

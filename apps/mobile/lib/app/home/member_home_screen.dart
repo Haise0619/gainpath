@@ -1,3 +1,7 @@
+import '../../features/analytics/presentation/member/goal_progress_screen.dart';
+import 'package:gainpath_identity/gainpath_identity.dart'
+    show FitnessProfileCubit;
+import '../../features/identity/presentation/member/goals_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'dart:math' as math;
@@ -11,6 +15,7 @@ import '../../features/gamification/presentation/member/daily_check_in_claim_but
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' as domain
     show BookingStatus;
+import 'package:gainpath_domain/gainpath_domain.dart' show FitnessGoal;
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +29,6 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../routing/workout_prep_route.dart';
 import '../../features/workout/presentation/member/equipment_scanner_screen.dart';
-import '../../features/analytics/presentation/member/goal_progress_screen.dart';
 import '../../features/analytics/presentation/shared/progress_dashboard_screen.dart';
 import '../../features/chatbot/presentation/member/chatbot_screen.dart';
 import '../../features/chatbot/presentation/member/saved_advice_screen.dart';
@@ -69,7 +73,8 @@ class MemberHomeScreen extends StatefulWidget {
       this.progressWarnings = const [],
       this.onRefreshProgress,
       this.onRefreshRoutines,
-      this.announcements,
+      this.upcomingClasses,
+      this.onRefreshClasses,
       this.recommendations,
       this.onRefreshAnnouncements,
       this.onOpenRewards,
@@ -100,7 +105,8 @@ class MemberHomeScreen extends StatefulWidget {
   final List<String> progressWarnings;
   final Future<void> Function()? onRefreshProgress;
   final Future<void> Function()? onRefreshRoutines;
-  final Widget? announcements;
+  final Widget? upcomingClasses;
+  final Future<void> Function()? onRefreshClasses;
   final Widget? recommendations;
   final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory, onOpenRewards;
@@ -132,9 +138,13 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     if (session == null) return;
     final request = ++_branchRequest;
     try {
-      final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-          .httpsCallable('branchManagementCommand')
-          .call({'action': 'list', 'organizationId': session.scope.organizationId});
+      final result =
+          await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+              .httpsCallable('branchManagementCommand')
+              .call({
+        'action': 'list',
+        'organizationId': session.scope.organizationId
+      });
       if (!mounted || request != _branchRequest) return;
       final data = Map<String, dynamic>.from(result.data as Map);
       final records = (data['records'] as List?)
@@ -143,14 +153,14 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
           [];
       final selectedId = data['selectedBranchId'] as String?;
       final homeId = data['homeBranchId'] as String?;
-      final selectedBranch = records
-              .where((b) => b['branchId'] == selectedId)
-              .firstOrNull ??
-          records.where((b) => b['branchId'] == homeId).firstOrNull ??
-          records.firstOrNull;
+      final selectedBranch =
+          records.where((b) => b['branchId'] == selectedId).firstOrNull ??
+              records.where((b) => b['branchId'] == homeId).firstOrNull ??
+              records.firstOrNull;
       setState(() {
         _branches = records;
-        _selectedBranchId = selectedId ?? selectedBranch?['branchId'] as String?;
+        _selectedBranchId =
+            selectedId ?? selectedBranch?['branchId'] as String?;
         _homeBranchId = homeId;
         _selectedBranchName = selectedBranch?['displayName'] as String?;
       });
@@ -182,11 +192,13 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       },
       request: (input) async {
         if (session != null) {
-          final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+          final result = await FirebaseFunctions.instanceFor(
+                  region: 'asia-southeast1')
               .httpsCallable('branchManagementCommand')
               .call({...input, 'organizationId': session.scope.organizationId});
           if (mounted &&
-              (input['action'] == 'setSelected' || input['action'] == 'setHome')) {
+              (input['action'] == 'setSelected' ||
+                  input['action'] == 'setHome')) {
             await widget.onRefreshAnnouncements?.call();
           }
           return Map<String, dynamic>.from(result.data as Map);
@@ -334,17 +346,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
       if (widget.onRefreshCheckIn != null) widget.onRefreshCheckIn!(),
       if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
+      if (widget.onRefreshClasses != null) widget.onRefreshClasses!(),
       if (widget.onRefreshAnnouncements != null)
         widget.onRefreshAnnouncements!(),
     ]);
-  }
-
-  Future<void> _openAnnouncements() async {
-    if (_homeScroll.hasClients) {
-      await _homeScroll.animateTo(_homeScroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
-    }
-    if (mounted) await widget.onRefreshAnnouncements?.call();
   }
 
   String get _greeting {
@@ -433,224 +438,236 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
               onOpenNotifications: widget.onOpenNotifications,
               unreadNotifications: widget.unreadNotifications,
               onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
-              onOpenAnnouncements: live && widget.announcements != null
-                  ? _openAnnouncements
-                  : null,
               avatarText: live
                   ? (firstName.isEmpty
                       ? '?'
                       : firstName.substring(0, 1).toUpperCase())
                   : 'ZY',
             ),
-                SliverToBoxAdapter(
-                  child: DecoratedBox(
-                    decoration:
-                        const BoxDecoration(gradient: AppColors.heroGradient),
-                    child: DecoratedBox(
-                      key: const ValueKey('home-content-top'),
-                      decoration: const BoxDecoration(
-                        color: AppColors.bg,
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(24)),
-                      ),
-                      child: const SizedBox(height: 20),
-                    ),
+            SliverToBoxAdapter(
+              child: DecoratedBox(
+                decoration:
+                    const BoxDecoration(gradient: AppColors.heroGradient),
+                child: DecoratedBox(
+                  key: const ValueKey('home-content-top'),
+                  decoration: const BoxDecoration(
+                    color: AppColors.bg,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(24)),
                   ),
+                  child: const SizedBox(height: 20),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
-                  sliver: SliverList.list(
-                    children: [
-                      const _HomeSectionHeading('Daily check-in'),
-                      if (live)
-                        AppCheckInCard(
-                            state: widget.appCheckIn ??
-                                const AppCheckInState(
-                                    status: AppCheckInStatus.unavailable,
-                                    message:
-                                        'Check-in unavailable. Pull down to refresh.'),
-                            homeDense: true,
-                            showDays: false,
-                            onClaim: widget.onAppClaim ?? () async {},
-                            onRefresh: widget.onRefreshCheckIn)
-                      else
-                        _StreakCard(
-                          live: live,
-                          claimed: gamification?.checkedInToday ?? false,
-                          scale: _claimScale,
-                          onClaim:
-                              live ? () => showUnavailable(context) : _claim,
-                          reward: RewardPolicy.dailyCheckIn,
-                        ),
-                      const SizedBox(height: 24),
-                      const _HomeSectionHeading("Today's workout"),
-                      _TodayWorkoutCard(
-                          live: live,
-                          publishedRoutine: widget.publishedRoutine,
-                          routineStatusMessage: widget.routineStatusMessage,
-                          attempt: live
-                              ? homeWorkoutAttempt(
-                                  widget.liveSession!.scope,
-                                  widget.publishedRoutine,
-                                  widget.routineProgress,
-                                  DateTime.now())
-                              : null,
-                          onOpenAttempt: widget.onOpenRoutine,
-                          onStart: live
-                              ? widget.onStartWorkout ??
-                                  () => _go(WorkoutPrepRoute(
-                                      publishedRoutine:
-                                          widget.publishedRoutine))
-                              : () => _go(const WorkoutPrepRoute(live: false))),
-                      const SizedBox(height: 24),
-                      MemberSectionHeader(
-                        title: 'Weekly progress',
-                        padded: false,
-                        actionText: (widget.onOpenProgress != null || !live)
-                            ? 'Details'
-                            : null,
-                        showChevron: true,
-                        onAction: (widget.onOpenProgress != null || !live)
-                            ? (widget.onOpenProgress ??
-                                () => _go(GoalProgressScreen(
-                                    live: live,
-                                    localProgress: widget.localProgress)))
-                            : null,
-                      ),
-                      const SizedBox(height: 10),
-                      HomeWeeklyActivity(
-                        progress: widget.localProgress,
-                        routines: widget.routineProgress,
-                      ),
-                      if (widget.progressError != null) ...[
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline_rounded,
-                                  size: 16, color: AppColors.danger),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  widget.progressError!,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: AppColors.danger),
-                                ),
-                              ),
-                              if (widget.onRefreshProgress != null)
-                                TextButton(
-                                  onPressed: widget.onRefreshProgress,
-                                  child: const Text('Retry',
-                                      style: TextStyle(fontSize: 12)),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (nextBooking != null) ...[
-                        const SizedBox(height: 24),
-                        const _HomeSectionHeading('Next with a coach'),
-                        _NextSessionCard(
-                          booking: nextBooking,
-                          onTap: live
-                              ? widget.onOpenBookings ??
-                                  () => showUnavailable(context)
-                              : () => _go(const BookingScheduleScreen()),
-                        ),
-                      ],
-                      if (_upcoming != null &&
-                          _upcoming!.status == domain.BookingStatus.confirmed &&
-                          _upcoming!.startAtMillis >
-                              DateTime.now().millisecondsSinceEpoch) ...[
-                        const SizedBox(height: 24),
-                        const _HomeSectionHeading('Upcoming coaching'),
-                        Panel(
-                            padding: const EdgeInsets.all(14),
-                            onTap: widget.onOpenBookings,
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Coaching session',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                      '${_upcoming!.localDate} · ${_upcoming!.startLabel} · ${_upcoming!.durationMinutes} min',
-                                      style: const TextStyle(
-                                          color: AppColors.inkSoft,
-                                          fontSize: 13)),
-                                ])),
-                      ],
-                      const SizedBox(height: 24),
-                      HomeRecentActivity(
-                        live: live,
-                        localProgress: widget.localProgress,
-                        routines: widget.routineProgress,
-                        selected: widget.publishedRoutine,
-                        scope: widget.liveSession?.scope,
-                        onOpenRoutine: widget.onOpenRoutine,
-                        onOpenHistory: widget.onOpenHistory ??
-                            widget.onOpenRoutineHistory ??
-                            () => _go(const ProgressDashboardScreen()),
-                        onOpenWorkout: widget.onOpenWorkout,
-                      ),
-                      const SizedBox(height: 24),
-                      if (widget.recommendations != null) ...[
-                        widget.recommendations!,
-                        const SizedBox(height: 24),
-                      ],
-                      const _HomeSectionHeading('Quick access'),
-                      _QuickActionsGrid(
-                          onOpenRewards: widget.onOpenRewards,
-                          onOpenPlan: widget.onOpenPlan,
-                          onSelect: _go,
-                          enabled: !live,
-                          onOpenSavedAdvice: live
-                              ? () => _go(buildMemberChatbot(
-                                  widget.liveSession!,
-                                  openSavedAdvice: true))
-                              : null,
-                          onOpenEquipment: widget.onOpenEquipment,
-                          onOpenCoaches: widget.onOpenCoaches,
-                          onOpenBookings: widget.onOpenBookings,
-                          onOpenProgress: widget.onOpenProgress),
-                      if (live &&
-                          widget.liveProfile != null &&
-                          widget.liveProfile!.goals.isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        const _HomeSectionHeading('Your goals'),
-                        _GoalPreviewCard(
-                          live: true,
-                          liveProfile: widget.liveProfile,
-                          onTap: () => _go(GoalProgressScreen(
-                              live: true, localProgress: widget.localProgress)),
-                        ),
-                      ] else if (!live) ...[
-                        const SizedBox(height: 24),
-                        const _HomeSectionHeading('Your goals'),
-                        _GoalPreviewCard(
-                          live: false,
-                          onTap: () => _go(const GoalProgressScreen()),
-                        ),
-                        const SizedBox(height: 24),
-                        _MembershipStrip(
-                          live: false,
-                          onTap: () => _go(const MembershipDashboardScreen()),
-                        ),
-                      ],
-                      if (widget.announcements != null) ...[
-                        const SizedBox(height: 24),
-                        widget.announcements!
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+              sliver: SliverList.list(
+                children: [
+                  const _HomeSectionHeading('Daily check-in'),
+                  if (live)
+                    AppCheckInCard(
+                        state: widget.appCheckIn ??
+                            const AppCheckInState(
+                                status: AppCheckInStatus.unavailable,
+                                message:
+                                    'Check-in unavailable. Pull down to refresh.'),
+                        homeDense: true,
+                        showDays: false,
+                        onClaim: widget.onAppClaim ?? () async {},
+                        onRefresh: widget.onRefreshCheckIn)
+                  else
+                    _StreakCard(
+                      live: live,
+                      claimed: gamification?.checkedInToday ?? false,
+                      scale: _claimScale,
+                      onClaim: live ? () => showUnavailable(context) : _claim,
+                      reward: RewardPolicy.dailyCheckIn,
+                    ),
+                  const SizedBox(height: 26),
+                  const _HomeSectionHeading("Today's workout"),
+                  _TodayWorkoutCard(
+                      live: live,
+                      publishedRoutine: widget.publishedRoutine,
+                      routineStatusMessage: widget.routineStatusMessage,
+                      attempt: live
+                          ? homeWorkoutAttempt(
+                              widget.liveSession!.scope,
+                              widget.publishedRoutine,
+                              widget.routineProgress,
+                              DateTime.now())
+                          : null,
+                      onOpenAttempt: widget.onOpenRoutine,
+                      onStart: live
+                          ? widget.onStartWorkout ??
+                              () => _go(WorkoutPrepRoute(
+                                  publishedRoutine: widget.publishedRoutine))
+                          : () => _go(const WorkoutPrepRoute(live: false))),
+                  const SizedBox(height: 26),
+                  MemberSectionHeader(
+                    title: 'Weekly progress',
+                    padded: false,
+                    actionText: (widget.onOpenProgress != null || !live)
+                        ? 'Details'
+                        : null,
+                    showChevron: true,
+                    onAction: (widget.onOpenProgress != null || !live)
+                        ? (widget.onOpenProgress ??
+                            () => _go(GoalProgressScreen(
+                                live: live,
+                                localProgress: widget.localProgress)))
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  HomeWeeklyActivity(
+                    progress: widget.localProgress,
+                    routines: widget.routineProgress,
+                  ),
+                  if (widget.progressError != null) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded,
+                              size: 16, color: AppColors.danger),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              widget.progressError!,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.danger),
+                            ),
+                          ),
+                          if (widget.onRefreshProgress != null)
+                            TextButton(
+                              onPressed: widget.onRefreshProgress,
+                              child: const Text('Retry',
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (nextBooking != null) ...[
+                    const SizedBox(height: 26),
+                    const _HomeSectionHeading('Next with a coach'),
+                    _NextSessionCard(
+                      booking: nextBooking,
+                      onTap: live
+                          ? widget.onOpenBookings ??
+                              () => showUnavailable(context)
+                          : () => _go(const BookingScheduleScreen()),
+                    ),
+                  ],
+                  if (_upcoming != null &&
+                      _upcoming!.status == domain.BookingStatus.confirmed &&
+                      _upcoming!.startAtMillis >
+                          DateTime.now().millisecondsSinceEpoch) ...[
+                    const SizedBox(height: 26),
+                    const _HomeSectionHeading('Upcoming coaching'),
+                    Panel(
+                        padding: const EdgeInsets.all(14),
+                        onTap: widget.onOpenBookings,
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Coaching session',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15)),
+                              const SizedBox(height: 4),
+                              Text(
+                                  '${_upcoming!.localDate} · ${_upcoming!.startLabel} · ${_upcoming!.durationMinutes} min',
+                                  style: const TextStyle(
+                                      color: AppColors.inkSoft, fontSize: 13)),
+                            ])),
+                  ],
+                  const SizedBox(height: 26),
+                  HomeRecentActivity(
+                    live: live,
+                    localProgress: widget.localProgress,
+                    routines: widget.routineProgress,
+                    selected: widget.publishedRoutine,
+                    scope: widget.liveSession?.scope,
+                    onOpenRoutine: widget.onOpenRoutine,
+                    onOpenHistory: widget.onOpenHistory ??
+                        widget.onOpenRoutineHistory ??
+                        () => _go(const ProgressDashboardScreen()),
+                    onOpenWorkout: widget.onOpenWorkout,
+                  ),
+                  const SizedBox(height: 26),
+                  if (widget.recommendations != null) ...[
+                    _RetainedHomeSection(
+                      key: ValueKey(widget.liveSession?.scope),
+                      child: widget.recommendations!,
+                    ),
+                    const SizedBox(height: 26),
+                  ],
+                  const _HomeSectionHeading('Quick access'),
+                  _QuickActionsGrid(
+                      onOpenRewards: widget.onOpenRewards,
+                      onOpenPlan: widget.onOpenPlan,
+                      onSelect: _go,
+                      enabled: !live,
+                      onOpenSavedAdvice: live
+                          ? () => _go(buildMemberChatbot(widget.liveSession!,
+                              openSavedAdvice: true))
+                          : null,
+                      onOpenEquipment: widget.onOpenEquipment,
+                      onOpenCoaches: widget.onOpenCoaches,
+                      onOpenBookings: widget.onOpenBookings,
+                      onOpenProgress: widget.onOpenProgress),
+                  if (widget.upcomingClasses case final classes?) ...[
+                    const SizedBox(height: 26),
+                    _RetainedHomeSection(
+                      key: ValueKey(('classes', widget.liveSession?.scope)),
+                      child: classes,
+                    ),
+                  ],
+                  const SizedBox(height: 26),
+                  _HomeGoals(
+                    goals: widget.liveProfile?.goals ?? const {},
+                    onOpen: () => _go(GoalsScreen(
+                      liveProfile: widget.liveProfile,
+                      liveCubit:
+                          live ? context.read<FitnessProfileCubit>() : null,
+                    )),
+                  ),
+                  if (!live) ...[
+                    const SizedBox(height: 26),
+                    _MembershipStrip(
+                      live: false,
+                      onTap: () => _go(const MembershipDashboardScreen()),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+}
+
+class _RetainedHomeSection extends StatefulWidget {
+  const _RetainedHomeSection({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RetainedHomeSection> createState() => _RetainedHomeSectionState();
+}
+
+class _RetainedHomeSectionState extends State<_RetainedHomeSection>
+    with AutomaticKeepAliveClientMixin<_RetainedHomeSection> {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
@@ -674,7 +691,6 @@ class _HeroHeader extends StatelessWidget {
   final String avatarText;
   final String? branchName;
   final VoidCallback? onSelectBranch;
-  final VoidCallback? onOpenAnnouncements;
   final VoidCallback? onOpenCoachingUpdates;
   final VoidCallback? onOpenNotifications;
   final ValueListenable<int>? unreadNotifications;
@@ -688,7 +704,6 @@ class _HeroHeader extends StatelessWidget {
     this.onSelectBranch,
     this.onOpenNotifications,
     this.unreadNotifications,
-    this.onOpenAnnouncements,
     this.onOpenCoachingUpdates,
     this.avatarText = 'ZY',
   });
@@ -708,7 +723,6 @@ class _HeroHeader extends StatelessWidget {
               )
             : bell,
         onPressed: onOpenNotifications ??
-            onOpenAnnouncements ??
             onOpenCoachingUpdates ??
             () => live
                 ? showUnavailable(context)
@@ -730,7 +744,8 @@ class _HeroHeader extends StatelessWidget {
         children: [
           const Flexible(
             flex: 2,
-            child: Text('GainPath', maxLines: 1, overflow: TextOverflow.ellipsis),
+            child:
+                Text('GainPath', maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
           if (branchName != null || onSelectBranch != null) ...[
             const SizedBox(width: 8),
@@ -996,8 +1011,7 @@ class _StreakCard extends StatelessWidget {
                     claimed
                         ? Icons.check_rounded
                         : Icons.local_fire_department_rounded,
-                    color:
-                        claimed ? Colors.white : const Color(0xFFF04438),
+                    color: claimed ? Colors.white : const Color(0xFFF04438),
                     size: 20,
                   ),
                 ),
@@ -1050,8 +1064,9 @@ class _StreakCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color:
-                              claimed ? const Color(0xFFEA580C) : AppColors.inkSoft,
+                          color: claimed
+                              ? const Color(0xFFEA580C)
+                              : AppColors.inkSoft,
                         ),
                       ),
                     ],
@@ -1556,58 +1571,80 @@ class _QuickActionTile extends StatelessWidget {
   }
 }
 
-class _GoalPreviewCard extends StatelessWidget {
-  final bool live;
-  final VoidCallback? onTap;
-  final FitnessProfile? liveProfile;
-  const _GoalPreviewCard(
-      {required this.onTap, this.liveProfile, this.live = false});
+class _HomeGoals extends StatelessWidget {
+  const _HomeGoals({required this.goals, required this.onOpen});
+
+  final Set<FitnessGoal> goals;
+  final VoidCallback onOpen;
+
+  IconData _icon(FitnessGoal goal) => switch (goal) {
+        FitnessGoal.loseWeight => Icons.trending_down,
+        FitnessGoal.buildMuscle => Icons.fitness_center,
+        FitnessGoal.improveEndurance => Icons.directions_run,
+        FitnessGoal.increaseFlexibility => Icons.self_improvement,
+        FitnessGoal.generalFitness => Icons.favorite_border,
+        FitnessGoal.reduceStress => Icons.spa_outlined,
+      };
 
   @override
   Widget build(BuildContext context) {
-    return Panel(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!live) ...[
-            const Text('Choose your fitness goals in Profile.'),
-          ] else if (liveProfile != null) ...[
-            for (final goal in liveProfile!.goals.take(2))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.flag_rounded,
-                        size: 16, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        goal.label,
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Expanded(child: _HomeSectionHeading('Your goals')),
+          if (goals.isNotEmpty)
+            TextButton(
+              onPressed: onOpen,
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('See all'),
+                Icon(Icons.chevron_right, size: 18),
+              ]),
+            ),
+        ]),
+        if (goals.isEmpty)
+          TextButton(
+              onPressed: onOpen, child: const Text('Set your fitness goals'))
+        else ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text('See all goals',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
-                      ?.copyWith(color: AppColors.primary)),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_forward_ios_rounded,
-                  size: 13, color: AppColors.primary),
+              for (final goal in goals.take(2))
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.hairline),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_icon(goal), size: 18, color: colors.primary),
+                        const SizedBox(width: 8),
+                        Flexible(
+                            child: Text(goal.label,
+                                style: theme.textTheme.bodyMedium)),
+                      ],
+                    ),
+                  ),
+                ),
+              if (goals.length > 2)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Text('+${goals.length - 2} more',
+                      style: theme.textTheme.bodyMedium),
+                ),
             ],
           ),
         ],
-      ),
+      ],
     );
   }
 }

@@ -1,0 +1,1 @@
+participant_code,role,session_date_local,task_id,attempt,build_sha256,repository_snapshot,device_or_browser,fixture_id,environment,expected_outcome,observed_outcome,seconds,assistance,outcome,severity,masked_evidence,issue_id,retest_status

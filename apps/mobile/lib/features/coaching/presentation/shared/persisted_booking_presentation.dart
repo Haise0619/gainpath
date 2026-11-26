@@ -93,6 +93,7 @@ DateTime _calendarTime(String date, String label) {
 /// Cancellation and the booking's historical status alone prove no settlement.
 String? memberBookingRefundStatus(live.PersistedBookingRecord? record) {
   if (record == null || record.paymentStatus != 'cleared') return null;
+  if (record.refundUnavailable) return 'Refund unavailable';
   return switch (record.refundStatus) {
     'approved' => 'Refund approved',
     'processing' => 'Refund processing',
@@ -100,4 +101,35 @@ String? memberBookingRefundStatus(live.PersistedBookingRecord? record) {
     'uncertain' || 'failed' || 'rejected' => 'Refund needs attention',
     _ => record.refundReviewRequired == true ? 'Refund under review' : null,
   };
+}
+
+List<legacy.Booking> visiblePersistedBookings(List<legacy.Booking> bookings,
+    live.PersistedBookingRecord? Function(String)? recordFor) {
+  final byId = {for (final booking in bookings) booking.id: booking};
+  if (recordFor == null) return byId.values.toList();
+
+  (String, String, String, int, int) slot(live.PersistedBookingRecord record) =>
+      (
+        record.memberId,
+        record.coachId,
+        record.branchId,
+        record.startAtMillis,
+        record.endAtMillis
+      );
+
+  final settledSlots = {
+    for (final booking in byId.values)
+      if (recordFor(booking.id) case final record?
+          when record.rawStatus == 'refunded' ||
+              (record.rawStatus == 'cancelled' &&
+                  record.paymentStatus == 'cleared'))
+        slot(record),
+  };
+  return byId.values.where((booking) {
+    final record = recordFor(booking.id);
+    return record == null ||
+        record.rawStatus != 'expired' ||
+        record.paymentStatus == 'cleared' ||
+        !settledSlots.contains(slot(record));
+  }).toList();
 }

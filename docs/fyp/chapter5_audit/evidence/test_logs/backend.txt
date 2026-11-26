@@ -1,0 +1,18 @@
+Run: backend
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:44.6071653Z
+Ended UTC: 2026-11-25T14:45:03.8816913Z
+Duration seconds (wall-clock): 79.27
+Child process exit code: 1
+Observed outcomes: 2386 pass / 9 fail / 2 skip across 198 files.
+Local HTTP connect error EACCES (loopback).
+Vitest linked cache write error EPERM.
+functions/test/batch2-read-callables.test.ts | retains actual HTTP App Check rejection before the certifications read handler | TypeError: fetch failed
+functions/test/batch2-read-callables.test.ts | retains actual HTTP App Check rejection before the photo read handler | TypeError: fetch failed
+functions/test/batch2-read-callables.test.ts | retains actual HTTP App Check rejection before the payment list read handler | TypeError: fetch failed
+functions/test/batch2-read-callables.test.ts | retains actual HTTP App Check rejection before the payment detail read handler | TypeError: fetch failed
+functions/test/coach-rating-pilot.test.ts | retains the actual callable App Check rejection boundary (0) | TypeError: fetch failed
+functions/test/coach-rating-pilot.test.ts | retains the actual callable App Check rejection boundary (1) | TypeError: fetch failed
+functions/test/equipment-scanner.test.ts | equipment-scanner-callable rejects missing auth and App Check through the actual HTTP callable wrapper | TypeError: fetch failed
+functions/test/regional-booking-reads.test.ts | rejects requests without App Check before the trusted handler (0) | TypeError: fetch failed
+functions/test/regional-booking-reads.test.ts | rejects requests without App Check before the trusted handler (1) | TypeError: fetch failed

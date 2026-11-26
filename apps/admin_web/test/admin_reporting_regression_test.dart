@@ -95,6 +95,8 @@ void main() {
     gateway.response.completeError(StateError('private provider diagnostic'));
     await tester.pumpAndSettle();
     expect(find.text('Retry reports'), findsOneWidget);
+    final error = find.text('Your reporting session changed. Sign in again.');
+    expect(tester.widget<Text>(error).style?.color, AppColors.danger);
     expect(find.textContaining('private provider diagnostic'), findsNothing);
     gateway.response = Completer();
     await tester.tap(find.text('Retry reports'));

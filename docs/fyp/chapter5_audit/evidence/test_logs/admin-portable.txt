@@ -1,0 +1,20 @@
+Run: admin-portable
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:45:55.4103155Z
+Ended UTC: 2026-11-25T14:50:26.4289063Z
+Duration seconds (wall-clock): 271.02
+Child process exit code: 1
+Observed outcomes: 711 pass / 13 fail / 30 skip across 136 files.
+apps/admin_web/test/admin_add_member_test.dart | Add Member preserves the directory and protects an unsaved draft | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/admin_shared_responsive_test.dart | Add Coach route stays under the shell Coaches breadcrumb | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/admin_shared_responsive_test.dart | Responsive Admin Console layouts renders on desktop (1600x1000) without overflow | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/admin_shared_responsive_test.dart | Responsive Admin Console layouts renders on tablet (950x1000) with collapsed rail without overflow | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/admin_shared_responsive_test.dart | Responsive Admin Console layouts renders on narrow viewport (768x1024) without overflow | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Branch hub stays usable at every target viewport | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, assertion did not find the expected value or widget, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Branch details, pick location and edit retain the shell and ID | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, required element missing, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Browser route changes protect unsaved branch changes | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Branch directory and editor support 200% text on a narrow screen | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, assertion did not find the expected value or widget, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Search and status filters persist when leaving a branch | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, required element missing, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Changing a deep link during pagination resolves the latest branch | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions
+apps/admin_web/test/branch_management_admin_render_test.dart | Equipment and physical visits keep their branch scope | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, assertion did not find the expected value or widget, multiple Flutter exceptions
+apps/admin_web/test/operations_calendar_navigation_test.dart | branch overview opens a scoped calendar and drills into Branch Reports by MYT day | AuthBloc provider missing in the mounted widget tree, RenderFlex layout overflow, multiple Flutter exceptions

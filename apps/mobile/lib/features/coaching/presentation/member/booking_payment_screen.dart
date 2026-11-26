@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show BookingException;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'booking_confirmed_screen.dart';
+import '../../../../presentation/shared/payment_status_heading.dart';
 import 'booking_payment_method_page.dart';
 
 class BookingPaymentScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class BookingPaymentScreen extends StatefulWidget {
       required this.bookingId,
       required this.isCurrent,
       this.create = false,
+      this.detailsOnly = false,
       this.usePremiumVoucher = false,
       this.reviewedQuoteToken,
       this.reviewedQuote,
@@ -27,6 +29,7 @@ class BookingPaymentScreen extends StatefulWidget {
   final String bookingId;
   final bool Function() isCurrent;
   final bool create;
+  final bool detailsOnly;
   final bool usePremiumVoucher;
   final String? reviewedQuoteToken;
   final BookingPaymentQuote? reviewedQuote;
@@ -114,12 +117,13 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     // Discovery recovers an existing invoice without changing its gateway, or
     // offers selection for a held booking which has not created a bill yet.
-    _chooseMethod =
-        _preferenceMode || widget.repository is BookingPaymentMethodRepository;
+    _chooseMethod = !widget.detailsOnly &&
+        (_preferenceMode ||
+            widget.repository is BookingPaymentMethodRepository);
     if (_selectingMethod) {
       _loadMethods();
     } else {
-      _load(create: widget.create);
+      _load(create: widget.create && !widget.detailsOnly);
     }
     _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_canCheck && _deadline != null) setState(() {});
@@ -212,7 +216,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   Future<void> _load({bool create = false, bool manual = false}) async {
     if (!_canCheck || _quoteChanged || _busy) return;
     if (manual) _followupsRemaining = 6;
-    _createRequested = _createRequested || create;
+    _createRequested = !widget.detailsOnly && (_createRequested || create);
     final remaining = _nextAllowedCheck?.difference(widget.now());
     if (remaining != null && remaining > Duration.zero) {
       setState(() => _message =
@@ -391,82 +395,88 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
           onRetry: _loadMethods);
     }
     final value = _payment;
-    final refund = value?.refundStatus;
-    final title = switch (refund) {
-      'completed' => 'Refund completed',
-      'failed' => 'Refund needs attention',
-      'approved' => 'Refund approved · not sent',
-      'uncertain' => 'Refund outcome not confirmed',
-      'processing' => 'Refund in progress',
-      'rejected' => 'Refund request declined',
-      _ => _quoteChanged
-          ? 'Your booking price changed'
-          : _expired
-              ? 'Reservation expired'
-              : value?.status == 'reconciliation_required'
-                  ? 'Payment needs review'
-                  : _opening || (_busy && _createStarted && value == null)
-                      ? 'Redirecting to secure payment'
-                      : value == null
-                          ? 'Preparing your payment'
-                          : _openedPayment || value.paymentStatus == 'cleared'
-                              ? 'Confirming payment'
-                              : 'Your time is reserved',
-    };
-    final detail = switch (refund) {
-      'completed' =>
-        'Your payment has been refunded. This booking is not confirmed.',
-      'failed' =>
-        'The refund could not be completed. Contact the gym for help.',
-      'approved' =>
-        'The gym approved your refund request. This approval does not mean a refund has been sent. Contact the gym for the next step.',
-      'uncertain' =>
-        'The provider outcome could not be confirmed. Contact the gym to check the original refund attempt. Do not request another payment or refund for this booking.',
-      'processing' =>
-        'Your refund is being processed. Contact the gym if you need help.',
-      'rejected' =>
-        'The gym declined this refund request. Contact the gym for details.',
-      _ => value?.status == 'reconciliation_required'
-          ? value?.paymentStatus == 'cleared'
-              ? 'Payment was received, but your booking is not confirmed. Contact the gym for a payment review.'
-              : 'Your booking is not confirmed. Contact the gym before attempting another payment.'
-          : _quoteChanged
-              ? 'Review the updated total before continuing. No checkout was created.'
-              : _expired
-                  ? 'This unpaid reservation has ended. Choose another available time. If you already paid, check payment status before booking again.'
-                  : _openedPayment || value?.paymentStatus == 'cleared'
-                      ? 'We are waiting for payment confirmation. You can safely check again here without paying twice.'
-                      : 'Complete payment before your reservation ends to secure your session.',
-    };
+    final refund = value?.refundStatus ??
+        (value?.paymentStatus == 'cleared' &&
+                const {'member_cancelled', 'coach_cancelled'}
+                    .contains(value?.resolutionReason)
+            ? 'pending_review'
+            : null);
+    final refundUnavailable = refund == 'failed' &&
+        value?.refundFailureCode == 'REFUND_NOT_SUPPORTED';
+    final title = refundUnavailable
+        ? 'Refund unavailable'
+        : switch (refund) {
+            'completed' => 'Refund completed',
+            'pending_review' => 'Refund under review',
+            'failed' => 'Refund needs attention',
+            'approved' => 'Refund approved · not sent',
+            'uncertain' => 'Refund outcome not confirmed',
+            'processing' => 'Refund in progress',
+            'rejected' => 'Refund request declined',
+            _ => _quoteChanged
+                ? 'Your booking price changed'
+                : _expired
+                    ? 'Reservation expired'
+                    : value?.status == 'reconciliation_required'
+                        ? 'Payment needs review'
+                        : _opening || (_busy && _createStarted && value == null)
+                            ? 'Redirecting to secure payment'
+                            : value == null
+                                ? 'Preparing your payment'
+                                : _openedPayment ||
+                                        value.paymentStatus == 'cleared'
+                                    ? 'Confirming payment'
+                                    : 'Your time is reserved',
+          };
+    final detail = refundUnavailable
+        ? 'The original payment method does not support refunds. The payment has not been returned.'
+        : switch (refund) {
+            'completed' =>
+              'Your payment has been refunded. This booking is not confirmed.',
+            'pending_review' => 'Your refund request is awaiting review.',
+            'failed' =>
+              'The refund could not be completed. Contact the gym for help.',
+            'approved' =>
+              'The gym approved your refund request. This approval does not mean a refund has been sent. Contact the gym for the next step.',
+            'uncertain' =>
+              'The provider outcome could not be confirmed. Contact the gym to check the original refund attempt. Do not request another payment or refund for this booking.',
+            'processing' =>
+              'Your refund is being processed. Contact the gym if you need help.',
+            'rejected' =>
+              'The gym declined this refund request. Contact the gym for details.',
+            _ => value?.status == 'reconciliation_required'
+                ? value?.paymentStatus == 'cleared'
+                    ? 'Payment was received, but your booking is not confirmed. Contact the gym for a payment review.'
+                    : 'Your booking is not confirmed. Contact the gym before attempting another payment.'
+                : _quoteChanged
+                    ? 'Review the updated total before continuing. No checkout was created.'
+                    : _expired
+                        ? 'This unpaid reservation has ended. Choose another available time. If you already paid, check payment status before booking again.'
+                        : _openedPayment || value?.paymentStatus == 'cleared'
+                            ? 'We are waiting for payment confirmation. You can safely check again here without paying twice.'
+                            : 'Complete payment before your reservation ends to secure your session.',
+          };
     return Scaffold(
-        appBar: AppBar(title: const Text('Session payment')),
+        appBar: AppBar(
+            title: Text(refund != null ? 'Refund details' : 'Session payment')),
         body: PageBody(children: [
+          if (value?.refundFailureCode case final String code)
+            Text('Refund provider: ' + code),
           if (_busy || _opening)
             const LinearProgressIndicator(color: AppColors.primary),
           Panel(
               background: AppColors.primaryTint,
               child: Column(children: [
-                Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
-                    child: Icon(
-                        _opening
-                            ? Icons.open_in_new_rounded
-                            : _openedPayment
-                                ? Icons.shield_outlined
-                                : Icons.lock_outline,
-                        color: AppColors.primary,
-                        size: 36)),
-                const SizedBox(height: 12),
-                AnimatedSwitcher(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    child: Text(title,
-                        key: ValueKey(title),
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge)),
+                PaymentStatusHeading(
+                    title: title,
+                    stage: _expired ||
+                            _quoteChanged ||
+                            value?.status == 'reconciliation_required' ||
+                            refund == 'failed'
+                        ? PaymentStage.failure
+                        : _opening || _busy
+                            ? PaymentStage.loading
+                            : PaymentStage.pending),
                 const SizedBox(height: 12),
                 if (refund == null && !_expired && !_quoteChanged)
                   const Text(
@@ -541,11 +551,12 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
             FilledButton(
                 onPressed: () => Navigator.pop(context, 'quote_changed'),
                 child: const Text('Return to booking review')),
-          if (_expired)
+          if (_expired && !widget.detailsOnly)
             FilledButton(
                 onPressed: () => Navigator.pop(context, 'expired'),
                 child: const Text('Choose another time')),
-          if (!_expired &&
+          if (!widget.detailsOnly &&
+              !_expired &&
               !_quoteChanged &&
               refund == null &&
               value?.paymentStatus != 'cleared' &&
@@ -569,7 +580,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               OutlinedButton(
                   onPressed: _busy ? null : () => _load(manual: true),
                   child: const Text('Check payment status')),
-          if (!_expired &&
+          if (!widget.detailsOnly &&
+              !_expired &&
               !_quoteChanged &&
               (value == null ||
                   value.status == 'creating' ||
@@ -579,7 +591,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                 onPressed:
                     _busy ? null : () => _load(create: true, manual: true),
                 child: const Text('Retry payment for same booking')),
-          if (!_expired &&
+          if (!widget.detailsOnly &&
+              !_expired &&
               !_quoteChanged &&
               refund == null &&
               value?.paymentStatus != 'cleared' &&

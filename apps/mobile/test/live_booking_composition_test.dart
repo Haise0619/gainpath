@@ -56,7 +56,7 @@ void main() {
                 bookingListFactory: (_, __) => Lists()))));
     await tester.pumpAndSettle();
     expect(created, 0);
-    expect(find.text('My Bookings'), findsOneWidget);
+    expect(find.byKey(const Key('coaches-my-bookings-button')), findsOneWidget);
     await tester.tap(find.text('Real contract Coach'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Book a session'));
@@ -117,11 +117,15 @@ void main() {
                 bookingFactory: (_, __) => throw StateError('Must remain lazy'),
                 bookingListFactory: (_, __) => Lists()))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('My Bookings'));
+    await tester.tap(find.byKey(const Key('coaches-my-bookings-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('View details'));
     await tester.pumpAndSettle();
     expect(find.textContaining('booking'), findsWidgets);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.text('My Bookings'), findsOneWidget);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.byType(AppBar), findsOneWidget);

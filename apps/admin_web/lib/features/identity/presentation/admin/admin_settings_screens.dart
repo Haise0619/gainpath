@@ -358,7 +358,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     const Padding(
                         padding: EdgeInsets.only(bottom: 8),
                         child: Text(
-                            'Save your choices here. Notification delivery is unavailable.')),
+                            'In-app alerts appear under the Admin bell.')),
                   Panel(
                     padding: EdgeInsets.zero,
                     child: Column(

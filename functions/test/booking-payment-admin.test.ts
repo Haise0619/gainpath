@@ -72,3 +72,25 @@ it('maps enquiring/executing to processing, refunded to failed, and completed on
   // Finalized status 'failed' rejects further approval
   await expect(manageAdminBookingPayment(store, auth, input('approve_refund', { requestId: 're-approve' }), deps())).rejects.toMatchObject({ code: 'failed-precondition' });
 });
+
+it('closes only an unsupported Xendit refund and records the Admin decision once', async () => {
+  Object.assign(store.documents.get(path)!, {
+    provider: 'xendit', refundStatus: 'failed', refundFailureCode: 'REFUND_NOT_SUPPORTED',
+    refundReviewRequired: true,
+  });
+  const close = input('close_refund', { reason: 'Original channel does not support refunds' });
+  await Promise.all([
+    manageAdminBookingPayment(store, auth, close, deps(), () => 1000),
+    manageAdminBookingPayment(store, auth, close, deps(), () => 1000),
+  ]);
+  expect(store.documents.get(path)).toMatchObject({
+    refundStatus: 'failed', refundFailureCode: 'REFUND_NOT_SUPPORTED',
+    refundClosedAtMillis: 1000, refundClosureReason: 'Original channel does not support refunds',
+    refundReviewRequired: false, paymentStatus: 'cleared',
+  });
+  expect(creates).toBe(0);
+  expect([...store.documents.values()].filter(row => row.event === 'refund_closed_no_transfer')).toHaveLength(1);
+  Object.assign(store.documents.get(path)!, { refundFailureCode: 'CHANNEL_UNAVAILABLE' });
+  await expect(manageAdminBookingPayment(store, auth,
+    input('close_refund', { requestId: 'other-close' }), deps())).rejects.toMatchObject({ code: 'failed-precondition' });
+});

@@ -6,7 +6,7 @@ export interface SandboxBill {
   id: string; collection_id: string; amount: number; paid: boolean; paid_amount: number;
   state: 'due' | 'paid' | 'deleted'; url: string; reference_1?: string; reference_2?: string;
 }
-export type BookingCheckoutInput = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string; gatewayCode?:string; paymentReference?:string; selectedPaymentMethodCode?: string };
+export type BookingCheckoutInput = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string; gatewayCode?:string; paymentReference?:string; selectedPaymentMethodCode?: string; chooseMethodAtCheckout?: boolean };
 export interface BillplzGateway {
   readonly provider?: 'xendit';
   acceptsSelection?(code: string): boolean;

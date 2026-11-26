@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/identity/application/coach_directory_admin_cubit.dart';
 import 'package:gainpath_admin_web/features/identity/application/coach_review_alerts_cubit.dart';
-import 'package:gainpath_admin_web/features/identity/presentation/admin/coach_review_notification_button.dart';
+import 'package:gainpath_admin_web/features/identity/presentation/admin/admin_notification_button.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 
@@ -276,7 +276,8 @@ void main() {
             child: MaterialApp(
                 home: Scaffold(
                     appBar: AppBar(actions: [
-              CoachReviewNotificationButton(onOpenCoach: (_) {})
+              AdminNotificationButton(
+                  scope: 'latency', onOpen: (_) async => true)
             ])))));
     await tester.pump(const Duration(milliseconds: 20));
     await tester.pump(const Duration(milliseconds: 120));

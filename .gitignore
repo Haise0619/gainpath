@@ -6,6 +6,12 @@ build/
 .flutter-plugins-dependencies
 # Application workspace dependency resolution is committed.
 
+# Generated test coverage
+/coverage/
+/apps/*/coverage/
+/packages/*/coverage/
+/functions/coverage/
+
 # IDE
 .idea/
 *.iml

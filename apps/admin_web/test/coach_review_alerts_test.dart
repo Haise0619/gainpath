@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_admin_web/features/identity/presentation/admin/coach_review_notification_button.dart';
+import 'package:gainpath_admin_web/features/identity/presentation/admin/admin_notification_button.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_admin_web/features/identity/application/coach_review_alerts_cubit.dart';
 import 'coach_directory_publication_flow_test.dart' show AdminFake;
@@ -96,23 +96,87 @@ void main() {
       (tester) async {
     final repo = Pages();
     String? selected;
-    await tester.pumpWidget(
-        RepositoryProvider<CoachProfileAdminRepository>.value(
+    await tester
+        .pumpWidget(RepositoryProvider<CoachProfileAdminRepository>.value(
             value: repo,
             child: MaterialApp(
                 home: Scaffold(
                     appBar: AppBar(actions: [
-              CoachReviewNotificationButton(onOpenCoach: (id) => selected = id)
+              AdminNotificationButton(
+                scope: 'coach-only',
+                onOpen: (notice) async {
+                  selected = notice.id;
+                  return true;
+                },
+              )
             ])))));
     await tester.pumpAndSettle();
     expect(find.text('1'), findsOneWidget);
-    await tester.tap(find.byTooltip('Coach profile updates'));
+    await tester.tap(find.byTooltip('Notifications'));
     await tester.pumpAndSettle();
-    expect(find.text('Profile changes awaiting Admin publication'),
+    expect(find.textContaining('Profile changes awaiting Admin publication'),
         findsOneWidget);
     await tester.tap(find.text('Fixture Coach'));
     await tester.pumpAndSettle();
     expect(selected, 'coach');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('bell keeps working sources visible and tracks read revisions',
+      (tester) async {
+    var failSupport = true;
+    var refundTime = 3;
+    AdminNotification? selected;
+    await tester.pumpWidget(
+      RepositoryProvider<CoachProfileAdminRepository>.value(
+        value: Pages(),
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(actions: [
+              AdminNotificationButton(
+                scope: 'combined-feed',
+                onOpen: (notice) async {
+                  selected = notice;
+                  return true;
+                },
+                loadRefunds: () async => [
+                  AdminNotification(AdminNotificationKind.refund, 'payment-1',
+                      'Basic renewal', 'Refund awaiting review', refundTime),
+                ],
+                loadSupport: () async {
+                  if (failSupport) throw StateError('Unavailable');
+                  return const [
+                    AdminNotification(AdminNotificationKind.support, 'ticket-1',
+                        'Membership issue', 'Billing', 5),
+                  ];
+                },
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not refresh support requests.'), findsOneWidget);
+    expect(find.text('Fixture Coach'), findsOneWidget);
+    expect(find.text('Basic renewal'), findsOneWidget);
+    await tester.tap(find.text('Mark all as read'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Unread'), findsNothing);
+
+    failSupport = false;
+    refundTime++;
+    await tester.tap(find.byTooltip('Refresh notifications'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Unread'), findsNWidgets(2));
+    expect(find.text('Could not refresh support requests.'), findsNothing);
+    await tester.tap(find.text('Membership issue'));
+    await tester.pumpAndSettle();
+    expect(selected?.kind, AdminNotificationKind.support);
+    expect(selected?.id, 'ticket-1');
+    expect(find.text('1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

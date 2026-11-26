@@ -22,30 +22,35 @@ extension on CalendarEventType {
         CalendarEventType.booking => 'Coach booking',
         CalendarEventType.availability => 'Coach availability',
         CalendarEventType.announcement => 'Announcement',
+        CalendarEventType.groupClass => 'Group class',
       };
 
   String get plural => switch (this) {
         CalendarEventType.booking => 'Coach bookings',
         CalendarEventType.availability => 'Coach availability',
         CalendarEventType.announcement => 'Announcements',
+        CalendarEventType.groupClass => 'Group Classes',
       };
 
   IconData get icon => switch (this) {
         CalendarEventType.booking => Icons.event_available_outlined,
         CalendarEventType.availability => Icons.schedule_rounded,
         CalendarEventType.announcement => Icons.campaign_outlined,
+        CalendarEventType.groupClass => Icons.groups_outlined,
       };
 
   Color get fill => switch (this) {
         CalendarEventType.booking => AppColors.primaryTint,
         CalendarEventType.availability => AppColors.infoTint,
         CalendarEventType.announcement => AppColors.accentTint,
+        CalendarEventType.groupClass => const Color(0xFFE6F6F1),
       };
 
   Color get ink => switch (this) {
         CalendarEventType.booking => AppColors.primaryDark,
         CalendarEventType.availability => const Color(0xff194b9e),
         CalendarEventType.announcement => const Color(0xff834107),
+        CalendarEventType.groupClass => const Color(0xFF145D49),
       };
 }
 
@@ -558,24 +563,31 @@ class _Feedback extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Material(
-          color: AppColors.accentTint,
+          color: retry == null ? AppColors.accentTint : AppColors.dangerTint,
           borderRadius: BorderRadius.circular(10),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 5, 8, 5),
             child: Row(
               children: [
-                const Icon(Icons.info_outline,
-                    color: AppColors.accentDark, size: 17),
+                Icon(retry == null ? Icons.info_outline : Icons.error_outline,
+                    color:
+                        retry == null ? AppColors.accentDark : AppColors.danger,
+                    size: 17),
                 const SizedBox(width: 8),
                 Expanded(
                     child: Text(message,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.ink,
+                          color:
+                              retry == null ? AppColors.ink : AppColors.danger,
                         ))),
                 if (retry != null)
-                  TextButton(onPressed: retry, child: const Text('Retry')),
+                  TextButton(
+                      onPressed: retry,
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.danger),
+                      child: const Text('Retry')),
               ],
             ),
           ),
@@ -752,11 +764,13 @@ class _EventDetails extends StatelessWidget {
       CalendarEventType.booking => 'View Booking',
       CalendarEventType.availability => 'Manage Schedule',
       CalendarEventType.announcement => 'View Announcement',
+      CalendarEventType.groupClass => 'View Class & Participants',
     };
     final heading = switch (event.type) {
       CalendarEventType.booking => 'Booking details',
       CalendarEventType.availability => 'Availability details',
       CalendarEventType.announcement => 'Announcement details',
+      CalendarEventType.groupClass => 'Group class details',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -823,7 +837,9 @@ class _EventDetails extends StatelessWidget {
               Icons.tag_rounded,
               event.type == CalendarEventType.booking
                   ? 'Booking reference'
-                  : 'Schedule reference',
+                  : (event.type == CalendarEventType.groupClass
+                      ? 'Class reference'
+                      : 'Schedule reference'),
               event.sourceId,
               selectable: true),
         const SizedBox(height: 20),

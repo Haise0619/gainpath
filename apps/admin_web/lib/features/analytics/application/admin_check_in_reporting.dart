@@ -82,7 +82,7 @@ class AdminCheckInReport {
           'Basis',
           'Server-confirmed app check-in receipts for current canonical active Members. Not gym attendance, games, wallet balances or redemption.'
         ],
-        ['Policy points per claim', pointsPerClaim],
+        ['Base points per claim', pointsPerClaim],
         ['Claims in selected range', claims],
         ['Unique claiming Members in selected range', claimingMembers],
         ['Points awarded in selected range', pointsAwarded],

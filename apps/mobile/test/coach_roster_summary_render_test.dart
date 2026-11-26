@@ -13,6 +13,31 @@ import 'booking_history_coach_fix_test.dart' show bookingJson;
 
 void main() {
   setUpAll(loadDemoRenderFonts);
+
+  test('hides only expired holds superseded by the same member booking', () {
+    final start = DateTime.utc(2026, 11, 26, 1);
+    Map<String, dynamic> expired(String id) => {
+          ...bookingJson(id, start, status: 'expired'),
+          'resolvedAtMillis':
+              start.subtract(const Duration(days: 1)).millisecondsSinceEpoch,
+          'resolution': 'hold_expired',
+        };
+    final records = [
+      PersistedBookingRecord.fromJson({
+        ...bookingJson('paid', start, status: 'cancelled'),
+        'paymentStatus': 'cleared',
+      }),
+      PersistedBookingRecord.fromJson(expired('expired')),
+      PersistedBookingRecord.fromJson({
+        ...expired('other-expired'),
+        'memberId': 'other-member',
+      }),
+    ];
+    final map = {for (final record in records) record.bookingId: record};
+    final result = visiblePersistedBookings(
+        records.map(persistedBookingPresentation).toList(), (id) => map[id]);
+    expect(result.map((booking) => booking.id), ['paid', 'other-expired']);
+  });
   for (final width in [320.0, 360.0]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('Coach pinned history and summary render $width $scale',

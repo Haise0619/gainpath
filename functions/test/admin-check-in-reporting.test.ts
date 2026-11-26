@@ -28,6 +28,15 @@ it('weekly and selected-range distinct claimants do not sum repeated daily users
   const r = await run(); expect(r.totals.claimingMembers).toBe(2); expect(r.daily.map(d => d.claimingMembers)).toEqual([1, 2, 1]);
   expect(r.weekly.map(w => [w.date, w.claims, w.claimingMembers])).toEqual([['2026-10-19', 3, 2], ['2026-10-26', 1, 1]]);
 });
+it('reports actual points for a mix of base and Premium claims', async () => {
+  addMember('a'); await claim('a', 24); await claim('a', 25);
+  const row=store.documents.get('orgs/gainpath/appCheckInProfiles/a/claims/2026-10-25')!;
+  Object.assign(row,{points:75,basePoints:50,premiumBonusPoints:25,premiumBonusPolicyVersion:'fixture'});
+  const r=await run();
+  expect(r.totals).toMatchObject({claims:2,pointsAwarded:125});
+  expect(r.daily.map(d=>d.pointsAwarded)).toEqual([50,75]);
+  expect(r.weekly[0].pointsAwarded).toBe(125);
+});
 it('Malaysia dates and start-inclusive/end-exclusive filter apply to claim timestamps', async () => {
   addMember('a'); await claim('a', 24); await claim('a', 25);
   const r = await run(reader, {...query, startAtMillis: Date.UTC(2026, 9, 24, 5), endAtMillis: Date.UTC(2026, 9, 25, 5)});

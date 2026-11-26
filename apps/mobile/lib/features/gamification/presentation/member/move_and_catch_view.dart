@@ -160,6 +160,13 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                       ]))),
               if (phase == 'finished')
                 MoveCatchResultPanel(
+                    completedAt: controller.completedAt,
+                    activeMillis: controller.completedAt == null
+                        ? null
+                        : engine.activeMillis,
+                    isShareCurrent: () =>
+                        controller.current &&
+                        engine.phase == MoveCatchPhase.finished,
                     score: engine.score,
                     caught: engine.caught,
                     missed: engine.missed,

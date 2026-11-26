@@ -6,6 +6,7 @@ import '../../application/membership_feature_host.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 import 'refund_request_screen.dart';
+import 'widgets/membership_components.dart';
 
 class BillingHistoryScreen extends StatelessWidget {
   const BillingHistoryScreen(
@@ -29,36 +30,41 @@ class BillingHistoryScreen extends StatelessWidget {
         }
 
         return [
+          const SizedBox(height: 8),
           const Text(
-              'Membership payments only. Coaching payments remain in your bookings.'),
+            'Membership payments only. Coaching payments remain in your bookings.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.inkSoft,
+              height: 1.4,
+            ),
+          ),
           const SizedBox(height: 16),
           if (payments.isEmpty)
-            const Panel(child: Text('No membership transactions yet.')),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.hairline),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: const Center(
+                child: Text(
+                  'No membership transactions yet.',
+                  style: TextStyle(color: AppColors.inkSoft, fontSize: 13.5),
+                ),
+              ),
+            ),
           ...payments.map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Panel(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(
-                        '${p['planName']} · ${membershipMoney(p['amountMinor'])}',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text(
-                        '${membershipOrderLabel(p)} · ${membershipDate(p['clearedAtMillis'] ?? p['createdAtMillis'])}'),
-                    Text(membershipPaymentLabel(p)),
-                    if (p['reviewReason'] != null)
-                      Text('Admin: ${p['reviewReason']}'),
-                    if (p['refundStatus'] != null)
-                      const Text(
-                          'Refund approval records a decision. Money is returned only after confirmed provider completion.'),
-                    Wrap(spacing: 8, children: [
-                      TextButton(
-                          onPressed: () => open(MembershipPaymentScreen(
-                              repository: repo, initial: p)),
-                          child: const Text('Payment details')),
-                      if (p['paymentStatus'] == 'cleared' && repo.sandbox)
-                        TextButton(
-                            onPressed: () async {
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BillingTransactionTile(
+                  payment: p,
+                  serverNowMillis: data['serverNowMillis'] as int?,
+                  onOpenDetails: () => open(
+                      MembershipPaymentScreen(repository: repo, initial: p)),
+                  onViewReceipt:
+                      p['paymentStatus'] == 'cleared' && repo.sandbox
+                          ? () async {
                               if (!repo.current) return;
                               try {
                                 final saved = await const MethodChannel(
@@ -97,17 +103,17 @@ class BillingHistoryScreen extends StatelessWidget {
                                       'Receipt could not be saved. Retry on Android.');
                                 }
                               }
-                            },
-                            child: const Text('View receipt (PDF)')),
-                      if (p['paymentStatus'] == 'cleared')
-                        TextButton(
-                            onPressed: () => open(RefundRequestScreen(
-                                repository: repo,
-                                preselectedTransactionId:
-                                    p['transactionId'] as String)),
-                            child: const Text('Request / track refund')),
-                    ]),
-                  ])))),
+                            }
+                          : null,
+                  onRequestRefund: p['paymentStatus'] == 'cleared'
+                      ? () => open(RefundRequestScreen(
+                          repository: repo,
+                          preselectedTransactionId:
+                              p['transactionId'] as String))
+                      : null,
+                ),
+              )),
+          const SizedBox(height: 16),
         ];
       });
 }

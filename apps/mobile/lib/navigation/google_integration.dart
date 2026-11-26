@@ -15,6 +15,7 @@ GoogleIntegrationPanelActions googleIntegrationPanelActions(
           senderEmail: status.senderEmail,
           lastSyncedAtMillis: status.lastSyncedAtMillis,
           automationEnabled: status.automationEnabled,
+          calendarAutomationEnabled: status.calendarAutomationEnabled,
           automationStatus: status.automationStatus,
           emailSyncStatus: status.emailSyncStatus,
           revocationPending: status.revocationPending,

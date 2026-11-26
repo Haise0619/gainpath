@@ -312,6 +312,57 @@ void main() {
             .onPressed,
         isNull);
   });
+  testWidgets('admin publishes a saved typed draft with explicit confirmation',
+      (tester) async {
+    tester.view.physicalSize = const Size(1450, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var published = false;
+    await tester.pumpWidget(MaterialApp(
+      home: SystemSettingsScreen(
+        live: true,
+        complianceCall: (action, input) async {
+          if (action == 'publish') {
+            expect(input,
+                {'kind': 'privacy', 'baseRevision': 1, 'requireConsent': true});
+            published = true;
+            return {'version': 'v1.0'};
+          }
+          return {
+            'draft': {
+              'text': 'Test privacy text.',
+              'revision': 1,
+              'updatedAtMillis': 1795500000000,
+              'isArchived': false,
+            },
+            'draftHistory': [],
+            'history': [
+              if (published)
+                {
+                  'version': 'v1.0',
+                  'text': 'Test privacy text.',
+                  'requireConsent': true
+                },
+            ],
+          };
+        },
+      ),
+    ));
+    await tester.tap(find.text('Legal & compliance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Privacy Policy'));
+    await tester.pumpAndSettle();
+    expect(published, false);
+    await tester.ensureVisible(find.text('Publish saved draft'));
+    await tester.tap(find.text('Publish saved draft'));
+    await tester.pumpAndSettle();
+    expect(published, false);
+    await tester.tap(find.widgetWithText(FilledButton, 'Publish'));
+    await tester.pumpAndSettle();
+    expect(published, true);
+    expect(find.text('v1.0 · Current'), findsOneWidget);
+  });
+
   testWidgets('stale draft save is blocked until reload without false success',
       (tester) async {
     await repo.save(await repo.load(), text: 'Original', isArchived: false);

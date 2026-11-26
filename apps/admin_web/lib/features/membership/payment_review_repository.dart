@@ -108,27 +108,46 @@ class PaymentReviewRecord {
   String get sessionSchedule => text('sessionLocalDate').isEmpty
       ? schedule
       : '${text('sessionLocalDate')} · ${text('sessionStartLabel')} – ${text('sessionEndLabel')} (${text('sessionTimeZone')})';
-  String get refundExplanation => switch (text('refundStatus')) {
-        'pending_review' =>
-          'Member requested a refund. Review the reason and notes. No transfer has been sent.',
-        'approved' when isMembership =>
-          'Refund approved for review. No money has been returned. Membership refund execution awaits provider resolution and an entitlement reversal policy.',
-        'approved' =>
-          'Approved for refund. No Payment Order has been sent yet. Execute sandbox refund creates a test order using dummy bank details; it does not refund real money.',
-        'uncertain' =>
-          'Provider outcome not confirmed. Do not execute again. Check the original Payment Order in Billplz Sandbox using the refund reference. If an order exists, use Recover Payment Order to attach its ID and verify its status. If no order is found, an authorized provider review is required; this screen cannot safely resend it.',
-        'processing' =>
-          'A Sandbox Payment Order was submitted. Check refund status to verify the existing order; do not create another one.',
-        'completed' =>
-          'Sandbox provider confirmed completion. This is a test refund; no real money was returned.',
-        'failed' =>
-          'The Sandbox Payment Order did not complete. Review the provider record before taking further action.',
-        'rejected' =>
-          'Admin declined this refund request. No refund was sent by this decision.',
-        _ => needsReview
-            ? 'Payment received; Admin review is required. Approval records a decision and does not send a refund.'
-            : 'No refund request is currently awaiting a decision.',
-      };
+  bool get refundUnavailable =>
+      text('provider') == 'xendit' &&
+      text('refundStatus') == 'failed' &&
+      text('refundFailureCode') == 'REFUND_NOT_SUPPORTED';
+  bool get refundClosed => data['refundClosedAtMillis'] is int;
+  bool get canCloseRefund =>
+      refundUnavailable && !refundClosed && text('refundOrderId').isEmpty;
+  String get refundExplanation => refundUnavailable
+      ? (refundClosed
+          ? 'Request closed. The original payment method does not support refunds. No funds were returned.'
+          : 'The original payment method does not support refunds. Close this request after reviewing the payment.')
+      : switch (
+          isPendingRefundReview ? 'pending_review' : text('refundStatus')) {
+          'pending_review' =>
+            'Member requested a refund. Review the reason and notes. No transfer has been sent.',
+          'approved' when text('provider') == 'xendit' =>
+            'Previously approved. Submit to Xendit to process the refund.',
+          'approved' when isMembership =>
+            'Refund approved for review. No money has been returned. Membership refund execution awaits provider resolution and an entitlement reversal policy.',
+          'approved' =>
+            'Approved for refund. Submit the refund to create a payment order.',
+          'uncertain' when text('provider') == 'xendit' =>
+            'Xendit has not confirmed the outcome. Recover the existing refund by its Xendit refund ID.',
+          'uncertain' =>
+            'Provider outcome not confirmed. Do not execute again. Check the original Payment Order in Billplz using the refund reference. If an order exists, use Recover Payment Order to attach its ID and verify its status. If no order is found, an authorized provider review is required; this screen cannot safely resend it.',
+          'processing' when text('provider') == 'xendit' =>
+            'Xendit is processing the refund. Check refund status for the latest result.',
+          'processing' =>
+            'A payment order was submitted. Check refund status to verify the existing order; do not create another one.',
+          'completed' => 'The payment provider confirmed the refund.',
+          'failed' when text('provider') == 'xendit' =>
+            'Xendit did not complete this refund. Review the provider failure code.',
+          'failed' =>
+            'The payment order did not complete. Review the provider record before taking further action.',
+          'rejected' =>
+            'Admin declined this refund request. No refund was sent by this decision.',
+          _ => needsReview
+              ? 'Payment received; Admin review is required. Approval records a decision and does not send a refund.'
+              : 'No refund request is currently awaiting a decision.',
+        };
   int get amountMinor => data['amountMinor'] as int;
   bool get hasPremiumVoucher => data['premiumVoucher'] is Map;
   String get originalAmount =>
@@ -142,6 +161,7 @@ class PaymentReviewRecord {
 
   String get amount => 'RM ${(amountMinor / 100).toStringAsFixed(2)}';
   bool get needsReview =>
+      !refundClosed &&
       text('fulfilmentStatus') == 'reconciliation_required' &&
       text('refundStatus') != 'completed';
   bool get canDecide =>
@@ -181,16 +201,22 @@ class PaymentReviewRecord {
 
   /// Refund lifecycle status label
   String? get refundLifecycleLabel {
+    if (refundUnavailable) {
+      return refundClosed
+          ? 'Refund unavailable · Closed'
+          : 'Refund unavailable';
+    }
     final status = text('refundStatus');
+    if (isPendingRefundReview) return 'Refund requested · Pending review';
     if (status.isEmpty) return null;
     return switch (status) {
       'pending_review' => 'Refund requested · Pending review',
       'approved' => 'Approved · Refund pending execution',
       'rejected' => 'Refund declined',
-      'processing' => 'Sandbox refund processing',
+      'processing' => 'Refund processing',
       'uncertain' => 'Refund outcome uncertain',
-      'completed' => 'Sandbox refund completed',
-      'failed' => 'Sandbox refund failed',
+      'completed' => 'Refund completed',
+      'failed' => 'Refund failed',
       _ => status,
     };
   }
@@ -242,7 +268,18 @@ class PaymentReviewRecord {
 
   /// True if this record has a refund request, active refund, or refund history
   bool get isRefundCase =>
-      text('refundStatus').isNotEmpty || text('refundReference').isNotEmpty;
+      text('refundStatus').isNotEmpty ||
+      text('refundReference').isNotEmpty ||
+      isPendingRefundReview;
+
+  bool get isPendingRefundReview =>
+      text('refundStatus') == 'pending_review' ||
+      (!isMembership &&
+          text('refundStatus').isEmpty &&
+          text('paymentStatus') == 'cleared' &&
+          needsReview &&
+          const {'member_cancelled', 'coach_cancelled'}
+              .contains(text('resolutionReason')));
 
   /// True if this record requires operational reconciliation
   bool get isReconciliationCase => needsReview;

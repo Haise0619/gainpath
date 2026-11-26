@@ -65,9 +65,11 @@ void main() {
     const Size(320, 760),
     const Size(360, 800),
     const Size(390, 844),
+    const Size(393, 852),
+    const Size(430, 932),
     const Size(844, 390)
   ]) {
-    for (final scale in [1.0, 1.5, 2.0]) {
+    for (final scale in [1.0, 1.3, 1.5, 2.0]) {
       testWidgets('membership ${size.width} x ${size.height} at $scale',
           (tester) async {
         final restoreFonts = await installFypOfflineFonts();

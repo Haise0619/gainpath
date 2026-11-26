@@ -61,6 +61,8 @@ class MoveAndCatchController extends ChangeNotifier {
   final MoveCatchBestScoreStore bestScores;
   final MoveCatchEngine engine;
   final MiniGameRoundCoordinator? roundTiming;
+  DateTime? _completedAt;
+  DateTime? get completedAt => _completedAt;
   final MiniGameCompetitionCoordinator? competition;
   final Future<bool> Function()? earningAvailable;
   final bool autoStart;
@@ -228,6 +230,7 @@ class MoveAndCatchController extends ChangeNotifier {
         !_saving) {
       competition?.finish();
       _roundRecorded = true;
+      _completedAt = DateTime.now().toUtc();
       if (current) playEffect?.call(SoundEffect.roundEnd);
       _previousBest = bestScoreAvailable ? bestScore : null;
       if (roundTimingConsent) roundTiming?.finish();
@@ -317,6 +320,7 @@ class MoveAndCatchController extends ChangeNotifier {
       if (competition != null) unawaited(competition!.loadPreference());
       roundTiming?.reset();
       _roundRecorded = false;
+      _completedAt = null;
       _previousBest = null;
       bestSaved = false;
       scoreSaveFailed = false;

@@ -1,0 +1,8 @@
+Run: dart-data
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:45.0178232Z
+Ended UTC: 2026-11-25T14:44:29.7642077Z
+Duration seconds (wall-clock): 44.75
+Child process exit code: 0
+Observed outcomes: 165 pass / 0 fail / 0 skip across 35 files.
+

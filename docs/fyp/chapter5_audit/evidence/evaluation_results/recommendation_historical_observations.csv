@@ -1,0 +1,4 @@
+case,source,evidence_class,candidates,saved_method,provider_latency_ms,input_tokens,output_tokens,total_tokens,backup_to_delivery_ms,inbox_count,changed_top
+standing_calf_raise_controlled_backup,docs/integration/module13-final-gemini-acceptance-20261118.md,historical_live_controlled,2,rule_fallback,7505,235,95,330,13225,1,
+single_arm_curl_controlled_backup,docs/integration/module13-gemini-output-fix-20261118.md,historical_live_controlled,2,gemini,629,,,227,4301,1,false
+

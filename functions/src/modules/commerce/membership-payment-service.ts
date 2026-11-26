@@ -6,10 +6,19 @@ import { requiredIdentifier } from '../../platform/validation';
 import { allowed, object } from '../coaching/coach-availability-contracts';
 import { currentBookingMembership, requireBookingOrganization } from '../coaching/booking-validation';
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
+import { materializeMembershipBill, membershipBillingPath, membershipBillingView, paidMembershipBill, pendingMembershipBill } from './membership-billing';
+import { xenditBookingReference } from './xendit-booking';
+
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import { isSupportedPaidPlan, MembershipCheckoutError } from './membership-plan-registry';
 import { assertMembershipLifecycle, membershipAccountAt, readMembershipEntitlement, readMembershipTermReceipt, scheduledMembershipUpgrade } from './membership-entitlement';
 import { preparePremiumCoachVoucherTerm } from './premium-coach-voucher';
+
+function matchesMembershipReference(bill: SandboxBill, provider: unknown, org: string, id: string) {
+  return provider === 'xendit'
+    ? bill.collection_id === 'xendit' && bill.reference_1 === xenditBookingReference(org, id)
+    : bill.reference_1 === id && bill.reference_2 === org;
+}
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const DAY = 86400000;
@@ -27,7 +36,7 @@ function context(auth: Auth, raw: unknown, keys: string[]) {
   if (d.schemaVersion !== 1) throw unavailable();
   return { d, org: requiredIdentifier(d.organizationId, 'organizationId'), uid: auth!.uid };
 }
-async function member(tx: TransactionPort, org: string, uid: string, auth?: Auth, sessionRequired = true) {
+export async function member(tx: TransactionPort, org: string, uid: string, auth?: Auth, sessionRequired = true) {
   const m = await currentBookingMembership(tx, org, uid);
   if (m.role !== 'member') throw new DomainError('permission-denied', 'Current Member access required.');
   const user = await tx.get(`users/${uid}`);
@@ -126,26 +135,46 @@ function requireUpgradeSelection(account: DocumentData | undefined, now: number)
 }
 export function membershipPayment(d: DocumentData | undefined, org: string, id: string): DocumentData {
   if (!d || d.organizationId !== org || d.transactionId !== id || !['MembershipPurchase', 'MembershipRenewal'].includes(String(d.kind))
-      || d.environment !== 'sandbox' || d.provider !== 'billplz' || d.currency !== 'MYR' || typeof d.memberId !== 'string'
+      || d.environment !== 'sandbox' || !['billplz', 'xendit'].includes(String(d.provider)) || d.currency !== 'MYR' || typeof d.memberId !== 'string'
       || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1 || !Number.isSafeInteger(d.durationDays) || Number(d.durationDays) < 1) throw unavailable();
   return d;
 }
 export function membershipPaymentView(d: DocumentData) {
-  return Object.fromEntries(['transactionId', 'organizationId', 'memberId', 'kind', 'planId', 'planName', 'benefits', 'amountMinor', 'baseAmountMinor', 'currency', 'durationDays', 'paymentStatus', 'fulfilmentStatus', 'checkoutUrl', 'billId', 'createdAtMillis', 'checkoutExpiresAtMillis', 'clearedAtMillis', 'expiresAtMillis', 'refundStatus', 'refundReason', 'refundNotes', 'reviewReason', 'resolutionReason', 'invoiceStatus', 'promoCode', 'upgradeExpiresAtMillis', 'upgradeMode', 'upgradeChargeMinor', 'premiumTermAmountMinor', 'basicExpiresAtMillis', 'startsAtMillis'].filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+  return Object.fromEntries(['transactionId', 'organizationId', 'memberId', 'kind', 'planId', 'planName', 'benefits', 'amountMinor', 'baseAmountMinor', 'currency', 'durationDays', 'paymentStatus', 'fulfilmentStatus', 'checkoutUrl', 'billingId', 'billId', 'createdAtMillis', 'checkoutExpiresAtMillis', 'clearedAtMillis', 'expiresAtMillis', 'refundStatus', 'refundFailureCode', 'refundReason', 'refundNotes', 'reviewReason', 'resolutionReason', 'invoiceStatus', 'promoCode', 'upgradeExpiresAtMillis', 'upgradeMode', 'upgradeChargeMinor', 'premiumTermAmountMinor', 'basicExpiresAtMillis', 'startsAtMillis'].filter(k => d[k] !== undefined).map(k => [k, d[k]]));
 }
 function event(tx: TransactionPort, org: string, id: string, name: string, now: number, extra: DocumentData = {}) {
   tx.set(`${paymentPath(org, id)}/events/${keyOf(name)}`, { event: name, atMillis: now, ...extra });
 }
 export async function createMembershipPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, clock = Date.now) {
-  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode', 'requestId', 'intent', 'quoteId', 'upgradeMode']);
+  const { d, org, uid } = context(auth, raw, ['planId', 'promoCode', 'requestId', 'intent', 'quoteId', 'upgradeMode', 'billingId']);
   const requestId = requiredIdentifier(d.requestId, 'requestId');
   if (!['purchase', 'renewal'].includes(String(d.intent))) throw unavailable();
   const mode = upgradeMode(d.upgradeMode);
+  if (d.billingId !== undefined && (typeof d.billingId !== 'string' || !/^[a-f0-9]{64}$/.test(d.billingId) || d.intent !== 'renewal' || d.promoCode || mode)) throw unavailable();
   if (mode && (d.intent !== 'purchase' || typeof d.quoteId !== 'string' || !/^[a-f0-9]{64}$/.test(d.quoteId))) {
     throw new MembershipCheckoutError('quote_changed', 'Verify the upgrade price before paying.');
   }
   const id = `membership_${keyOf(uid, requestId)}`;
-  const fingerprint = keyOf(d.planId, d.promoCode ?? '', d.intent, d.quoteId ?? '', ...(mode ? [mode] : []));
+  const fingerprint = keyOf(d.planId, d.promoCode ?? '', d.intent, d.quoteId ?? '', ...(mode ? [mode] : []), ...(d.billingId ? [d.billingId] : []));
+  if (gateway.provider === 'xendit') {
+    const expired = await store.transact(async tx => {
+      await member(tx, org, uid, auth);
+      const account = await tx.get(accountPath(org, uid));
+      const pendingId = account?.pendingTransactionId;
+      if (typeof pendingId !== 'string' || pendingId === id) return;
+      const pending = await tx.get(paymentPath(org, pendingId));
+      if (pending?.memberId === uid && pending.provider === 'xendit' &&
+          pending.paymentStatus === 'pending' && pending.fulfilmentStatus === 'awaiting_payment' &&
+          Number(pending.checkoutExpiresAtMillis) <= clock() && typeof pending.billId === 'string') {
+        return { transactionId: pendingId, billId: pending.billId };
+      }
+    });
+    if (expired) {
+      const bill = await gateway.get(expired.billId);
+      // Keep a payable or uncertain session attached to the original order.
+      if (bill.state === 'deleted') await settleMembershipPayment(store, org, expired.transactionId, bill, clock);
+    }
+  }
   const reserved = await store.transact(async tx => {
     await member(tx, org, uid, auth);
     const old = await tx.get(paymentPath(org, id));
@@ -165,6 +194,7 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
       return { p: payment, create: false, recovered: recovery.orderChanged === true };
     }
     const a = await tx.get(accountPath(org, uid));
+    if (a?.refundInProgress) throw new DomainError('failed-precondition', 'A membership refund is in progress.');
     // A new client request ID cannot bypass an unresolved checkout.
     if (typeof a?.pendingTransactionId === 'string' && a.pendingTransactionId) {
       const pending = membershipPayment(await tx.get(paymentPath(org, a.pendingTransactionId)), org, a.pendingTransactionId);
@@ -178,6 +208,9 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
     const now = clock();
     if (futureUpgrade(a, now)) throw new MembershipCheckoutError('upgrade_already_scheduled', 'Premium is already scheduled.');
     const current = membershipAccountAt(a, now);
+    const billing = d.billingId === undefined ? undefined : pendingMembershipBill(
+      await tx.get(membershipBillingPath(org, uid)), d.billingId, d.planId, current?.expiresAtMillis);
+    if (d.billingId !== undefined && (!billing || billing.dueAtMillis > now)) throw new DomainError('failed-precondition', 'Refresh the renewal bill before paying.');
     if (!mode && d.planId === 'premium') requireUpgradeSelection(current, now);
     const issuedQuote = mode && await tx.get(upgradeQuotePath(org, uid, mode));
     if (mode && (!issuedQuote || issuedQuote.quoteId !== d.quoteId)) {
@@ -190,8 +223,9 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
     if (d.intent === 'renewal' && current?.planId !== d.planId) throw new DomainError('failed-precondition', 'Renew your current plan.');
     if (!mode && Number(current?.expiresAtMillis ?? 0) > now && current?.planId !== d.planId) throw new DomainError('failed-precondition', 'Active plan changes require an Admin policy.');
     const p = { schemaVersion: 1, organizationId: org, transactionId: id, memberId: uid, kind: d.intent === 'renewal' ? 'MembershipRenewal' : 'MembershipPurchase',
-      environment: 'sandbox', provider: 'billplz', planId: d.planId, planName: q.value.name, planVersion: q.value.version, benefits: q.value.benefits,
-      amountMinor: q.value.amountMinor, baseAmountMinor: q.value.baseAmountMinor, currency: 'MYR', durationDays: q.value.durationDays,
+      environment: 'sandbox', provider: gateway.provider ?? 'billplz', planId: d.planId, planName: q.value.name, planVersion: q.value.version, benefits: q.value.benefits,
+      amountMinor: billing?.amountMinor ?? q.value.amountMinor, baseAmountMinor: billing?.amountMinor ?? q.value.baseAmountMinor,
+      ...(billing ? { billingId: billing.id, billingDueAtMillis: billing.dueAtMillis } : {}), currency: 'MYR', durationDays: q.value.durationDays,
       ...(q.code ? { promoCode: q.code } : {}), paymentStatus: 'pending', fulfilmentStatus: 'creating', invoiceStatus: 'pending',
       ...('upgradeMode' in q.value ? { upgradeMode: q.value.upgradeMode, upgradeChargeMinor: q.value.upgradeChargeMinor,
         premiumTermAmountMinor: q.value.premiumTermAmountMinor, basicExpiresAtMillis: q.value.basicExpiresAtMillis,
@@ -208,8 +242,8 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
   if (!reserved.create) return { ...membershipPaymentView(reserved.p), ...(reserved.recovered ? { recoveredPendingCheckout: true } : {}) };
   let bill: SandboxBill;
   try {
-    bill = await gateway.create({ amountMinor: Number(reserved.p.amountMinor), name: reserved.name!, email: reserved.email!, reference: id, organizationId: org, description: `Membership: ${reserved.p.planName}` });
-    if (bill.reference_1 !== id || bill.reference_2 !== org || bill.amount !== reserved.p.amountMinor || !bill.collection_id) throw unavailable();
+    bill = await gateway.create({ amountMinor: Number(reserved.p.amountMinor), name: reserved.name!, email: reserved.email!, reference: id, organizationId: org, ...(gateway.provider === 'xendit' ? { chooseMethodAtCheckout: true } : {}), description: `Membership: ${reserved.p.planName}` });
+    if (!matchesMembershipReference(bill, reserved.p.provider, org, id) || bill.amount !== reserved.p.amountMinor || !bill.collection_id) throw unavailable();
   } catch {
     return store.transact(async tx => {
       const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id);
@@ -235,7 +269,7 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
   }
   return store.transact(async tx => {
     const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id);
-    if (p.billId !== bill.id || p.collectionId !== bill.collection_id || p.amountMinor !== bill.amount || bill.reference_1 !== id || bill.reference_2 !== org) throw unavailable();
+    if (p.billId !== bill.id || p.collectionId !== bill.collection_id || p.amountMinor !== bill.amount || !matchesMembershipReference(bill, p.provider, org, id)) throw unavailable();
     if (p.paymentStatus === 'cleared') return membershipPaymentView(p);
     const now = clock();
     if (!bill.paid || bill.state !== 'paid') {
@@ -246,15 +280,18 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
     if (bill.paid_amount !== p.amountMinor) throw unavailable();
     const a = await tx.get(accountPath(org, String(p.memberId)));
     const current = membershipAccountAt(a, now);
+    const billingPath = membershipBillingPath(org, String(p.memberId));
+    const billingState = await tx.get(billingPath);
     // Re-check current organization authority. Paid but ineligible/late => review, never discard money.
-    let reason = now >= Number(p.checkoutExpiresAtMillis) ? 'checkout_expired' : '';
+    let reason = p.recurringCycleId === undefined && now >= Number(p.checkoutExpiresAtMillis) ? 'checkout_expired' : '';
     if (!isSupportedPaidPlan(p.planId) || p.durationDays !== 30) reason = 'unsupported_plan';
     if (identityIneligible) reason = 'account_ineligible';
     try { await member(tx, org, String(p.memberId), undefined, false); } catch { reason = 'account_ineligible'; }
     const immediate = p.upgradeMode === 'immediate';
     const nextTerm = p.upgradeMode === 'next_term';
     const legacyUpgrade = p.upgradeMode === undefined && p.upgradeExpiresAtMillis !== undefined;
-    if (futureUpgrade(a, now)) reason = 'plan_changed';
+    if (futureUpgrade(a, now) || (p.recurringCycleId !== undefined && current?.planId !== p.planId)) reason = 'plan_changed';
+    if (p.billingId !== undefined && (p.billingDueAtMillis !== current?.expiresAtMillis || p.planId !== current?.planId)) reason = 'billing_term_changed';
     if (immediate || nextTerm || legacyUpgrade) {
       const priorExpiry = legacyUpgrade ? p.upgradeExpiresAtMillis : p.basicExpiresAtMillis;
       const priorPaymentId = legacyUpgrade ? p.upgradeFromTransactionId : p.sourceTransactionId;
@@ -271,9 +308,11 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
     const startsAtMillis = immediate ? now : cycleStart;
     const scheduled = nextTerm && startsAtMillis > now;
     const next = { ...p, paymentStatus: 'cleared', clearedAtMillis: now, invoiceStatus: 'paid', fulfilmentStatus: reason ? 'reconciliation_required' : 'confirmed', updatedAtMillis: now,
-      ...(reason ? { resolutionReason: reason } : { expiresAtMillis, ...((immediate || nextTerm) ? { startsAtMillis } : {}) }) };
+      ...(reason ? { resolutionReason: reason } : { ...(current?.lastTransactionId ? { previousMembershipTerm: { lastTransactionId: current.lastTransactionId, planId: current.planId, planName: current.planName, benefits: current.benefits, expiresAtMillis: current.expiresAtMillis } } : {}), expiresAtMillis, ...((immediate || nextTerm) ? { startsAtMillis } : {}) }) };
     const applyVoucherTerm = !reason && !legacyUpgrade ? await preparePremiumCoachVoucherTerm(tx, org, next, current) : () => undefined;
     if (!reason) {
+      const paidBill = paidMembershipBill(billingState, p.planId, current?.expiresAtMillis, id);
+      if (paidBill) tx.set(billingPath, paidBill);
       const term = { planId: p.planId, planName: p.planName, benefits: p.benefits, expiresAtMillis, lastTransactionId: id };
       tx.set(accountPath(org, String(p.memberId)), { ...a, organizationId: org, memberId: p.memberId,
         ...(scheduled ? { scheduledUpgrade: { ...term, startsAtMillis } } : { ...term, scheduledUpgrade: null }),
@@ -285,7 +324,7 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
     return membershipPaymentView(next);
   });
 }
-export async function readMembershipPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, clock = Date.now, readIdentity?: CoachIdentityReader) {
+export async function readMembershipPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: Pick<BillplzGateway, 'get'>, clock = Date.now, readIdentity?: CoachIdentityReader, xendit?: Pick<BillplzGateway, 'get'>) {
   const { d, org, uid } = context(auth, raw, ['transactionId']);
   const id = requiredIdentifier(d.transactionId, 'transactionId');
   const captured = await store.transact(async tx => {
@@ -298,7 +337,11 @@ export async function readMembershipPayment(store: DocumentStore, auth: Auth, ra
     if (next !== p) tx.set(paymentPath(org, id), next);
     return { p: next, check };
   });
-  if (captured.check) await settleMembershipPayment(store, org, id, await gateway.get(String(captured.p.billId)), clock, readIdentity);
+  if (captured.check) {
+    const provider = captured.p.provider === 'xendit' ? xendit : gateway;
+    if (!provider) throw unavailable();
+    await settleMembershipPayment(store, org, id, await provider.get(String(captured.p.billId)), clock, readIdentity);
+  }
   return store.transact(async tx => { await member(tx, org, uid, auth); return membershipPaymentView(membershipPayment(await tx.get(paymentPath(org, id)), org, id)); });
 }
 export async function membershipRefund(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now) {
@@ -335,7 +378,8 @@ export async function membershipOverview(store: DocumentStore, auth: Auth, raw: 
   return store.transact(async tx => {
     const now = clock(), { account: a, entitlement } = await readMembershipEntitlement(tx, auth, org, now);
     const scheduled = futureUpgrade(a, now);
-    return { schemaVersion: 1, organizationId: org, memberId: uid, serverNowMillis: now, autoRenewSupported: false,
+    const billing = await materializeMembershipBill(tx, org, uid, now);
+    return { schemaVersion: 1, organizationId: org, memberId: uid, serverNowMillis: now, billingSupported: true, billing: membershipBillingView(billing, now),
       entitlement,
       ...(scheduled ? { scheduledUpgrade: { planId: scheduled.planId, planName: scheduled.planName,
         startsAtMillis: scheduled.startsAtMillis, expiresAtMillis: scheduled.expiresAtMillis } } : {}),

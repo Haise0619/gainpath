@@ -57,7 +57,7 @@ void main() {
                         coachPhotoBuilder: (_) =>
                             const Icon(Icons.person_outline, size: 44))))));
         await t.pumpAndSettle();
-        await t.tap(find.text('My Bookings'));
+        await t.tap(find.byKey(const Key('coaches-my-bookings-button')));
         await t.pumpAndSettle();
         Future<void> capture(String label) async {
           expect(t.takeException(), isNull);

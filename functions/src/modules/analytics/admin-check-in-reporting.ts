@@ -80,7 +80,7 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
   }
   if (eligible.length > CHECK_IN_REPORT_LIMITS.eligibleMembers) throw cap();
   result.coverage.activeMembers = eligible.length;
-  const daily = new Map<string, Set<string>>(), weekly = new Map<string, {claims: number; members: Set<string>}>(), claimants = new Set<string>();
+  const daily = new Map<string, {members: Set<string>; points: number}>(), weekly = new Map<string, {claims: number; members: Set<string>; points: number}>(), claimants = new Set<string>();
   await forEachReportBatch(eligible, async uid => {
     const profilePath = `orgs/${org}/appCheckInProfiles/${uid}`;
     const rawProfile = await store.transact(async tx => {await authorizeAdminReport(tx, auth!, org); return tx.get(profilePath);});
@@ -99,10 +99,14 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
         running = last !== null && ordinal === last + 1 ? running + 1 : 1; longest = Math.max(longest, running); last = ordinal; allDays.push(row.id);
         if (receipt.claimedAtMillis >= result.startAtMillis && receipt.claimedAtMillis < result.endAtMillis) {
           result.totals.claims++; claimants.add(uid);
-          if (!daily.has(row.id)) daily.set(row.id, new Set()); daily.get(row.id)!.add(uid);
+          result.totals.pointsAwarded += receipt.points;
+          if (!integer(result.totals.pointsAwarded)) throw fail();
+          if (!daily.has(row.id)) daily.set(row.id, {members: new Set(), points: 0});
+          const dayCounts = daily.get(row.id)!;
+          dayCounts.members.add(uid); dayCounts.points += receipt.points;
           const day = new Date(ordinal * DAY), monday = new Date((ordinal - (day.getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
-          if (!weekly.has(monday)) weekly.set(monday, {claims: 0, members: new Set()});
-          const week = weekly.get(monday)!; week.claims++; week.members.add(uid);
+          if (!weekly.has(monday)) weekly.set(monday, {claims: 0, members: new Set(), points: 0});
+          const week = weekly.get(monday)!; week.claims++; week.members.add(uid); week.points += receipt.points;
         }
       }
       if (claims.length < 100) break; cursor = claims.at(-1)!.id;
@@ -119,9 +123,9 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
     const current = last !== null && today - last <= 1 ? running : 0;
     result.streaks.current[bucketKey(current)]++; result.streaks.longest[bucketKey(longest)]++;
   });
-  result.totals.claimingMembers = claimants.size; result.totals.pointsAwarded = result.totals.claims * APP_CHECK_IN_POLICY.points;
-  result.daily = [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, members]) => ({date, claims: members.size, claimingMembers: members.size, pointsAwarded: members.size * APP_CHECK_IN_POLICY.points}));
-  result.weekly = [...weekly].sort(([a], [b]) => a.localeCompare(b)).map(([date, week]) => ({date, claims: week.claims, claimingMembers: week.members.size, pointsAwarded: week.claims * APP_CHECK_IN_POLICY.points}));
+  result.totals.claimingMembers = claimants.size;
+  result.daily = [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, day]) => ({date, claims: day.members.size, claimingMembers: day.members.size, pointsAwarded: day.points}));
+  result.weekly = [...weekly].sort(([a], [b]) => a.localeCompare(b)).map(([date, week]) => ({date, claims: week.claims, claimingMembers: week.members.size, pointsAwarded: week.points}));
   const readSource = async <T>(source: 'extensions' | 'observations', read: () => Promise<T>): Promise<T | undefined> => {
     try {
       return await read();

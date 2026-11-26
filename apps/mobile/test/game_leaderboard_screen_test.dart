@@ -42,6 +42,34 @@ class Rankings extends CompetitionRepo {
   }
 }
 
+class ConfigurableRankingsRepo extends CompetitionRepo {
+  ConfigurableRankingsRepo({
+    this.entries = const [],
+    this.you = const MiniGameScoreRank(
+        rank: null, displayName: 'You', score: null, isYou: true),
+    this.totalParticipants = 0,
+  });
+
+  final List<MiniGameScoreRank> entries;
+  final MiniGameScoreRank you;
+  final int totalParticipants;
+
+  @override
+  Future<MiniGameScoreLeaderboard> leaderboard(
+      {required String gameId, required String period}) async {
+    return MiniGameScoreLeaderboard(
+      scope: scope,
+      gameId: gameId,
+      period: period,
+      periodKey: '2026-10-26',
+      entries: entries,
+      you: you,
+      totalParticipants: totalParticipants,
+      resolvedAtMillis: 1234,
+    );
+  }
+}
+
 void main() {
   testWidgets(
       'separate games and periods show accepted best plus own rank outside top20',
@@ -63,6 +91,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.requestedGame, 'move-catch-v1');
   });
+
   testWidgets(
       'privacy optout explains previous scores and confirms server state',
       (tester) async {
@@ -83,6 +112,7 @@ void main() {
     expect(repo.enabled, false);
     expect(find.text('Hidden from game rankings'), findsOneWidget);
   });
+
   testWidgets(
       'load failure is not unranked and retry can recover at320 doubletext',
       (tester) async {
@@ -109,6 +139,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
   testWidgets(
       'failed withdrawal keeps confirmed enabled state and never claims hidden',
       (tester) async {
@@ -125,4 +156,131 @@ void main() {
     expect(find.text('Hidden from game rankings'), findsNothing);
     expect(tester.widget<Switch>(find.byType(Switch)).value, true);
   });
+
+  testWidgets('adaptive empty state shows No Rankings Yet when 0 players',
+      (tester) async {
+    final repo = ConfigurableRankingsRepo(
+      entries: const [],
+      you: const MiniGameScoreRank(
+          rank: null, displayName: 'You', score: null, isYou: true),
+      totalParticipants: 0,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: GameLeaderboardScreen(repository: repo, gameId: 'move-catch-v1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No Rankings Yet'), findsOneWidget);
+    expect(find.textContaining('No accepted scores yet'), findsOneWidget);
+    expect(find.text('Unranked'), findsOneWidget);
+    expect(find.text('Top 3'), findsNothing);
+  });
+
+  testWidgets(
+      'adaptive compact list shows Rankings (1) or (2) without podium for <3 players',
+      (tester) async {
+    final repo = ConfigurableRankingsRepo(
+      entries: const [
+        MiniGameScoreRank(
+            rank: 1, displayName: 'Jordan', score: 380, isYou: false),
+        MiniGameScoreRank(
+            rank: 2, displayName: 'Sam', score: 310, isYou: true),
+      ],
+      you: const MiniGameScoreRank(
+          rank: 2, displayName: 'Sam', score: 310, isYou: true),
+      totalParticipants: 2,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: GameLeaderboardScreen(repository: repo, gameId: 'move-catch-v1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rankings (2)'), findsOneWidget);
+    expect(find.text('Jordan'), findsOneWidget);
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Top 3'), findsNothing);
+    expect(find.text('YOU'), findsOneWidget);
+  });
+
+  testWidgets(
+      'adaptive podium and remaining list displays 5 players without duplicating Top 3',
+      (tester) async {
+    tester.view.physicalSize = const Size(393, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = ConfigurableRankingsRepo(
+      entries: const [
+        MiniGameScoreRank(
+            rank: 1, displayName: 'Alex', score: 500, isYou: false),
+        MiniGameScoreRank(
+            rank: 2, displayName: 'Sam', score: 450, isYou: false),
+        MiniGameScoreRank(
+            rank: 3, displayName: 'Kai', score: 400, isYou: false),
+        MiniGameScoreRank(
+            rank: 4, displayName: 'Taylor', score: 350, isYou: false),
+        MiniGameScoreRank(
+            rank: 5, displayName: 'Jordan', score: 300, isYou: false),
+      ],
+      you: const MiniGameScoreRank(
+          rank: 1, displayName: 'Alex', score: 500, isYou: true),
+      totalParticipants: 5,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: GameLeaderboardScreen(repository: repo, gameId: 'move-catch-v1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Top 3'), findsOneWidget);
+    expect(find.textContaining('Rankings (4'), findsOneWidget);
+
+    // Podium contestants appear in podium
+    expect(find.text('Alex'), findsOneWidget);
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Kai'), findsOneWidget);
+
+    // Runner-up contestants appear in list
+    expect(find.text('Taylor'), findsOneWidget);
+    expect(find.text('Jordan'), findsOneWidget);
+  });
+
+  testWidgets('current member in Top 3 displays highlight on podium',
+      (tester) async {
+    final repo = ConfigurableRankingsRepo(
+      entries: const [
+        MiniGameScoreRank(
+            rank: 1, displayName: 'Alex', score: 500, isYou: true),
+        MiniGameScoreRank(
+            rank: 2, displayName: 'Sam', score: 450, isYou: false),
+        MiniGameScoreRank(
+            rank: 3, displayName: 'Kai', score: 400, isYou: false),
+      ],
+      you: const MiniGameScoreRank(
+          rank: 1, displayName: 'Alex', score: 500, isYou: true),
+      totalParticipants: 3,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: GameLeaderboardScreen(repository: repo, gameId: 'move-catch-v1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alex · You'), findsOneWidget);
+  });
+
+  for (final width in [320.0, 360.0, 393.0, 430.0]) {
+    testWidgets('responsive layout at width ${width.toInt()} at 1.0x and 2.0x text scale',
+        (tester) async {
+      final repo = Rankings();
+      for (final scale in [1.0, 2.0]) {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(MaterialApp(
+          builder: (c, w) => MediaQuery(
+            data: MediaQuery.of(c).copyWith(textScaler: TextScaler.linear(scale)),
+            child: w!,
+          ),
+          home: GameLeaderboardScreen(repository: repo, gameId: 'move-catch-v1'),
+        ));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 }

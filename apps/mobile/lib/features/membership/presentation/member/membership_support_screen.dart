@@ -35,8 +35,9 @@ class MembershipSupportScreen extends StatelessWidget {
                   if (!repository.current) return;
                   await Clipboard.setData(
                       ClipboardData(text: '${payment['transactionId']}'));
-                  if (context.mounted && repository.current)
+                  if (context.mounted && repository.current) {
                     showToast(context, 'Payment reference copied.');
+                  }
                 },
                 icon: const Icon(Icons.copy_outlined),
                 label: const Text('Copy reference')),

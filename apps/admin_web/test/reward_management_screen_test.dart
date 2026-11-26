@@ -286,19 +286,16 @@ void main() {
     expect(repo.saves.first['requestId'], isNot(repo.saves.last['requestId']));
   });
 
-  testWidgets('unavailable lazy workout draft does not block reward catalog',
+  testWidgets('reward catalog hides the inactive workout policy tab',
       (tester) async {
     final repo = _UnavailableWorkoutRepo();
     await tester.pumpWidget(
         MaterialApp(home: RewardManagementScreen(repository: repo)));
     await tester.pumpAndSettle();
     expect(repo.draftReads, 0);
-    await tester.tap(find.text('Reward policies'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workout reward draft'));
-    await tester.pumpAndSettle();
-    expect(repo.draftReads, 1);
-    expect(find.text('Retry workout draft'), findsOneWidget);
+    expect(find.text('Reward policies'), findsNothing);
+    expect(find.text('Reward shop'), findsOneWidget);
+    expect(find.text('Voucher collection'), findsOneWidget);
     await tester.ensureVisible(find.text('Add reward'));
     await tester.tap(find.text('Add reward'));
     await tester.pumpAndSettle();

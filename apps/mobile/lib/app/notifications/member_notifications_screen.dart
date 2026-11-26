@@ -28,6 +28,7 @@ class UnifiedNotificationItem {
     this.isRead,
     this.noticeId,
     this.bookingId,
+    this.groupClassId,
     this.announcement,
     this.recommendation,
   });
@@ -39,7 +40,7 @@ class UnifiedNotificationItem {
   final DateTime? timestamp;
   final bool? isRead;
   final String? noticeId;
-  final String? bookingId;
+  final String? bookingId, groupClassId;
   final Announcement? announcement;
   final RecommendationNotice? recommendation;
 }
@@ -56,6 +57,7 @@ class MemberNotificationsScreen extends StatefulWidget {
     this.bookingListFactory,
     required this.isCurrent,
     this.onOpenBookings,
+    this.onOpenGroupClass,
     this.initialItems,
     this.recommendationRepository,
     this.onOpenRecommendationTarget,
@@ -70,6 +72,7 @@ class MemberNotificationsScreen extends StatefulWidget {
   final BookingListFactory? bookingListFactory;
   final bool Function() isCurrent;
   final VoidCallback? onOpenBookings;
+  final ValueChanged<String>? onOpenGroupClass;
   final List<UnifiedNotificationItem>? initialItems;
   final MemberRecommendationRepository? recommendationRepository;
   final MemberRecommendationOpener? onOpenRecommendationTarget;
@@ -181,6 +184,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
         isRead: notice.read,
         noticeId: notice.id,
         bookingId: notice.bookingId,
+        groupClassId: notice.groupClassId,
         recommendation: notice.recommendation,
       );
 
@@ -316,6 +320,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
         isRead: true,
         noticeId: old.noticeId,
         bookingId: old.bookingId,
+        groupClassId: old.groupClassId,
         announcement: old.announcement,
         recommendation: old.recommendation,
       );
@@ -362,6 +367,12 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     if (!_current) return;
 
     // 2. Destination routing
+    if (item.groupClassId case final classId?) {
+      if (widget.onOpenGroupClass != null) {
+        widget.onOpenGroupClass!(classId);
+        return;
+      }
+    }
     final bookingId = item.bookingId;
     if (bookingId != null) {
       await showDialog<void>(

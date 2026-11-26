@@ -2,11 +2,14 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
+import { requireVerifiedEmail } from '../../platform/auth-context';
+import { cancelMembershipBilling, membershipBillingView } from './membership-billing';
 import { DomainError } from '../../platform/errors';
 import { coachCommandError } from '../coaching/coach-profile-callables';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway } from './billplz-sandbox';
-import { membershipOverview, membershipQuote, createMembershipPayment, readMembershipPayment, membershipRefund } from './membership-payment-service';
+import { requireXenditCheckout, xenditGateway, xenditKey } from './xendit-payment-config';
+import { member, membershipOverview, membershipQuote, createMembershipPayment, readMembershipPayment, membershipRefund } from './membership-payment-service';
 
 import { MembershipCheckoutError } from './membership-plan-registry';
 export function membershipCommandError(error: unknown) {
@@ -16,13 +19,11 @@ export function membershipCommandError(error: unknown) {
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
 const collection = defineString('BILLPLZ_SANDBOX_COLLECTION_ID', { default: '' });
 const organization = defineString('BILLPLZ_SANDBOX_ORGANIZATION_ID', { default: 'gainpath' });
-const enabled = defineString('BILLPLZ_SANDBOX_ENABLED', { default: 'false' });
 const store = () => new FirestoreStore(getFirestore());
 function check(data: unknown) {
   if (!data || typeof data !== 'object' || (data as Record<string, unknown>).organizationId !== organization.value()) throw new DomainError('permission-denied', 'Organization unavailable.');
 }
-function gateway() {
-  if (enabled.value() !== 'true') throw new DomainError('unavailable', 'Sandbox checkout disabled.');
+function legacyGateway() {
   const project = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
   if (!project || !/^[a-z0-9-]+$/.test(project)) throw new DomainError('unavailable', 'Sandbox configuration unavailable.');
   return new BillplzSandboxGateway({ apiKey: apiKey.value(), collectionId: collection.value(), callbackUrl: `https://us-central1-${project}.cloudfunctions.net/paymentWebhook`, redirectUrl: `https://us-central1-${project}.cloudfunctions.net/billplzSandboxReturn` });
@@ -42,13 +43,35 @@ export const getMembershipOverviewCommand = onCall({ enforceAppCheck: true, pres
 export const getMembershipQuoteCommand = onCall({ enforceAppCheck: true }, async r => {
   try { check(r.data); return await membershipQuote(store(), r.auth, r.data); } catch (e) { throw membershipCommandError(e); }
 });
-export const createMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey] }, async r => {
-  try { check(r.data); return await createMembershipPayment(store(), r.auth, r.data, gateway()); } catch (e) { throw membershipCommandError(e); }
+export const createMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [xenditKey] }, async r => {
+  try { check(r.data); requireXenditCheckout(); return await createMembershipPayment(store(), r.auth, r.data, xenditGateway()); } catch (e) { throw membershipCommandError(e); }
 });
-export const getMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey] }, async r => {
-  try { check(r.data); return await readMembershipPayment(store(), r.auth, r.data, gateway(), Date.now, readCoachIdentity); } catch (e) { throw membershipCommandError(e); }
+export const getMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey, xenditKey] }, async r => {
+  try {
+    check(r.data);
+    return await readMembershipPayment(store(), r.auth, r.data,
+      { get: id => legacyGateway().get(id) }, Date.now, readCoachIdentity,
+      { get: id => xenditGateway().get(id) });
+  } catch (e) { throw membershipCommandError(e); }
 });
 export const requestMembershipRefundCommand = onCall({ enforceAppCheck: true }, async r => {
   try { check(r.data); return await membershipRefund(store(), r.auth, r.data); } catch (e) { throw membershipCommandError(e); }
 });
 
+
+export const cancelMembershipRenewalCommand = onCall({ enforceAppCheck: true }, async r => {
+  try {
+    check(r.data);
+    requireVerifiedEmail(r.auth);
+    const { organizationId, schemaVersion } = r.data;
+    if (schemaVersion !== 1) throw new HttpsError('invalid-argument', 'Invalid membership request.');
+    const now = Date.now();
+    return await store().transact(async tx => {
+      await member(tx, organizationId, r.auth!.uid, r.auth!);
+      return membershipBillingView(await cancelMembershipBilling(tx, organizationId, r.auth!.uid, now), now);
+    });
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    throw membershipCommandError(e);
+  }
+});

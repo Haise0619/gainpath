@@ -33,7 +33,13 @@ String _dateKey(DateTime date) =>
 
 enum _CalendarView { month, week, day }
 
-enum _EventFilter { booking, availability, announcement, inactiveBookings }
+enum _EventFilter {
+  booking,
+  availability,
+  announcement,
+  groupClass,
+  inactiveBookings
+}
 
 typedef _CalendarRange = ({DateTime start, DateTime end});
 typedef _EventScope = ({_CalendarRange range, String? branch, int types});
@@ -45,6 +51,7 @@ class OperationsCalendarScreen extends StatefulWidget {
     super.key,
     required this.repository,
     this.initialBranchId,
+    this.groupClassesRevision = 0,
     required this.onOpenSource,
     required this.onOpenCoach,
     required this.onOpenReport,
@@ -53,6 +60,7 @@ class OperationsCalendarScreen extends StatefulWidget {
 
   final OperationsCalendarRepository repository;
   final String? initialBranchId;
+  final int groupClassesRevision;
   final ValueChanged<OperationsEvent> onOpenSource;
   final ValueChanged<OperationsEvent> onOpenCoach;
   final void Function(String? branchId, DateTime date) onOpenReport;
@@ -158,10 +166,14 @@ class _OperationsCalendarScreenState extends State<OperationsCalendarScreen> {
       _branches = null;
       unawaited(_loadBranches());
     }
+    if (oldWidget.groupClassesRevision != widget.groupClassesRevision) {
+      _eventCache.clear();
+    }
     if (oldWidget.initialBranchId != widget.initialBranchId) {
       _branchId = widget.initialBranchId;
     }
     if (oldWidget.repository != widget.repository ||
+        oldWidget.groupClassesRevision != widget.groupClassesRevision ||
         oldWidget.initialBranchId != widget.initialBranchId) {
       _queueLoad();
     }

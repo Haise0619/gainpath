@@ -94,7 +94,9 @@ void main() {
         currentUid: () => 'member',
         readiness: ready(),
         call: (n, d) async {
-          expect(n, 'getBookingPaymentMethodsCommand');
+          expect(n, 'getBookingPaymentCommand');
+          expect(d['includeSelectionMethods'], true);
+          expect(d['supportsXendit'], true);
           current = false;
           return {};
         });

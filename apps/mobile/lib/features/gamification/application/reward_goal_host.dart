@@ -9,8 +9,12 @@ import 'rewards_feature_host.dart';
 
 class RewardGoalHost extends StatelessWidget {
   const RewardGoalHost(
-      {super.key, required this.onShop, required this.fallback});
+      {super.key,
+      required this.onShop,
+      required this.fallback,
+      this.onBalanceChanged});
   final FutureOr<void> Function() onShop;
+  final Future<void> Function()? onBalanceChanged;
   final Widget fallback;
   @override
   Widget build(BuildContext context) {
@@ -31,6 +35,7 @@ class RewardGoalHost extends StatelessWidget {
                   repository: repo,
                   scope: session.scope,
                   store: LocalRewardGoalStore(),
+                  onBalanceChanged: onBalanceChanged,
                   onShop: onShop));
         });
   }

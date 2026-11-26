@@ -108,7 +108,62 @@ class PagedRangeBookings extends RangeBookings {
   }
 }
 
+class FullHistoryBookings extends RangeBookings {
+  @override
+  Future<BookingPage> load(
+      {String? coachId,
+      String? firstLocalDate,
+      int? dayCount,
+      BookingCursor? cursor}) async {
+    final base = await super.load(
+        coachId: coachId,
+        firstLocalDate: firstLocalDate,
+        dayCount: dayCount,
+        cursor: cursor);
+    final List<Map<String, dynamic>> records;
+    if (firstLocalDate == null) {
+      records = [
+        bookingJson('future-refund', DateTime.utc(2026, 11, 12, 2, 30),
+            status: 'refunded'),
+      ];
+    } else {
+      records = [
+        for (var i = cursor == null ? 0 : 20;
+            i < (cursor == null ? 20 : 24);
+            i++)
+          bookingJson('history-$i', DateTime.utc(2026, 10, 11 + i, 2, 30)),
+      ];
+    }
+    return BookingPage.fromJson({
+      ...base.toJson(),
+      'records': records,
+      if (firstLocalDate != null && cursor == null)
+        'nextCursor': {
+          'bookingId': records.last['bookingId'],
+          'startAtMillis': records.last['startAtMillis'],
+        },
+    });
+  }
+}
+
 void main() {
+  testWidgets(
+      'both tabs show the full history count, including a future refund',
+      (tester) async {
+    final repo = FullHistoryBookings();
+    await tester.pumpWidget(
+        shell(LiveBookingListView(repository: repo, isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    final history = find.byKey(const ValueKey('tab_history'));
+    final count = find.descendant(of: history, matching: find.text('25'));
+    expect(count, findsOneWidget);
+    expect(find.text('Load more bookings'), findsNothing);
+    final calls = repo.calls.length;
+    await tester.tap(history);
+    await tester.pumpAndSettle();
+    expect(count, findsOneWidget);
+    expect(repo.calls, hasLength(calls));
+  });
   test('historical pagination keeps its original range across server midnight',
       () async {
     final repo = PagedRangeBookings();
@@ -143,6 +198,21 @@ void main() {
     expect(c.state.page, isNull);
     await c.close();
   });
+  testWidgets(
+      'initial failure offers retry without implying bookings are empty',
+      (tester) async {
+    final repo = RangeBookings()..fail = true;
+    await tester.pumpWidget(
+        shell(LiveBookingListView(repository: repo, isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry bookings'), findsOneWidget);
+    expect(find.text('No upcoming sessions'), findsNothing);
+    repo.fail = false;
+    await tester.tap(find.text('Retry bookings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry bookings'), findsNothing);
+  });
+
   testWidgets('Member does not subscribe to background booking changes',
       (t) async {
     final repo = WatchedRangeBookings();
@@ -152,7 +222,7 @@ void main() {
     expect(repo.events.hasListener, false);
     repo.events.add(null);
     await t.pumpAndSettle();
-    expect(repo.calls, hasLength(1));
+    expect(repo.calls, hasLength(2));
     await t.pumpWidget(const SizedBox());
     await repo.events.close();
   });
@@ -171,7 +241,10 @@ void main() {
     expect(repo.calls.last.days, 30);
     expect(find.textContaining('21 Oct 2026'), findsOneWidget);
     expect(find.text('Session ended'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('booking-filter-button')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('filter_completed')));
+    await t.tap(find.text('Apply Filters'));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('tab_upcoming')));
     await t.pumpAndSettle();
@@ -191,10 +264,10 @@ void main() {
     expect(find.byType(RefreshIndicator), findsOneWidget);
     await t.pump(const Duration(seconds: 61));
     await t.pumpAndSettle();
-    expect(repo.calls, hasLength(1));
+    expect(repo.calls, hasLength(2));
     await t.drag(find.byType(ListView).first, const Offset(0, 500));
     await t.pumpAndSettle();
-    expect(repo.calls, hasLength(2));
+    expect(repo.calls, hasLength(4));
   });
   test('failed date-range request preserves active range and successful rows',
       () async {
@@ -251,7 +324,8 @@ void main() {
     await t.pumpAndSettle();
     expect(done, true);
     expect(repo.calls.last.first, '2026-10-10');
-    expect(find.textContaining('Past 30 days'), findsOneWidget);
+    expect(find.textContaining('History (last 30 days & cancellations)'),
+        findsOneWidget);
   });
   test(
       'historical refresh includes today and advances its server-day range after midnight',

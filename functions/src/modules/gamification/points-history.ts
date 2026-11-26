@@ -1,5 +1,5 @@
 import {DomainError} from '../../platform/errors';
-import {validCheckInBonusReceipt} from './premium-check-in-policy';
+import {validCheckInBonusReceipt} from './app-check-in-receipt';
 import type {DocumentData,DocumentStore} from '../../platform/firestore/store';
 import {resolveMembershipEntitlement} from '../commerce/membership-entitlement';
 import {rewardVoucherDetails} from './reward-details';

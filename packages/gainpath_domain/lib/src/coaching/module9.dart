@@ -16,11 +16,12 @@ class MemberNotice {
       required this.read,
       required this.createdAt,
       this.bookingId,
+      this.groupClassId,
       this.recommendation});
   final String id, title, message;
   final bool read;
   final DateTime createdAt;
-  final String? bookingId;
+  final String? bookingId, groupClassId;
   final RecommendationNotice? recommendation;
 }
 

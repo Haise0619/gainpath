@@ -152,6 +152,7 @@ class BookingPaymentView {
       this.checkoutUrl,
       this.paymentStatus,
       this.refundStatus,
+      this.refundFailureCode,
       this.resolutionReason,
       this.gatewayCode,
       this.paymentMethodName,
@@ -164,7 +165,7 @@ class BookingPaymentView {
   final String? checkoutUrl, resolutionReason;
   final String? gatewayCode, paymentMethodName;
   final SelectedBookingPaymentMethod? selectedPaymentMethod;
-  final String? paymentStatus, refundStatus;
+  final String? paymentStatus, refundStatus, refundFailureCode;
   bool get confirmed => status == 'confirmed';
   factory BookingPaymentView.fromJson(Map<String, dynamic> json,
       {required String bookingId}) {
@@ -225,6 +226,9 @@ class BookingPaymentView {
         checkoutUrl: json['checkoutUrl'] as String?,
         paymentStatus: json['paymentStatus'] as String?,
         refundStatus: json['refundStatus'] as String?,
+        refundFailureCode: json['refundFailureCode'] is String
+            ? json['refundFailureCode'] as String
+            : null,
         resolutionReason: json['resolutionReason'] as String?);
   }
 }

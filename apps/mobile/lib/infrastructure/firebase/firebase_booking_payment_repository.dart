@@ -133,16 +133,8 @@ class FirebaseBookingPaymentRepository
           quoteToken: quoteToken,
           usePremiumVoucher: usePremiumVoucher);
   @override
-  Future<BookingPaymentMethods> loadPaymentMethods(String bookingId) async {
-    try {
-      return BookingPaymentMethods.fromJson(
-          await _call(
-              'getBookingPaymentMethodsCommand', {'bookingId': bookingId}),
-          bookingId: bookingId);
-    } on FormatException {
-      throw const BookingException('invalid-response');
-    }
-  }
+  Future<BookingPaymentMethods> loadPaymentMethods(String bookingId) =>
+      loadPaymentSelections(bookingId);
 
   @override
   Future<BookingPaymentMethods> loadPaymentSelections(String bookingId) async {

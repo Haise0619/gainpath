@@ -100,7 +100,8 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
         {CoachDirectoryFactory? factory,
         CoachAvailabilityFactory? availabilityFactory,
         BookingServicesFactory? bookingFactory,
-        BookingListFactory? bookingListFactory}) =>
+        BookingListFactory? bookingListFactory,
+        VoidCallback? onOpenGroupClasses}) =>
     CoachSessionHost(
         key: ObjectKey(session),
         session: session,
@@ -109,6 +110,7 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               FirebaseCoachDirectoryRepository(
                   scope: session.scope, isCurrent: isCurrent);
           return BrowseCoachesScreen(
+              onOpenGroupClasses: onOpenGroupClasses,
               loadBranches: factory == null ? () async {
                 final names = <String, String>{};
                 final seen = <String>{};

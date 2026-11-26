@@ -129,8 +129,10 @@ void main() {
   testWidgets('badges open separately using only real check-in progress',
       (tester) async {
     await show(tester, ready());
-    await tester.ensureVisible(find.text('Badges'));
-    await tester.tap(find.text('Badges'));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('training-achievements-view-all')));
+    await tester
+        .tap(find.byKey(const ValueKey('training-achievements-view-all')));
     await tester.pumpAndSettle();
     expect(find.text('Check-in badges'), findsOneWidget);
     expect(find.text('Three-day streak'), findsOneWidget);
@@ -142,14 +144,15 @@ void main() {
       (tester) async {
     await show(tester, ready(), width: 320, scale: 2);
     for (final label in [
-      'Redeem points',
+      'Shop',
       'My Rewards',
-      'Badges',
       'Points History',
-      'Leaderboards'
+      'Earned-points weekly rank'
     ]) {
       await tester.ensureVisible(find.text(label));
     }
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('training-achievements-view-all')));
     expect(find.textContaining('Squat Rush'), findsNothing);
     expect(tester.takeException(), isNull);
   });

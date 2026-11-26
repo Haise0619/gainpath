@@ -1,0 +1,18 @@
+Date: 25 November 2026, Asia/Kuala_Lumpur
+Environment: installed Flutter 3.38.9, local VM widget fixture
+Working directory: apps/mobile
+Command:
+  flutter --suppress-analytics test --no-pub --concurrency=1 --name 'Training Report 390dp 1.0x text' --dart-define=GAINPATH_RENDER_REPORT=true --dart-define=REPORT_STAGE=audit --dart-define=REPORT_RENDER_DIR=../../build/chapter5-audit-figures test/training_report_consumer_render_test.dart
+
+00:00 +0: (setUpAll)
+00:00 +0: Training Report 390dp 1.0x text
+00:00 +1: (tearDownAll)
+00:00 +1: All tests passed!
+Exit code: 0
+
+Scope: opt-in synthetic render. This test pumps the Training Report screen directly. It does not compile the normal Member shell, sign in or execute the native PDF export.
+Visible inputs: synthetic mixed workout history and one compatible form assessment.
+Archived screenshots:
+  evidence/screenshots/FIG-10A-training-report.png
+  evidence/screenshots/FIG-10B-form-assessment.png
+The test is a repeat of a widget scenario with capture enabled. Do not add its pass to the full Mobile suite total.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'widgets/booking_location.dart';
+import '../../../../presentation/shared/payment_status_heading.dart';
 
 /// Confirmation uses the verified booking/payment response.
 /// Payment responses retain the checkout schedule after rescheduling.
@@ -46,22 +47,11 @@ class BookingConfirmedScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF0FAF5), shape: BoxShape.circle),
-                child: Container(
-                  width: 68, height: 68,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFDDF4E7), shape: BoxShape.circle),
-                  child: const Icon(Icons.check_rounded,
-                      size: 40, color: Color(0xFF16804A)),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(payment != null ? 'Payment successful' : 'Booking confirmed',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium),
+              PaymentStatusHeading(
+                  stage: PaymentStage.success,
+                  title: payment != null
+                      ? 'Payment successful'
+                      : 'Booking confirmed'),
               const SizedBox(height: 6),
               Text('Your coaching session is confirmed.',
                   textAlign: TextAlign.center,
@@ -73,11 +63,13 @@ class BookingConfirmedScreen extends StatelessWidget {
             child: Column(
               children: [
                 Row(children: [
-                  const ExcludeSemantics(child: Icon(Icons.person_outline_rounded,
-                      color: AppColors.primary, size: 22)),
+                  const ExcludeSemantics(
+                      child: Icon(Icons.person_outline_rounded,
+                          color: AppColors.primary, size: 22)),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(coachName,
-                      style: Theme.of(context).textTheme.titleLarge)),
+                  Expanded(
+                      child: Text(coachName,
+                          style: Theme.of(context).textTheme.titleLarge)),
                 ]),
                 const Divider(height: 24, color: AppColors.hairline),
                 DetailRow('Date & time', dateLabel),
@@ -87,16 +79,25 @@ class BookingConfirmedScreen extends StatelessWidget {
                   BookingLocation(bookingId: payment.bookingId),
                 const Divider(height: 24, color: AppColors.hairline),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(color: AppColors.surfaceAlt,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
                       borderRadius: BorderRadius.circular(12)),
                   child: Row(children: [
-                    Expanded(child: Text('Paid',
-                        style: Theme.of(context).textTheme.bodyMedium)),
+                    Expanded(
+                        child: Text('Paid',
+                            style: Theme.of(context).textTheme.bodyMedium)),
                     const SizedBox(width: 12),
-                    Flexible(child: Text(amount, textAlign: TextAlign.end,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: AppColors.ink, fontWeight: FontWeight.w700))),
+                    Flexible(
+                        child: Text(amount,
+                            textAlign: TextAlign.end,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                    color: AppColors.ink,
+                                    fontWeight: FontWeight.w700))),
                   ]),
                 ),
                 if (payment?.selectedPaymentMethod != null) ...[

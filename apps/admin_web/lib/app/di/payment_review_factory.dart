@@ -12,9 +12,11 @@ class AdminPaymentReviewRoute extends StatefulWidget {
     required this.session,
     this.mode = PaymentsMode.transactions,
     this.onNavigateMode,
+    this.initialBookingId,
   });
   final AuthSession session;
   final PaymentsMode mode;
+  final String? initialBookingId;
   final ValueChanged<PaymentsMode>? onNavigateMode;
 
   @override
@@ -54,6 +56,7 @@ class _AdminPaymentReviewRouteState extends State<AdminPaymentReviewRoute> {
               repository: _repository!,
               isCurrent: _guard!.isCurrent,
               mode: widget.mode,
+              initialBookingId: widget.initialBookingId,
               onNavigateMode: widget.onNavigateMode)
           : const Center(
               child: Text('Payment review unavailable for this session.')));

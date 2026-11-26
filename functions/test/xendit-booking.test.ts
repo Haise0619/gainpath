@@ -19,6 +19,20 @@ describe('Xendit booking checkout', () => {
     expect(request).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(request.mock.calls[0][1]?.body)).allowed_payment_channels).toEqual([channel]);
   });
+  it('offers enabled methods together on hosted membership checkout', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      payment_session_id: 'ps-661f87c614802d6c402cd82d',
+      reference_id: xenditBookingReference('gainpath', 'member-payment'), country: 'MY', currency: 'MYR',
+      amount: 89, status: 'ACTIVE', session_type: 'PAY', mode: 'PAYMENT_LINK',
+      payment_link_url: 'https://checkout-staging.xendit.co/latest/test-checkout',
+    }));
+    const gateway = new XenditBookingGateway('xnd_development_example', 'https://gainpath.example/return',
+      new Set(['CIMB_FPX', 'TOUCHNGO', 'CARDS']), request);
+    await gateway.create({ amountMinor: 8900, name: 'Member', email: 'member@example.com',
+      reference: 'member-payment', organizationId: 'gainpath', description: 'Membership', chooseMethodAtCheckout: true });
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).allowed_payment_channels)
+      .toEqual(['CIMB_FPX', 'TOUCHNGO', 'CARDS']);
+  });
   it.each(['valid', 'missing', 'wrong_session', 'expired'])(
     'checks the original Touch n Go session once when create omits its link (%s)',
     async outcome => {

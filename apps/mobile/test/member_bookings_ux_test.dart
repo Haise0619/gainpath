@@ -93,7 +93,7 @@ void main() {
     });
 
     testWidgets(
-        'tapping History tab reveals sub-filters (All, Completed, Cancelled) and shows history',
+        'tapping History tab reveals filter controls and shows history',
         (tester) async {
       await tester.pumpWidget(
         _testShell(
@@ -119,15 +119,23 @@ void main() {
       expect(find.text('UPCOMING'), findsNothing);
       expect(find.text('Sarah Jenkins'), findsNothing);
 
-      // Sub-filters are visible
+      // Filter button is visible; tap it to reveal bottom sheet filters
+      expect(
+          find.byKey(const ValueKey('booking-filter-button')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('booking-filter-button')));
+      await tester.pumpAndSettle();
+
       expect(find.byKey(const ValueKey('filter_all')), findsOneWidget);
       expect(find.byKey(const ValueKey('filter_completed')), findsOneWidget);
       expect(find.byKey(const ValueKey('filter_cancelled')), findsOneWidget);
 
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
       // In All mode, both completed and cancelled sessions appear
-      expect(find.text('COMPLETED'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
       expect(find.text('Marcus Vance'), findsOneWidget);
-      expect(find.text('CANCELLED'), findsOneWidget);
+      expect(find.text('Cancelled'), findsOneWidget);
       expect(find.text('Elena Rostova'), findsOneWidget);
     });
 
@@ -152,15 +160,18 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
-      // Tap on Completed sub-filter
+      // Open filter bottom sheet and tap Completed
+      await tester.tap(find.byKey(const ValueKey('booking-filter-button')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('filter_completed')));
+      await tester.tap(find.text('Apply Filters'));
       await tester.pumpAndSettle();
 
-      expect(find.text('COMPLETED'), findsOneWidget);
+      expect(find.textContaining('Completed · 1'), findsOneWidget);
       expect(find.text('Marcus Vance'), findsOneWidget);
 
       // Cancelled is filtered out
-      expect(find.text('CANCELLED'), findsNothing);
+      expect(find.text('Cancelled'), findsNothing);
       expect(find.text('Elena Rostova'), findsNothing);
     });
 
@@ -185,11 +196,14 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
-      // Tap on Cancelled sub-filter
+      // Open filter bottom sheet and tap Cancelled
+      await tester.tap(find.byKey(const ValueKey('booking-filter-button')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('filter_cancelled')));
+      await tester.tap(find.text('Apply Filters'));
       await tester.pumpAndSettle();
 
-      expect(find.text('CANCELLED'), findsOneWidget);
+      expect(find.textContaining('Cancelled · 1'), findsOneWidget);
       expect(find.text('Elena Rostova'), findsOneWidget);
 
       // Open details to view cancellation reason
@@ -202,7 +216,6 @@ void main() {
       expect(find.text('Schedule conflict with work.'), findsOneWidget);
 
       // Completed is filtered out
-      expect(find.text('COMPLETED'), findsNothing);
       expect(find.text('Marcus Vance'), findsNothing);
     });
 
@@ -390,8 +403,9 @@ void main() {
       expect(find.text('Coach'), findsOneWidget);
       // Raw branch ID is converted to human-readable
       expect(find.text('branch_internal_42'), findsNothing);
+      // Missing/unrecorded location does not show generic placeholder on card
       expect(find.textContaining('Location confirmed when booking'),
-          findsOneWidget);
+          findsNothing);
       // Missing/zero price is NOT displayed (never RM 0.00 or Free)
       expect(find.text('RM 0.00'), findsNothing);
       expect(find.text('Free'), findsNothing);

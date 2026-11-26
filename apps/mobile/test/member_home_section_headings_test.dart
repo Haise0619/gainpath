@@ -12,8 +12,48 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../test_support/fyp_render_support.dart';
 import 'support/module13_demo_render.dart' show loadDemoRenderFonts;
 
+class _RecommendationProbe extends StatefulWidget {
+  const _RecommendationProbe(this.onMount);
+  final VoidCallback onMount;
+
+  @override
+  State<_RecommendationProbe> createState() => _RecommendationProbeState();
+}
+
+class _RecommendationProbeState extends State<_RecommendationProbe> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const SizedBox(height: 120, child: Text('Recommendation probe'));
+}
+
 void main() {
   setUpAll(loadDemoRenderFonts);
+
+  testWidgets('registered classes destination starts in My Classes Upcoming',
+      (tester) async {
+    final restore = await installFypOfflineFonts();
+    addTearDown(restore);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(),
+      home: MemberGroupClassesScreen(
+        startInMyClasses: true,
+        call: (_, __) async => {'classes': []},
+        onUpgrade: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('My Classes'), findsOneWidget);
+    final upcoming = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'Upcoming'),
+    );
+    expect(upcoming.selected, isTrue);
+  });
 
   const testSession = AuthSession(
     userId: 'member1',
@@ -44,12 +84,21 @@ void main() {
   Widget createTestWidget({
     required ThemeData theme,
     required Key captureKey,
+    Widget? recommendations,
+    Widget? upcomingClasses,
+    Set<FitnessGoal> goals = const {FitnessGoal.buildMuscle},
+    double scale = 1,
   }) {
     return RepaintBoundary(
       key: captureKey,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: theme,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: MemberHomeScreen(
             liveSession: testSession,
@@ -60,44 +109,163 @@ void main() {
               weightKg: 70,
               experience: TrainingExperience.beginner,
               activity: ActivityLevel.moderatelyActive,
-              goals: {FitnessGoal.buildMuscle},
+              goals: goals,
             ),
+            upcomingClasses: upcomingClasses,
             publishedRoutine: testRoutine(),
             appCheckIn: const AppCheckInState(
               status: AppCheckInStatus.ready,
               message: 'Checked in today',
             ),
-            recommendations: Builder(
-              builder: (context) => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
+            recommendations: recommendations ??
+                Builder(
+                  builder: (context) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Recommended for You',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Recommended for You',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {},
+                            child: const Text('View all'),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () {},
-                        child: const Text('View all'),
+                      const SizedBox(height: 8),
+                      Panel(
+                        padding: const EdgeInsets.all(16),
+                        child: const Text('Full Body Strength & Conditioning'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Panel(
-                    padding: const EdgeInsets.all(16),
-                    child: const Text('Full Body Strength & Conditioning'),
-                  ),
-                ],
-              ),
-            ),
+                ),
           ),
         ),
       ),
     );
   }
+
+  for (final width in [320.0, 360.0, 393.0, 430.0]) {
+    for (final scale in [1.0, 1.5, 2.0]) {
+      testWidgets('compact Home sections fit ${width.toInt()}dp at ${scale}x',
+          (tester) async {
+        final restore = await installFypOfflineFonts();
+        addTearDown(restore);
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 852);
+        addTearDown(tester.view.reset);
+        final key = GlobalKey();
+        final start = DateTime.utc(2026, 11, 30, 2).millisecondsSinceEpoch;
+        final nearest = <String, dynamic>{
+          'id': 'next',
+          'title': 'Yoga and mobility for healthy movement',
+          'venue': 'Training Studio',
+          'branchName': 'GainPath International Performance Centre',
+          'startAtMillis': start,
+          'endAtMillis': start + 3600000,
+          'status': 'Open',
+          'registration': {'status': 'Registered'},
+        };
+        String? opened;
+        var openedAll = false;
+        await tester.pumpWidget(createTestWidget(
+          theme: AppTheme.build(),
+          captureKey: key,
+          scale: scale,
+          goals: {
+            FitnessGoal.generalFitness,
+            FitnessGoal.increaseFlexibility,
+            FitnessGoal.reduceStress,
+          },
+          upcomingClasses: UpcomingGroupClasses(
+            call: (_, __) async => {
+              'serverNowMillis': start - 5000,
+              'classes': [
+                {...nearest, 'title': 'Cancelled class', 'status': 'Cancelled'},
+                {
+                  ...nearest,
+                  'title': 'Later class',
+                  'startAtMillis': start + 3600000
+                },
+                nearest,
+              ],
+            },
+            onOpen: (id) async => opened = id,
+            onExplore: () async {},
+            onViewAll: () async => openedAll = true,
+          ),
+        ));
+        await tester.pumpAndSettle();
+        final scroll = find.byType(Scrollable).first;
+        await tester.scrollUntilVisible(find.text('+1 more'), 250,
+            scrollable: scroll);
+        await tester.pumpAndSettle();
+        final cls = find.text('Yoga and mobility for healthy movement');
+        expect(find.text('Announcements'), findsNothing);
+        expect(find.text('Cancelled class'), findsNothing);
+        expect(find.text('Later class'), findsNothing);
+        expect(find.text('10:00–11:00 MYT'), findsOneWidget);
+        expect(find.text('General fitness'), findsOneWidget);
+        expect(find.text('Increase flexibility'), findsOneWidget);
+        expect(find.text('Reduce stress'), findsNothing);
+        expect(tester.takeException(), isNull);
+        if (width == 393 && scale == 1) {
+          final boundary =
+              tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
+          await tester.runAsync(() async {
+            final image = await boundary.toImage(pixelRatio: 1.5);
+            final bytes =
+                await image.toByteData(format: ui.ImageByteFormat.png);
+            final file = File(
+                '../../build/home-goals-classes/home-upcoming-classes-and-goals.png');
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+          await tester.ensureVisible(cls);
+          await tester.tap(cls);
+          await tester.pumpAndSettle();
+          expect(opened, 'next');
+          final viewAll = find.widgetWithText(TextButton, 'View all').last;
+          await tester.ensureVisible(viewAll);
+          await tester.tap(viewAll);
+          await tester.pumpAndSettle();
+          expect(openedAll, isTrue);
+        }
+      });
+    }
+  }
+
+  testWidgets('scrolling away retains the loaded recommendation section',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 450);
+    addTearDown(tester.view.reset);
+    var mounts = 0;
+    await tester.pumpWidget(createTestWidget(
+      theme: AppTheme.build(),
+      captureKey: const ValueKey('home'),
+      recommendations: _RecommendationProbe(() => mounts++),
+    ));
+    final scroll = find.byType(Scrollable).first;
+    final probe = find.text('Recommendation probe');
+    await tester.scrollUntilVisible(probe, 150, scrollable: scroll);
+    await tester.pumpAndSettle();
+    final position = tester.state<ScrollableState>(scroll).position;
+    final recommendationOffset = position.pixels;
+    position.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(probe.hitTestable(), findsNothing);
+    position.jumpTo(recommendationOffset);
+    await tester.pumpAndSettle();
+    expect(probe.hitTestable(), findsOneWidget);
+    expect(mounts, 1);
+  });
 
   testWidgets(
       'every home page section title matches recommendation section titleLarge style',

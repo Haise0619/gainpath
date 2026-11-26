@@ -1,0 +1,8 @@
+trial_date,trial_profile,metric,cpu_control,gpu_candidate,unit,source,boundary
+2026-10-06,matched_phone_pair,processed_delivered_drawable_unique_cpu_paint_fps,9.55,17.00,fps,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,nonempty_delivered_unique_painted,382,680,count,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,mean_landmark_native,70.02,12.59,ms,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,mean_worker_computation,102.72,56.25,ms,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,mean_callback_to_ui,122.97,77.42,ms,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,mean_callback_to_first_cpu_paint,135.84,90.61,ms,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry
+2026-10-06,matched_phone_pair,nonempty_overlay_expiries,15,0,count,docs/architecture/2026-10-06-pose-step2m-screen-comparison.md:87-113,historical internal telemetry

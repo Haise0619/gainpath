@@ -96,12 +96,18 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
         mounted && widget.repository.scope == scope && isCurrent();
     if (!current()) return;
     final repository = widget.createPaymentRepository!();
+    final booking = controller.state.records
+        .where((record) => record.bookingId == bookingId)
+        .firstOrNull;
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (_) => BookingPaymentScreen(
           repository: repository,
           bookingId: bookingId,
+          detailsOnly: booking != null &&
+              (booking.rawStatus != 'pending_hold' ||
+                  booking.paymentStatus == 'cleared'),
           initialMethodCode: _paymentPreferences[bookingId],
           onMethodChanged: (code) {
             if (!current()) return;
@@ -282,7 +288,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
   late final controller = BookingListCubit(
       repository: widget.repository,
       isCurrent: widget.isCurrent,
-      coachId: widget.coachId)
+      coachId: widget.coachId,
+      loadMemberOverview: widget.coachId == null)
     ..refresh();
   @override
   void dispose() {
@@ -318,7 +325,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
   }
 
   Future<void> _changeMemberBooking(PersistedBookingRecord record,
-      {required bool reschedule}) async {
+      {required bool reschedule, BuildContext? detailsContext}) async {
     final repository = widget.memberChanges;
     if (repository == null ||
         !widget.isCurrent() ||
@@ -335,6 +342,15 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 reschedule: reschedule,
                 isCurrent: widget.isCurrent)));
     if (changed == true && mounted && widget.isCurrent()) {
+      if (!reschedule &&
+          detailsContext != null &&
+          detailsContext.mounted &&
+          ModalRoute.of(detailsContext)?.isCurrent == true) {
+        Navigator.of(detailsContext).pop();
+      }
+      if (!reschedule && !controller.recentHistory) {
+        await controller.showRecentHistory(true);
+      }
       await controller.refresh();
     }
   }
@@ -645,7 +661,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone == 'Asia/Kuala_Lumpur' ? 'Malaysia time (MYT)' : state.page!.timeZone}',
+                          '${controller.recentHistory ? "History (last 30 days & cancellations)" : "Next 30 days"} · ${state.page!.timeZone == 'Asia/Kuala_Lumpur' ? 'Malaysia time (MYT)' : state.page!.timeZone}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.inkSoft,
@@ -847,6 +863,37 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       ? header
                       : null);
             }
+            if (state.page == null ||
+                (state.message != null && state.records.isEmpty)) {
+              final body = RefreshIndicator(
+                onRefresh: _refreshCurrent,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    header,
+                    if (state.message != null)
+                      OutlinedButton(
+                        onPressed: _refreshCurrent,
+                        child: const Text('Retry bookings'),
+                      ),
+                  ],
+                ),
+              );
+              return widget.embedded
+                  ? body
+                  : Scaffold(
+                      backgroundColor: const Color(0xFFF8F7FC),
+                      appBar: AppBar(
+                        backgroundColor: AppColors.surface,
+                        foregroundColor: AppColors.ink,
+                        elevation: 0,
+                        scrolledUnderElevation: 0,
+                        title: const Text('My Bookings'),
+                      ),
+                      body: SafeArea(top: false, child: body),
+                    );
+            }
             return BookingScheduleScreen(
                 onRefresh: _refreshCurrent,
                 historyRange: controller.recentHistory,
@@ -891,10 +938,12 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       }
                     : null,
                 onCancelBooking: widget.memberChanges != null
-                    ? (b) {
+                    ? (b, detailsContext) {
                         final r = recordMap[b.id];
                         if (r != null) {
-                          _changeMemberBooking(r, reschedule: false);
+                          _changeMemberBooking(r,
+                              reschedule: false,
+                              detailsContext: detailsContext);
                         }
                       }
                     : null,

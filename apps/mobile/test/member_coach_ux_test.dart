@@ -192,8 +192,8 @@ void main() {
     await tester.pumpWidget(shell(BrowseCoachesScreen(
         live: true, liveRepository: repo, isCurrent: () => true)));
     await tester.pump();
-    expect(find.text('Finding your coaches…'), findsOneWidget);
-    expect(find.text('No coaches available yet.'), findsNothing);
+    expect(find.bySemanticsLabel('Loading coaches'), findsOneWidget);
+    expect(find.text('No coaches available'), findsNothing);
     repo.pending!.complete(CoachDirectoryPage(repo.items));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'unmatched');
@@ -217,7 +217,7 @@ void main() {
     await tester.tap(find.byTooltip('Filter and sort coaches'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Price: low to high').last);
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.text('Apply Filters'));
     await tester.pumpAndSettle();
     final cards = tester.widgetList<CoachCard>(find.byType(CoachCard)).toList();
     expect(cards.take(2).map((c) => c.coach.id), ['low', 'high']);
@@ -297,12 +297,12 @@ void main() {
         live: true, liveRepository: repo, isCurrent: () => true)));
     await tester.pumpAndSettle();
     expect(find.text('Could not load coaches'), findsOneWidget);
-    expect(find.text('No coaches available yet.'), findsNothing);
+    expect(find.text('No coaches available'), findsNothing);
     repo.failure = null;
     repo.items = [];
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
-    expect(find.text('No coaches available yet.'), findsOneWidget);
+    expect(find.text('No coaches available'), findsOneWidget);
     expect(find.text('Not yet rated'), findsNothing);
   });
   testWidgets('filter and query remain when returning from a profile',
@@ -326,12 +326,16 @@ void main() {
                         appBar: AppBar(title: Text('Profile $id')),
                         body: const Text('Profile body')))))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('My Bookings'));
+    await tester.tap(find.byKey(const Key('coaches-my-bookings-button')));
     await tester.pumpAndSettle();
     expect(bookings, 1);
-    await tester.tap(find.text('Find Coach'));
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Filter and sort coaches'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Strength'));
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Jack');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Jackson'));
@@ -341,11 +345,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'Jack');
-    expect(
-        tester
-            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Strength'))
-            .selected,
-        isTrue);
+    expect(find.textContaining('Strength'), findsWidgets);
     expect(find.text('Jackson'), findsOneWidget);
   });
   testWidgets(

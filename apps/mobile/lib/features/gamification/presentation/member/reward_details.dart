@@ -10,24 +10,32 @@ String rewardDate(int millis) {
 }
 
 class RewardCover extends StatelessWidget {
-  const RewardCover({super.key, required this.url});
+  const RewardCover({
+    super.key,
+    required this.url,
+    this.height = 150,
+    this.fit = BoxFit.cover,
+    this.placeholderSize = 52,
+  });
   final String url;
+  final double height, placeholderSize;
+  final BoxFit fit;
   @override
   Widget build(BuildContext context) {
     final uri = Uri.tryParse(url);
     final placeholder = Container(
         color: AppColors.surfaceAlt,
         alignment: Alignment.center,
-        child: const Icon(Icons.card_giftcard_rounded,
-            size: 52, color: AppColors.primary));
+        child: Icon(Icons.card_giftcard_rounded,
+            size: placeholderSize, color: AppColors.primary));
     return ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-            height: 150,
+            height: height,
             width: double.infinity,
             child: uri?.scheme == 'https' && (uri?.host.isNotEmpty ?? false)
                 ? Image.network(url,
-                    fit: BoxFit.cover,
+                    fit: fit,
                     excludeFromSemantics: true,
                     errorBuilder: (_, __, ___) => placeholder)
                 : placeholder));

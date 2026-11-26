@@ -40,6 +40,7 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
       : switch (settings.name) {
           FeatureNavigation.reachAndTap when firebase => MembershipAccessGate(
               enabled: true,
+              preserveAdmittedRoute: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'reach-tap-v1',
               repositoryFactory: membershipAccessFactory,
@@ -53,6 +54,7 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
                           : null)),
           FeatureNavigation.moveAndCatch when firebase => MembershipAccessGate(
               enabled: true,
+              preserveAdmittedRoute: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'move-catch-v1',
               repositoryFactory: membershipAccessFactory,

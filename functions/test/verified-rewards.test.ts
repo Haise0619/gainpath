@@ -56,7 +56,16 @@ it('floors Premium multiplier using the immutable historical grant even after cu
   expect(await command('award', { eventId: 'event' })).toMatchObject({ award: { points: 7, premiumBonus: true, membershipTransactionId: 'paid' } });
   expect((await command('overview')).balance).toBe(7);
 });
-it.each(['missing', 'future_purchase', 'before_interval', 'at_expiry', 'wrong_owner', 'pending', 'reconciliation', 'wrong_environment', 'invalid_duration'])('does not retroactively grant Premium bonus for %s historical evidence', async mode => {
+it('recognizes the effective start of a cleared Xendit Premium upgrade', async () => {
+  payment();
+  Object.assign(store.documents.get(path('transactions', 'paid'))!, {
+    provider: 'xendit', startsAtMillis: now - 2000, clearedAtMillis: now - 2000,
+  });
+  event('event', now - 1000);
+  expect(await command('award', { eventId: 'event' }))
+    .toMatchObject({ award: { points: 7, premiumBonus: true } });
+});
+it.each(['missing', 'future_purchase', 'before_interval', 'at_expiry', 'wrong_owner', 'pending', 'reconciliation', 'wrong_environment', 'invalid_duration', 'refunded', 'scheduled_upgrade'])('does not retroactively grant Premium bonus for %s historical evidence', async mode => {
   payment();
   const p = store.documents.get(path('transactions', 'paid'))!;
   if (mode === 'missing') store.documents.delete(path('transactions', 'paid'));
@@ -68,6 +77,8 @@ it.each(['missing', 'future_purchase', 'before_interval', 'at_expiry', 'wrong_ow
   if (mode === 'reconciliation') p.fulfilmentStatus = 'reconciliation_required';
   if (mode === 'wrong_environment') p.environment = 'production';
   if (mode === 'invalid_duration') p.durationDays = 0;
+  if (mode === 'refunded') Object.assign(p, { provider: 'xendit', refundStatus: 'completed' });
+  if (mode === 'scheduled_upgrade') Object.assign(p, { provider: 'xendit', startsAtMillis: now });
   expect(await command('award', { eventId: 'event' })).toMatchObject({ award: { points: 5, premiumBonus: false } });
 });
 it.each(['absent', 'owner', 'source', 'producer', 'policy_version', 'client_time', 'future', 'old', 'before_policy'])('rejects %s event evidence', async mode => {

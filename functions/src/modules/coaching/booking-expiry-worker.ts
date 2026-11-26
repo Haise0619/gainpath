@@ -1,6 +1,8 @@
 import { FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineString } from 'firebase-functions/params';
+import { runMembershipBillingBatch } from '../commerce/membership-billing-worker';
 import { logger } from 'firebase-functions';
 import { DomainError } from '../../platform/errors';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
@@ -31,7 +33,14 @@ export async function runBookingExpiryBatch(db: Firestore, clock = Date.now) {
   }
   return results;
 }
-export const expireBookingHolds = onSchedule({ schedule: 'every 1 minutes', timeZone: 'UTC', maxInstances: 1, timeoutSeconds: 120 }, async () => {
-  try { logger.info('Booking expiry batch', await runBookingExpiryBatch(getFirestore())); }
+const billingOrganization = defineString('BILLPLZ_SANDBOX_ORGANIZATION_ID', { default: 'gainpath' });
+
+export const expireBookingHolds = onSchedule({ schedule: 'every 1 minutes', timeZone: 'UTC', maxInstances: 1, timeoutSeconds: 120 }, async event => {
+  const db = getFirestore();
+  try { logger.info('Booking expiry batch', await runBookingExpiryBatch(db)); }
   catch { throw new Error('Booking expiry infrastructure unavailable.'); }
+  if (new Date(event.scheduleTime).getUTCMinutes() % 5 === 0) {
+    try { logger.info('Membership billing batch', { scanned: await runMembershipBillingBatch(db, billingOrganization.value(), Date.now()) }); }
+    catch { logger.error('Membership billing sweep failed'); }
+  }
 });

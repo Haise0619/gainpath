@@ -26,9 +26,9 @@ function bill(id = bookingId, paid = false, amount = 10800): SandboxBill {
     state: paid ? 'paid' : 'due', url: `https://www.billplz-sandbox.com/bills/bill-${id}`, reference_1: id, reference_2: org };
 }
 const gateway: BillplzGateway = { create: async d => bill(d.reference, false, d.amountMinor), get: async id => bill(id.replace('bill-', ''), true) };
-async function grant(id = 'paid-1', start = now - DAY, cleared = start, previous?: DocumentData) {
+async function grant(id = 'paid-1', start = now - DAY, cleared = start, previous?: DocumentData, provider = 'billplz') {
   const p = { schemaVersion: 1, organizationId: org, memberId: uid, transactionId: id, kind: previous ? 'MembershipRenewal' : 'MembershipPurchase',
-    environment: 'sandbox', provider: 'billplz', paymentStatus: 'cleared', fulfilmentStatus: 'confirmed', billId: `bill-${id}`, collectionId: 'collection',
+    environment: 'sandbox', provider, paymentStatus: 'cleared', fulfilmentStatus: 'confirmed', billId: `bill-${id}`, collectionId: 'collection',
     amountMinor: 8900, currency: 'MYR', durationDays: 30, clearedAtMillis: cleared, expiresAtMillis: start + 30 * DAY,
     planId: 'premium', planName: 'Synthetic Premium', benefits: [] };
   await store.transact(async tx => {
@@ -51,9 +51,16 @@ it('reports unavailable and never grants when any required finance rule is missi
   expect(await quote()).toMatchObject({ amountMinor: 12000, premiumVoucher: { status: 'unavailable' } });
   expect([...store.documents.keys()].filter(p => p.includes('/premiumCoachVoucher'))).toEqual([]);
   await expect(createBookingPayment(store, auth, input(), gateway, eligibleCoach, () => now)).rejects.toMatchObject({ code: 'unavailable' });
-  const legacy = await getBookingPaymentQuote(store, auth, { ...quoteInput, includePremiumVoucher: undefined });
+  const legacy = await getBookingPaymentQuote(store, auth, { ...quoteInput, includePremiumVoucher: undefined }, () => now);
   expect(legacy).not.toHaveProperty('premiumVoucher');
   expect(legacy.amountMinor).toBe(12000);
+});
+it('records an eligible Xendit renewal in the same voucher history as a legacy term', async () => {
+  await grant();
+  const prior = store.documents.get(`orgs/${org}/membershipAccounts/${uid}`)!;
+  await grant('paid-2', now + 29 * DAY, now, prior, 'xendit');
+  expect((await quote(now + 29 * DAY)).premiumVoucher)
+    .toMatchObject({ status: 'available', cycleStartAtMillis: now + 29 * DAY });
 });
 it.each(['rounding', 'fundingSource', 'coachCommissionBasis', 'financeApprovalId', 'commissionPolicyVersion', 'eligibleBranchIds', 'expiry', 'stacking', 'refund', 'unpaidRecovery'])('fails closed without explicit %s', async field => {
   delete store.documents.get(policyPath)![field]; await grant();
@@ -67,7 +74,7 @@ it('earns exactly one active cycle, preserves it across early renewal, and earns
   await grant('paid-2', now + 29 * DAY, now, prior);
   expect((await quote()).premiumVoucher).toEqual(first);
   expect((await quote(now + 29 * DAY)).premiumVoucher).toMatchObject({ status: 'available', cycleStartAtMillis: now + 29 * DAY });
-  expect((await quote(now + 59 * DAY)).premiumVoucher).toMatchObject({ status: 'ineligible' });
+  await expect(quote(now + 59 * DAY)).rejects.toMatchObject({ code: 'permission-denied' });
 });
 it('validates cleared historical payment evidence, even after early renewal', async () => {
   await grant(); const prior = store.documents.get(`orgs/${org}/membershipAccounts/${uid}`)!;

@@ -1,11 +1,13 @@
 import 'package:gainpath_domain/membership.dart';
+import '../../features/membership/application/membership_billing_repository.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show SessionScope, BookingException;
 import 'firebase_booking_repository.dart';
 import 'firebase_app_check_readiness.dart';
 import '../local/membership_cache.dart';
 
-class FirebaseMembershipRepository implements MembershipCommerceRepository {
+class FirebaseMembershipRepository
+    implements MembershipCommerceRepository, MembershipBillingRepository {
   FirebaseMembershipRepository(
       {required SessionScope scope,
       required bool Function() isCurrent,
@@ -118,6 +120,22 @@ class FirebaseMembershipRepository implements MembershipCommerceRepository {
         if (upgradeMode != null) 'upgradeMode': upgradeMode.wireValue,
         'intent': renewal ? 'renewal' : 'purchase'
       });
+  @override
+  Future<Map<String, dynamic>> payRenewalBill(
+          String billingId, String planId, String requestId) =>
+      _call('createMembershipPaymentCommand', {
+        'billingId': billingId,
+        'planId': planId,
+        'requestId': requestId,
+        'promoCode': '',
+        'intent': 'renewal',
+      });
+
+  @override
+  Future<void> cancelRenewal() async {
+    await _call('cancelMembershipRenewalCommand', {});
+  }
+
   @override
   Future<Map<String, dynamic>> payment(String transactionId) =>
       _call('getMembershipPaymentCommand', {'transactionId': transactionId});

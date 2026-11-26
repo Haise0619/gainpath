@@ -46,6 +46,20 @@ it('never grants configured paid access using unknown payment evidence', async (
   paid(); store.documents.delete(`orgs/${org}/transactions/payment`);
   expect(await access()).toMatchObject({ decision: 'legacy', effectiveTier: null, reason: 'digital_fitness_included' });
 });
+it('unlocks both games after a confirmed Xendit renewal and excludes a refunded receipt', async () => {
+  paid('basic');
+  const path = `orgs/${org}/transactions/payment`;
+  const receipt = { ...store.documents.get(path), kind: 'MembershipRenewal', provider: 'xendit' };
+  store.documents.set(path, receipt);
+
+  for (const resourceId of ['fitness-arcade', 'move-catch-v1', 'reach-tap-v1']) {
+    const game = { ...request, feature: 'miniGame', resourceId };
+    expect(await access(game)).toMatchObject({ decision: 'allowed', effectiveTier: 'basic' });
+  }
+  store.documents.set(path, { ...receipt, refundStatus: 'completed' });
+  expect(await access({ ...request, feature: 'miniGame', resourceId: 'fitness-arcade' }))
+    .toMatchObject({ decision: 'unknown', effectiveTier: null });
+});
 it('ignores target session age while verifying current target Auth and lifecycle without impersonation', async () => {
   store.documents.get('users/member')!.accountLifecycle = { schemaVersion: 1, state: 'active', revocationPending: false, sessionNotBeforeSeconds: now / 1000 + 1 };
   paid();

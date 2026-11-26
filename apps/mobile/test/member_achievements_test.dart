@@ -321,9 +321,11 @@ void main() {
     ));
     await tester.tap(find.text('Open Rewards'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Badges'), 180);
-    expect(find.text('0 / 1 training badges unlocked'), findsOneWidget);
-    await tester.tap(find.text('Badges'));
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('training-achievements-view-all')), 180);
+    expect(find.text('0/1 badges unlocked'), findsOneWidget);
+    await tester
+        .tap(find.byKey(const ValueKey('training-achievements-view-all')));
     await tester.pumpAndSettle();
     expect(find.text('My Achievements'), findsOneWidget);
     await tester.binding.handlePopRoute();

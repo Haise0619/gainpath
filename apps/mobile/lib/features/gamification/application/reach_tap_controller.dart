@@ -107,6 +107,7 @@ class ReachTapController extends ChangeNotifier {
   String? error;
   ReachTapHistory? localHistory;
   ReachTapRound? _round;
+  ReachTapRound? get completedRound => _round;
   Future<void>? _closing, _saving;
   Timer? _timer;
   int? _previousBest;

@@ -247,7 +247,7 @@ class GamificationDashboardScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 26),
           const MemberSectionHeader(title: 'Streak'),
           Panel(
             child: Column(
@@ -272,7 +272,7 @@ class GamificationDashboardScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 26),
           const MemberSectionHeader(title: 'Explore'),
           LayoutBuilder(builder: (context, constraints) {
             final tileWidth = (constraints.maxWidth - 12) / 2;
@@ -365,7 +365,7 @@ class GamificationDashboardScreen extends StatelessWidget {
               ],
             );
           }),
-          const SizedBox(height: 24),
+          const SizedBox(height: 26),
           const MemberSectionHeader(title: 'Recent activity'),
           Panel(
             padding: EdgeInsets.zero,

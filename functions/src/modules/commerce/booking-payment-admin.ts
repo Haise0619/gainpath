@@ -1,3 +1,4 @@
+import { applyXenditRefund, membershipRefundEffect, XenditRefundGateway, xenditRefundReference } from './xendit-refund';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { readAll } from '../../platform/firestore/store';
 import { prefetchReads } from '../../platform/firestore/prefetch-reads';
@@ -28,6 +29,7 @@ type RefundOrder = {
 };
 export interface PaymentAdminDependencies {
     refundExecutionConfigured?: boolean;
+    xenditRefunds?: XenditRefundGateway;
     bills: BillplzGateway;
     collectionId: string;
     refundCollectionId?: string;
@@ -75,7 +77,7 @@ function isMembership(d: DocumentData) { return ['MembershipPurchase', 'Membersh
 function settle(store: DocumentStore, org: string, id: string, d: DocumentData, b: SandboxBill, deps: PaymentAdminDependencies, clock: () => number) { return isMembership(d) ? settleMembershipPayment(store, org, id, b, clock, deps.readIdentity) : settleBookingPayment(store, org, id, b, deps.readIdentity, clock); }
 function payment(d: DocumentData | undefined, org: string, id: string): DocumentData { if (d && isMembership(d)) return membershipPayment(d, org, id); if (!d || d.schemaVersion !== 1 || d.environment !== 'sandbox' || !['billplz', 'xendit'].includes(String(d.provider)) || d.organizationId !== org || d.bookingId !== id || d.currency !== 'MYR' || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1 || !['pending', 'cleared'].includes(String(d.paymentStatus)) || !['creating', 'awaiting_payment', 'confirmed', 'reconciliation_required'].includes(String(d.fulfilmentStatus)))
     throw invalid(); return d; }
-function projection(d: DocumentData) { return { ...Object.fromEntries(['transactionId', 'provider', 'kind', 'planName', 'refundReason', 'refundNotes', 'bookingId', 'memberId', 'coachName', 'branchName', 'amountMinor', 'currency', 'paymentStatus', 'fulfilmentStatus', 'createdAtMillis', 'updatedAtMillis', 'billId', 'resolutionReason', 'refundStatus', 'refundOrderId', 'reviewReason', 'localDate', 'startLabel', 'endLabel', 'durationMinutes', 'reviewedAtMillis', 'refundReservedAtMillis', 'refundReference', 'refundProviderStatus'].filter(k => d[k] !== undefined).map(k => [k, d[k]])), ...((d.paymentVerifiedAtMillis ?? d.clearedAtMillis) !== undefined ? { paymentConfirmedAtMillis: d.paymentVerifiedAtMillis ?? d.clearedAtMillis } : {}) }; }
+function projection(d: DocumentData) { return { ...Object.fromEntries(['transactionId', 'provider', 'kind', 'planName', 'refundReason', 'refundNotes', 'bookingId', 'memberId', 'coachName', 'branchName', 'amountMinor', 'currency', 'paymentStatus', 'fulfilmentStatus', 'createdAtMillis', 'updatedAtMillis', 'billId', 'resolutionReason', 'refundStatus', 'refundOrderId', 'reviewReason', 'localDate', 'startLabel', 'endLabel', 'durationMinutes', 'reviewedAtMillis', 'refundReservedAtMillis', 'refundReference', 'refundProviderStatus', 'refundFailureCode', 'refundClosedAtMillis', 'refundClosureReason'].filter(k => d[k] !== undefined).map(k => [k, d[k]])), ...((d.paymentVerifiedAtMillis ?? d.clearedAtMillis) !== undefined ? { paymentConfirmedAtMillis: d.paymentVerifiedAtMillis ?? d.clearedAtMillis } : {}) }; }
 function audit(tx: TransactionPort, org: string, id: string, event: string, requestId: string, uid: string, now: number, extra: DocumentData = {}) { tx.create(`${path(org, id)}/events/${keyOf(event, requestId)}`, { schemaVersion: 1, environment: 'sandbox', event, atMillis: now, actorId: uid, ...extra }); }
 async function reviewRows(store: DocumentStore, org: string, uid: string, rows: DocumentData[]) {
     return store.transact(async tx => {
@@ -127,13 +129,83 @@ async function applyOrder(store: DocumentStore, org: string, id: string, uid: st
 export async function manageAdminBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies, clock = Date.now) {
     const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'bookingId', 'requestId', 'action', 'reason', 'billId', 'refundOrderId']);
     const id = requiredIdentifier(d.bookingId, 'bookingId'), requestId = requiredIdentifier(d.requestId, 'requestId'), action = String(d.action);
-    if (!['verify', 'recover_bill', 'approve_refund', 'reject_refund', 'execute_refund', 'check_refund', 'recover_refund'].includes(action))
+    if (!['verify', 'recover_bill', 'approve_refund', 'reject_refund', 'execute_refund', 'check_refund', 'recover_refund', 'close_refund'].includes(action))
         throw new DomainError('invalid-argument', 'Unsupported payment action.');
     const reason = ['verify', 'check_refund'].includes(action) ? 'Provider status checked by Admin' : note(d);
     const receipt = `${path(org, id)}/adminCommands/${requestId}`, fingerprint = keyOf(action, reason, d.billId ?? null, d.refundOrderId ?? null);
     const initial = await store.transact(async (tx) => { await admin(tx, org, uid); const p = payment(await tx.get(path(org, id)), org, id), old = await tx.get(receipt); if (old && old.fingerprint !== fingerprint)
         throw new DomainError('already-exists', 'Request belongs to another review action.'); return { p, replay: !!old }; });
     const result = () => getAdminBookingPayment(store, auth, { schemaVersion: 1, organizationId: org, bookingId: id }, deps);
+    if (action === 'close_refund') {
+        await store.transact(async tx => {
+            await admin(tx, org, uid);
+            const p = payment(await tx.get(path(org, id)), org, id);
+            const old = await tx.get(receipt);
+            if (old && old.fingerprint !== fingerprint) throw invalid();
+            if (old) return;
+            if (p.provider !== 'xendit' || p.paymentStatus !== 'cleared' ||
+                p.refundStatus !== 'failed' || p.refundFailureCode !== 'REFUND_NOT_SUPPORTED' ||
+                p.refundOrderId) throw invalid();
+            if (p.refundClosedAtMillis !== undefined) return;
+            const now = clock();
+            tx.set(path(org, id), { ...p, refundClosedAtMillis: now, refundClosedBy: uid,
+                refundClosureReason: reason, refundReviewRequired: false, updatedAtMillis: now });
+            tx.create(receipt, { fingerprint, atMillis: now, actorId: uid });
+            audit(tx, org, id, 'refund_closed_no_transfer', requestId, uid, now, { reason });
+        });
+        return result();
+    }
+    if (initial.p.provider === 'xendit' && deps.xenditRefunds && ['approve_refund', 'check_refund', 'recover_refund'].includes(action)) {
+        const gateway = deps.xenditRefunds;
+        if (action === 'check_refund' || action === 'recover_refund') {
+            const refundId = action === 'recover_refund' ? d.refundOrderId : initial.p.refundOrderId;
+            await applyXenditRefund(store, org, id, await gateway.get(refundId), clock());
+            return result();
+        }
+        if (initial.replay || initial.p.refundReference) return result();
+        eligible(initial.p);
+        const original = await gateway.originalPayment(org, id, initial.p);
+        const reference = xenditRefundReference(org, id);
+        const newRequest = await store.transact(async tx => {
+            await admin(tx, org, uid);
+            const p = payment(await tx.get(path(org, id)), org, id);
+            const old = await tx.get(receipt);
+            if (old && old.fingerprint !== fingerprint) throw invalid();
+            if (old || p.refundReference) return false;
+            eligible(p);
+            if (p.billId !== initial.p.billId || p.amountMinor !== initial.p.amountMinor || p.provider !== 'xendit') throw invalid();
+            if (isMembership(p)) {
+                const account = await tx.get('orgs/' + org + '/membershipAccounts/' + p.memberId);
+                if (account?.pendingTransactionId || account?.refundInProgress) throw invalid();
+                await membershipRefundEffect(tx, org, id, p);
+                if (account) tx.set('orgs/' + org + '/membershipAccounts/' + p.memberId, { ...account, refundInProgress: id });
+            } else {
+                const booking = await tx.get('orgs/' + org + '/bookings/' + id);
+                if (booking && !['cancelled','expired','refunded'].includes(String(booking.status))) throw invalid();
+            }
+            tx.set(path(org, id), { ...p, refundStatus: 'processing', refundReference: reference,
+                refundPaymentId: original, refundReservedAtMillis: clock(), reviewReason: reason, reviewedBy: uid });
+            tx.create(receipt, { fingerprint, atMillis: clock(), actorId: uid });
+            audit(tx, org, id, 'refund_reserved', requestId, uid, clock(), { reason });
+            return true;
+        });
+        if (!newRequest) return result();
+        const response = await gateway.create(reference, original, Number(initial.p.amountMinor)).catch(() => null);
+        if (response && !response.rejected) {
+            await applyXenditRefund(store, org, id, response, clock());
+        } else {
+            await store.transact(async tx => {
+                const p = await tx.get(path(org, id));
+                if (p?.refundStatus !== 'processing' || p.refundOrderId) return;
+                const accountPath = 'orgs/' + org + '/membershipAccounts/' + p.memberId;
+                const account = response && isMembership(p) ? await tx.get(accountPath) : undefined;
+                if (account?.refundInProgress === id) tx.set(accountPath, { ...account, refundInProgress: null });
+                tx.set(path(org, id), { ...p, refundStatus: response ? 'failed' : 'uncertain',
+                    refundFailureCode: response?.rejected ?? 'PROVIDER_OUTCOME_UNKNOWN', updatedAtMillis: clock() });
+            });
+        }
+        return result();
+    }
     if (initial.p.provider === 'xendit' && !['approve_refund', 'reject_refund'].includes(action)) {
         throw new DomainError('failed-precondition', 'This action is not available for this payment.');
     }

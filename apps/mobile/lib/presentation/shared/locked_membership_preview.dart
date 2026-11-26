@@ -5,14 +5,15 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 class LockedRewardsPreview extends StatelessWidget {
   const LockedRewardsPreview(
       {super.key,
-      required this.sectionTitle,
+      this.sectionTitle,
       required this.title,
       required this.description,
       required this.previewLabel,
       required this.onViewPlans,
       required this.child,
       this.onBrowse});
-  final String sectionTitle, title, description, previewLabel;
+  final String? sectionTitle;
+  final String title, description, previewLabel;
   final Future<void> Function() onViewPlans;
   final VoidCallback? onBrowse;
   final Widget child;
@@ -82,23 +83,25 @@ class LockedRewardsPreview extends StatelessWidget {
                     const Text('Browse rewards', textAlign: TextAlign.center)),
         ]));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-            width: 4,
-            height: 19,
-            margin: const EdgeInsets.only(top: 3, right: 9),
-            decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(4))),
-        Expanded(
-            child: Text(sectionTitle,
-                style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 19,
-                    height: 1.25,
-                    fontWeight: FontWeight.w800))),
-      ]),
-      const SizedBox(height: 12),
+      if (sectionTitle case final heading?) ...[
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+              width: 4,
+              height: 19,
+              margin: const EdgeInsets.only(top: 3, right: 9),
+              decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(4))),
+          Expanded(
+              child: Text(heading,
+                  style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 19,
+                      height: 1.25,
+                      fontWeight: FontWeight.w800))),
+        ]),
+        const SizedBox(height: 12),
+      ],
       DecoratedBox(
           decoration: BoxDecoration(
               gradient: const LinearGradient(

@@ -93,7 +93,7 @@ void main() {
                         coachPhotoBuilder: (_) =>
                             const Icon(Icons.person_outline, size: 44))))));
         await t.pumpAndSettle();
-        await t.tap(find.text('My Bookings'));
+        await t.tap(find.byKey(const Key('coaches-my-bookings-button')));
         await t.pumpAndSettle();
         Future<void> capture(String label) async {
           expect(t.takeException(), isNull);
@@ -126,6 +126,8 @@ void main() {
                     w is Scrollable && w.axisDirection == AxisDirection.down)
                 .first);
         await t.ensureVisible(find.byKey(const ValueKey('tab_history')));
+        await t.drag(find.byType(ListView).first, const Offset(0, 300));
+        await t.pumpAndSettle();
         await t.tap(find.byKey(const ValueKey('tab_history')));
         await t.pumpAndSettle();
         expect(find.text('Refund processing'), findsOneWidget);

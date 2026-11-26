@@ -6,6 +6,7 @@ class GoogleIntegrationStatus {
       this.senderEmail,
       this.lastSyncedAtMillis,
       this.automationEnabled = false,
+      this.calendarAutomationEnabled = false,
       this.automationStatus = 'not_started',
       this.emailSyncStatus = 'not_sent',
       this.revocationPending = false});
@@ -14,6 +15,7 @@ class GoogleIntegrationStatus {
   final int? lastSyncedAtMillis;
   final bool revocationPending;
   final bool automationEnabled;
+  final bool calendarAutomationEnabled;
   final String automationStatus, emailSyncStatus;
   bool get connected => connectionStatus == 'connected';
   factory GoogleIntegrationStatus.fromJson(Map<String, dynamic> d) {
@@ -31,6 +33,7 @@ class GoogleIntegrationStatus {
         senderEmail: d['senderEmail'] as String?,
         lastSyncedAtMillis: d['lastSyncedAtMillis'] as int?,
         automationEnabled: d['automationEnabled'] == true,
+        calendarAutomationEnabled: d['calendarAutomationEnabled'] == true,
         automationStatus: d['automationStatus'] as String? ?? 'not_started',
         emailSyncStatus: d['emailSyncStatus'] as String? ?? 'not_sent',
         revocationPending: d['revocationPending'] == true);

@@ -7,7 +7,6 @@ import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
 import '../notifications/member_notification_badge.dart';
 import '../../infrastructure/local/member_announcement_read_store.dart';
-import '../../features/content/presentation/member/member_announcements.dart';
 import '../routing/app_check_in_host.dart';
 import '../di/app_check_in_factory.dart';
 import '../di/workout_backup_network_opportunities.dart';
@@ -19,6 +18,15 @@ import '../../features/gamification/presentation/member/member_achievements_scre
 import '../routing/workout_program_route.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import 'package:flutter/material.dart';
+import 'package:gainpath_ui/gainpath_ui.dart'
+    show
+        SupportRequestsPage,
+        MemberGroupClassesScreen,
+        MemberGroupClassDetails,
+        UpcomingGroupClasses,
+        UpcomingGroupClassesState;
+import '../../infrastructure/firebase/firebase_function_transport.dart'
+    show firebaseCallable;
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -110,13 +118,13 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   AnnouncementReader? _announcements;
   Module9Repository? _notificationInbox;
   MemberNotificationBadge? _notificationBadge;
-  final _announcementKey = GlobalKey<MemberAnnouncementsState>();
+  GlobalKey<UpcomingGroupClassesState> _upcomingClassesKey = GlobalKey();
 
   Future<void> _refreshAnnouncements() async {
     final badge = _notificationBadge;
-    unawaited(badge?.refreshAnnouncements(clearFirst: true));
-    unawaited(badge?.refreshInbox());
-    await _announcementKey.currentState?.refresh();
+    if (badge == null) return;
+    await Future.wait(
+        [badge.refreshAnnouncements(clearFirst: true), badge.refreshInbox()]);
   }
 
   AuthBloc? _auth;
@@ -170,9 +178,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     bool current() => mounted && _activeScope() == scope;
     final inbox = scope.datasetScope == null
         ? FirebaseModule9Repository(scope: scope, isCurrent: current)
-        : FirebaseDemoInboxRepository(
-            (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
-                scope, current));
+        : FirebaseDemoInboxRepository((widget.datasetTransportFactory ??
+            firebaseFypDatasetTransport)(scope, current));
     final readStore = MemberAnnouncementReadStore(scope);
     final badge = MemberNotificationBadge(
       announcements: _announcements,
@@ -186,6 +193,54 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     badge.watchInbox();
     unawaited(badge.refreshAnnouncements());
     unawaited(badge.refreshInbox());
+  }
+
+  Future<Map<String, dynamic>> _classCall(
+      String action, Map<String, dynamic> input) async {
+    final session = widget.liveSession;
+    if (session == null ||
+        session.datasetScope != null ||
+        _activeScope() != session.scope) {
+      throw StateError('Group classes are unavailable for this session.');
+    }
+    final response = await firebaseCallable(action == 'instructorPhoto'
+            ? 'getCoachPublishedPhotoCommand'
+            : 'groupClassesCommand')
+        .call<Map<String, dynamic>>({
+      ...input,
+      'schemaVersion': 1,
+      'organizationId': session.organizationId,
+      if (action != 'instructorPhoto') 'action': action,
+    });
+    if (_activeScope() != session.scope) {
+      throw StateError('Member session changed.');
+    }
+    return response.data;
+  }
+
+  void _openClassMembership() {
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => const MembershipDashboardScreen(connected: true)));
+  }
+
+  Future<void> _openClassDetails(String id) async {
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => MemberGroupClassDetails(
+            call: _classCall, id: id, onUpgrade: _openClassMembership)));
+  }
+
+  Future<void> _exploreClasses() => _openClasses();
+
+  Future<void> _openClasses({bool registered = false}) async {
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => MemberGroupClassesScreen(
+        call: _classCall,
+        onUpgrade: _openClassMembership,
+        startInMyClasses: registered,
+      ),
+    ));
   }
 
   Future<void> _openNotifications() async {
@@ -206,12 +261,14 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                             firebaseFypDatasetTransport)(
                         session.scope, () => _activeScope() == session.scope),
                 inbox: inbox,
-                coachDirectory: widget.coachDirectoryFactory
-                    ?.call(session.scope, () => _activeScope() == session.scope),
+                coachDirectory: widget.coachDirectoryFactory?.call(
+                    session.scope, () => _activeScope() == session.scope),
                 catalog: widget.routineCatalogFactory
                     ?.call(session.scope, _activeScope),
                 announcements: reader,
                 notificationBadge: badge,
+                onOpenGroupClass:
+                    session.datasetScope == null ? _openClassDetails : null,
                 bookingFactory: widget.bookingFactory,
                 bookingListFactory: widget.bookingListFactory,
                 availabilityFactory: widget.coachAvailabilityFactory,
@@ -234,8 +291,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   void _createAchievements() {
     final scope = widget.liveSession?.scope;
     if (scope == null) return;
-    final repository = FirebaseAppCheckInRepository(
-        scope: scope, activeScope: _activeScope);
+    final repository =
+        FirebaseAppCheckInRepository(scope: scope, activeScope: _activeScope);
     final cache = MemberAchievementsCache(scope);
     _achievements = MemberAchievementsController(
         load: repository.achievements,
@@ -260,8 +317,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   void _openAchievements() {
     final controller = _achievements;
     if (controller == null) return;
-    Navigator.push(context, MaterialPageRoute<void>(
-        builder: (_) => MemberAchievementsScreen(controller: controller)));
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => MemberAchievementsScreen(controller: controller)));
   }
 
   @override
@@ -278,6 +337,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   void didUpdateWidget(MemberShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
+      _upcomingClassesKey = GlobalKey();
       unawaited(_catalog?.close());
       _catalog = null;
       _membership = null;
@@ -336,8 +396,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                                   claimCheckIn: () async {
                                     final achievements = _achievements;
                                     await claimCheckIn();
-                                    if (achievements != null && achievements.current) {
-                                      unawaited(achievements.refresh(changed: true));
+                                    if (achievements != null &&
+                                        achievements.current) {
+                                      unawaited(
+                                          achievements.refresh(changed: true));
                                     }
                                   },
                                   refresh: refresh,
@@ -382,7 +444,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                   isCurrent: () => _activeScope() == session.scope,
                   datasetTransport: session.datasetScope == null
                       ? null
-                      : (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
+                      : (widget.datasetTransportFactory ??
+                              firebaseFypDatasetTransport)(
                           session.scope, () => _activeScope() == session.scope),
                   coachDirectory: widget.coachDirectoryFactory?.call(
                       session.scope, () => _activeScope() == session.scope),
@@ -400,6 +463,18 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           onAppClaim: claimCheckIn,
           onRefreshCheckIn: refreshCheckIn,
           unreadNotifications: _notificationBadge,
+          upcomingClasses: session != null && session.datasetScope == null
+              ? UpcomingGroupClasses(
+                  key: _upcomingClassesKey,
+                  call: _classCall,
+                  active: _index == 0,
+                  onExplore: _exploreClasses,
+                  onViewAll: () => _openClasses(registered: true),
+                  onOpen: _openClassDetails)
+              : null,
+          onRefreshClasses: () async {
+            await _upcomingClassesKey.currentState?.refresh();
+          },
           onOpenNotifications: _openNotifications,
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
@@ -415,23 +490,26 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           progressWarnings: progress?.snapshot?.warnings ?? const [],
           onRefreshProgress: refresh,
           onRefreshRoutines: _catalog?.refresh,
-          announcements: _announcements == null
-              ? null
-              : MemberAnnouncements(
-                  key: _announcementKey,
-                  reader: _announcements!,
-                  compact: true,
-                  onAnnouncementOpened: _notificationBadge?.markAnnouncementRead),
           onRefreshAnnouncements: _refreshAnnouncements,
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
-          onOpenHistory: open == null ? null : () => open(MemberProgressView.history),
-          onOpenEquipment: session == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentScanner(session, factory: widget.equipmentReaderFactory))),
+          onOpenHistory:
+              open == null ? null : () => open(MemberProgressView.history),
+          onOpenEquipment: session == null
+              ? null
+              : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => buildMemberEquipmentScanner(session,
+                          factory: widget.equipmentReaderFactory))),
           onOpenCoaches: () => setState(() {
                 _index = 3;
                 _directoryVisited = true;
               }),
-          onOpenBookings: session == null ? null : () => openBookingList(context, session, factory: widget.bookingListFactory),
+          onOpenBookings: session == null
+              ? null
+              : () => openBookingList(context, session,
+                  factory: widget.bookingListFactory),
           onOpenWorkout: openWorkout,
           onLoadUpcomingCoaching: session == null
               ? null
@@ -517,17 +595,43 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
               achievements: _achievements,
               onClaim: claimCheckIn,
               onRefreshCheckIn: refreshCheckIn),
-      session == null
-          ? const BrowseCoachesScreen()
-          : _directoryVisited
-              ? buildFirebaseCoachDirectory(session,
-                  factory: widget.coachDirectoryFactory,
-                  bookingFactory: widget.bookingFactory,
-                  bookingListFactory: widget.bookingListFactory,
-                  availabilityFactory: widget.coachAvailabilityFactory)
-              : const SizedBox.shrink(),
+      if (session == null)
+        const BrowseCoachesScreen()
+      else if (!_directoryVisited)
+        const SizedBox.shrink()
+      else
+        buildFirebaseCoachDirectory(
+          session,
+          factory: widget.coachDirectoryFactory,
+          bookingFactory: widget.bookingFactory,
+          bookingListFactory: widget.bookingListFactory,
+          availabilityFactory: widget.coachAvailabilityFactory,
+          onOpenGroupClasses:
+              session.datasetScope == null ? _exploreClasses : null,
+        ),
       MemberProfileScreen(
           liveSession: session,
+          supportBuilder: session == null || session.datasetScope != null
+              ? null
+              : (_) => SupportRequestsPage(call: (action, input) async {
+                    if (!mounted ||
+                        _auth?.state.session?.scope != session.scope) {
+                      throw StateError('Support session changed.');
+                    }
+                    final result =
+                        await firebaseCallable('supportRequestCommand')
+                            .call<Map<String, dynamic>>({
+                      ...input,
+                      'schemaVersion': 1,
+                      'organizationId': session.organizationId,
+                      'action': action,
+                    });
+                    if (!mounted ||
+                        _auth?.state.session?.scope != session.scope) {
+                      throw StateError('Support session changed.');
+                    }
+                    return result.data;
+                  }),
           liveProfile: widget.liveProfile,
           membershipRepository: session == null
               ? MockMembershipCommerce.forRepository(

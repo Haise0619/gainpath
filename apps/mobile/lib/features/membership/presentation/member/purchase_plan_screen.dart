@@ -1,5 +1,7 @@
 import 'dart:async';
+import '../../../../presentation/shared/payment_status_heading.dart';
 import 'package:flutter/material.dart';
+import 'package:gainpath_domain/coaching.dart' show isBookingCheckoutUrl;
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show BookingException;
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -249,6 +251,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                 ]),
           )
         : DetailRow(label, value);
+
     return Scaffold(
         appBar: AppBar(
             title: Text(upgrade != null
@@ -257,112 +260,282 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                     ? 'Extend your membership'
                     : 'Review order')),
         body: PageBody(children: [
-          Panel(
-              background: AppColors.primaryTint,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // 1. Compact Plan Summary Card
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.primarySoft.withValues(alpha: 0.35),
+                width: 1.5,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x08190F2E),
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    Text(widget.plan.name,
-                        style: Theme.of(context).textTheme.headlineMedium),
-                    const SizedBox(height: 8),
-                    Text(widget.plan.tagline),
-                    const SizedBox(height: 8),
-                    Text(upgrade == MembershipUpgradeMode.immediate
-                        ? 'Upgrade your remaining Basic time and add 30 days of Premium.'
-                        : upgrade == MembershipUpgradeMode.nextTerm
-                            ? 'Keep Basic until it expires. Premium starts at Basic expiry or when payment is confirmed, whichever is later.'
-                            : widget.renewal
-                                ? 'Renew anytime. Your remaining membership time will be preserved.'
-                                : 'One-time membership purchase'),
-                    if (preview != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                          '${preview.active ? 'Current membership' : 'Previous membership'}: ${preview.tier.label}'),
-                      Text(
-                          '${preview.active ? 'Current expiry' : 'Expired'}: ${membershipDate(preview.expiryMillis)}'),
-                    ],
-                  ])),
-          const SizedBox(height: 18),
-          if (upgrade == null)
+                    Text(
+                      widget.plan.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryTint,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        widget.renewal ? '30-day renewal' : '30 days',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.plan.tagline,
+                  style:
+                      const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  upgrade == MembershipUpgradeMode.immediate
+                      ? 'Upgrade your remaining Basic time and add 30 days of Premium.'
+                      : upgrade == MembershipUpgradeMode.nextTerm
+                          ? 'Keep Basic until it expires. Premium starts at Basic expiry or when payment is confirmed, whichever is later.'
+                          : widget.renewal
+                              ? 'Renew anytime. Your remaining membership time will be preserved.'
+                              : 'One-time membership purchase',
+                  style: const TextStyle(fontSize: 12.5, color: AppColors.ink),
+                ),
+                if (preview != null) ...[
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, color: AppColors.hairline),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${preview.active ? 'Current membership' : 'Previous membership'}: ${preview.tier.label}',
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${preview.active ? 'Current expiry' : 'Expired'}: ${membershipDate(preview.expiryMillis)}',
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 2. Promo Code Input & Action
+          if (upgrade == null) ...[
             TextField(
                 controller: _promo,
                 enabled: !_busy && !_submitted,
-                decoration:
-                    const InputDecoration(labelText: 'Promo code (optional)'),
+                decoration: InputDecoration(
+                  labelText: 'Promo code (optional)',
+                  hintText: 'Enter promo code',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
                 onChanged: (_) => setState(() => _quote = null)),
-          TextButton(
-              onPressed: _busy || _submitted ? null : _apply,
-              child: Text(upgrade == null
-                  ? 'Verify price / apply code'
-                  : 'Verify price')),
+            const SizedBox(height: 4),
+          ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+                onPressed: _busy || _submitted ? null : _apply,
+                child: Text(upgrade == null
+                    ? 'Verify price / apply code'
+                    : 'Verify price')),
+          ),
           if (_busy) const LinearProgressIndicator(),
           if (_message != null)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(_message!)),
-          if (_quote != null)
-            Panel(
-                child: Column(children: [
-              if (upgrade != null) ...[
-                if (upgrade == MembershipUpgradeMode.immediate)
-                  detail('Upgrade remaining Basic time',
-                      membershipMoney(_quote!['upgradeChargeMinor'])),
-                detail('30-day Premium term',
-                    membershipMoney(_quote!['premiumTermAmountMinor'])),
-                detail(
-                    upgrade == MembershipUpgradeMode.immediate
-                        ? 'Premium starts'
-                        : 'Estimated Premium start',
-                    upgrade == MembershipUpgradeMode.immediate
-                        ? 'When payment is confirmed'
-                        : membershipDate(_quote!['startsAtMillis'])),
-                detail('Estimated Premium expiry',
-                    membershipDate(_quote!['expiresAtMillis'])),
-              ] else ...[
-                DetailRow(widget.renewal ? 'Additional time' : 'Duration',
-                    '${_quote!['durationDays']} days'),
-                if (_quote!['baseAmountMinor'] != null)
-                  DetailRow('Original price',
-                      membershipMoney(_quote!['baseAmountMinor'])),
-                if (_quotedCode.isNotEmpty)
-                  DetailRow('Promo code', _quotedCode),
-                if (_quote!['baseAmountMinor'] is num &&
-                    _quote!['amountMinor'] is num)
-                  DetailRow(
-                      'Discount',
-                      membershipMoney((_quote!['baseAmountMinor'] as num) -
-                          (_quote!['amountMinor'] as num))),
-              ],
-              const Divider(),
-              detail('Total', membershipMoney(_quote!['amountMinor'])),
-            ])),
-          const SizedBox(height: 16),
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.dangerTint,
+                borderRadius: BorderRadius.circular(10),
+                border:
+                    Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                _message!,
+                style: const TextStyle(color: AppColors.danger, fontSize: 13),
+              ),
+            ),
+
+          // 3. Compact Order Summary Card with Prominent Total
+          if (_quote != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.hairline),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Order Summary',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (upgrade != null) ...[
+                    if (upgrade == MembershipUpgradeMode.immediate)
+                      detail('Upgrade remaining Basic time',
+                          membershipMoney(_quote!['upgradeChargeMinor'])),
+                    detail('30-day Premium term',
+                        membershipMoney(_quote!['premiumTermAmountMinor'])),
+                    detail(
+                        upgrade == MembershipUpgradeMode.immediate
+                            ? 'Premium starts'
+                            : 'Estimated Premium start',
+                        upgrade == MembershipUpgradeMode.immediate
+                            ? 'When payment is confirmed'
+                            : membershipDate(_quote!['startsAtMillis'])),
+                    detail('Estimated Premium expiry',
+                        membershipDate(_quote!['expiresAtMillis'])),
+                  ] else ...[
+                    DetailRow(widget.renewal ? 'Additional time' : 'Duration',
+                        '${_quote!['durationDays']} days'),
+                    if (_quote!['baseAmountMinor'] != null)
+                      DetailRow('Original price',
+                          membershipMoney(_quote!['baseAmountMinor'])),
+                    if (_quotedCode.isNotEmpty)
+                      DetailRow('Promo code', _quotedCode),
+                    if (_quote!['baseAmountMinor'] is num &&
+                        _quote!['amountMinor'] is num)
+                      DetailRow(
+                          'Discount',
+                          membershipMoney((_quote!['baseAmountMinor'] as num) -
+                              (_quote!['amountMinor'] as num))),
+                  ],
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(color: AppColors.hairline, height: 1),
+                  ),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      Text(
+                        membershipMoney(_quote!['amountMinor']),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryDark,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
           if (estimate != null)
             Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text('Estimated new expiry: ${membershipDate(estimate)}',
-                    style: Theme.of(context).textTheme.titleMedium)),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w700,
+                        ))),
           if (widget.renewal)
             const Padding(
-                padding: EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(bottom: 8),
                 child: Text(
-                    'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
-          const Text('One-time payment. No automatic recurring charges.'),
+                    'Your final expiry is calculated when payment clears: any remaining paid time plus this term.',
+                    style:
+                        TextStyle(fontSize: 12.5, color: AppColors.inkSoft))),
+          const Center(
+            child: Text(
+              'One-time payment. No automatic recurring charges.',
+              style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+            ),
+          ),
           PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton(
+                onPressed: _busy || _quote == null ? null : _pay,
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                child: Text(
+                    _submitted ? 'Recover checkout' : 'Continue to Payment')),
+          ),
           const SizedBox(height: 16),
-          FilledButton(
-              onPressed: _busy || _quote == null ? null : _pay,
-              child: Text(
-                  _submitted ? 'Recover checkout' : 'Continue to Payment')),
         ]));
   }
 }
 
 class MembershipPaymentScreen extends StatefulWidget {
   const MembershipPaymentScreen(
-      {super.key, required this.repository, required this.initial});
+      {super.key,
+      required this.repository,
+      required this.initial,
+      this.openOnStart = false});
   final MembershipCommerceRepository repository;
   final Map<String, dynamic> initial;
+  final bool openOnStart;
   @override
   State<MembershipPaymentScreen> createState() =>
       _MembershipPaymentScreenState();
@@ -382,6 +555,15 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _check();
+    if (widget.openOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.repository.current &&
+            _payment['fulfilmentStatus'] == 'awaiting_payment') {
+          _open();
+        }
+      });
+    }
   }
 
   @override
@@ -446,15 +628,8 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
   Future<void> _open() async {
     final value = _payment['checkoutUrl'];
     if (value is! String) return;
-    final url = Uri.tryParse(value);
-    if (url == null ||
-        url.scheme != 'https' ||
-        !['www.billplz-sandbox.com', 'billplz-sandbox.com']
-            .contains(url.host) ||
-        url.userInfo.isNotEmpty ||
-        (url.hasPort && url.port != 443)) {
-      return;
-    }
+    if (!isBookingCheckoutUrl(value)) return;
+    final url = Uri.parse(value);
     try {
       final opened = await launchUrl(url, mode: LaunchMode.inAppBrowserView);
       if (!opened && mounted) {
@@ -488,7 +663,20 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                       Text(membershipOrderLabel(_payment)),
                     Text(membershipMoney(_payment['amountMinor'])),
                     const SizedBox(height: 12),
-                    Text(membershipPaymentLabel(_payment)),
+                    PaymentStatusHeading(
+                        title: membershipPaymentLabel(_payment),
+                        stage: _payment['paymentStatus'] == 'cleared' &&
+                                status == 'confirmed'
+                            ? PaymentStage.success
+                            : const {
+                                'expired',
+                                'failed',
+                                'reconciliation_required'
+                              }.contains(status)
+                                ? PaymentStage.failure
+                                : _busy
+                                    ? PaymentStage.loading
+                                    : PaymentStage.pending),
                     if (_payment['startsAtMillis'] != null)
                       Text(
                           'Premium starts: ${membershipDate(_payment['startsAtMillis'])}'),

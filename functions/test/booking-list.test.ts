@@ -207,3 +207,39 @@ it('projects payment/refund evidence only on explicit opt-in and matching cleare
   expect(unpaid).not.toHaveProperty('refundReviewRequired');
   await expect(read('member-1',{includePaymentDetails:'yes'})).rejects.toThrow();
 });
+
+it('projects refunded coaching bookings in the format supported by installed clients', async () => {
+  Object.assign(store.documents.get('orgs/org-1/bookings/booking-1')!, {
+    status: 'refunded', resolution: 'member_confirmed_cancelled', resolvedAtMillis: now,
+    cancelledBy: 'member-1', cancellationReason: 'Cannot attend',
+  });
+  const page = await read('member-1', { includeMemberChangeDetails: true });
+  expect(page.records[0]).toMatchObject({ status: 'refunded' });
+  expect(page.records[0]).not.toHaveProperty('resolution');
+  expect(page.records[0]).not.toHaveProperty('resolvedAtMillis');
+});
+
+it('returns valid member bookings alongside a warning for a malformed record', async () => {
+  store.documents.set('orgs/org-1/bookings/malformed', {
+    ...record, bookingId: 'malformed', durationMinutes: 42,
+  });
+  const page = await read('member-1', { allowPartialResults: true });
+  expect(page.records.map(row => row.bookingId)).toEqual(['booking-1']);
+  expect(page.omittedInvalidRecords).toBe(1);
+  await expect(read()).rejects.toMatchObject({ code: 'failed-precondition' });
+});
+
+it('exposes refund unavailable to opted-in member clients without leaking Admin closure details', async () => {
+  store.documents.set('orgs/org-1/transactions/booking-1', {
+    schemaVersion: 1, organizationId: 'org-1', bookingId: 'booking-1',
+    memberId: 'member-1', coachId: 'coach-1', branchId: 'branch-1',
+    amountMinor: 10000, provider: 'xendit', paymentStatus: 'cleared',
+    refundStatus: 'failed', refundFailureCode: 'REFUND_NOT_SUPPORTED',
+    refundClosedAtMillis: now, refundClosureReason: 'Internal reason',
+  });
+  const current = await read('member-1', { includePaymentDetails: true, allowPartialResults: true });
+  expect(current.records[0]).toMatchObject({ refundStatus: 'failed', refundUnavailable: true });
+  expect(current.records[0]).not.toHaveProperty('refundClosureReason');
+  const legacy = await read('member-1', { includePaymentDetails: true });
+  expect(legacy.records[0]).not.toHaveProperty('refundUnavailable');
+});

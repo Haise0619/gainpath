@@ -12,13 +12,15 @@ PublishedCoachProfile _coach({
   int experience = 5,
   double rating = 4.8,
   int reviews = 15,
+  String branchId = 'branch_1',
 }) =>
     PublishedCoachProfile(
       id: id,
       fields: CoachProfessionalFields(
         displayName: name,
         specialty: specialty,
-        bio: 'Certified strength and conditioning coach with 5 years experience.',
+        bio:
+            'Certified strength and conditioning coach with 5 years experience.',
         specializationTags: [specialty, 'Powerlifting'],
         yearsExperience: experience,
         consultationFeeMinor: fee,
@@ -26,7 +28,7 @@ PublishedCoachProfile _coach({
       revision: 1,
       sourceRevision: 1,
       status: 'published',
-      branchIds: ['branch_1'],
+      branchIds: [branchId],
       createdAtMillis: 1000,
       updatedAtMillis: 1000,
       publishedAtMillis: 1000,
@@ -45,7 +47,8 @@ class _TestDirectoryRepository implements CoachDirectoryRepository {
   final List<PublishedCoachProfile> coaches;
 
   @override
-  Future<CoachDirectoryPage<PublishedCoachProfile>> loadPage({String? afterId}) async {
+  Future<CoachDirectoryPage<PublishedCoachProfile>> loadPage(
+      {String? afterId}) async {
     return CoachDirectoryPage(coaches);
   }
 
@@ -75,106 +78,125 @@ Widget _wrap(Widget child, {double width = 360.0, double scale = 1.0}) {
 }
 
 void main() {
-  group('BrowseCoachesScreen Search UX & Filter Window', () {
+  group('BrowseCoachesScreen Filtering & Search Refinements', () {
     late _TestDirectoryRepository repo;
 
     setUp(() {
       repo = _TestDirectoryRepository(coaches: [
-        _coach(id: 'c1', name: 'Jackson', specialty: 'Strength'),
-        _coach(id: 'c2', name: 'Elena', specialty: 'Mobility'),
-        _coach(id: 'c3', name: 'Marcus', specialty: 'Conditioning'),
+        _coach(
+            id: 'c1',
+            name: 'Jackson',
+            specialty: 'Strength',
+            branchId: 'branch_1'),
+        _coach(
+            id: 'c2',
+            name: 'Elena',
+            specialty: 'Mobility',
+            branchId: 'branch_1'),
+        _coach(
+            id: 'c3',
+            name: 'Marcus',
+            specialty: 'Conditioning',
+            branchId: 'branch_2'),
       ]);
     });
 
-    testWidgets('clicking a category shows removable tag inside the search bar',
+    testWidgets(
+        'chips are removed from main page; opening filter modal allows specialty selection and shows active summary',
         (tester) async {
       await tester.pumpWidget(_wrap(BrowseCoachesScreen(
         live: true,
         liveRepository: repo,
         isCurrent: () => true,
+        loadBranches: () async => {
+          'branch_1': 'GainPath Main',
+          'branch_2': 'GainPath Downtown',
+        },
       )));
       await tester.pumpAndSettle();
 
-      // Initially, no removable tag in the search bar
-      expect(find.byTooltip('Remove Strength filter'), findsNothing);
+      // 1. Permanently visible filter chips are removed from the main page
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Clear all'), findsNothing);
 
-      // Tap "Strength" in the category row
+      // Search bar and adjacent filter icon button are visible
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byTooltip('Filter and sort coaches'), findsOneWidget);
+
+      // Initially all coaches visible
+      expect(find.text('Jackson'), findsOneWidget);
+      expect(find.text('Elena'), findsOneWidget);
+      expect(find.text('Marcus'), findsOneWidget);
+
+      // Default count displayed; redundant summary hidden
+      expect(find.text('3 coaches available'), findsOneWidget);
+      expect(find.textContaining('All specialties'), findsNothing);
+
+      // 2. Open Filter Modal Bottom Sheet
+      await tester.tap(find.byTooltip('Filter and sort coaches'));
+      await tester.pumpAndSettle();
+
+      // Bottom sheet contains Title, Location, Specialty, Sort by, Reset All, and Apply Filters
+      expect(find.text('Filter and sort'), findsOneWidget);
+      expect(find.text('Training location'), findsOneWidget);
+      expect(find.text('Specialty'), findsOneWidget);
+      expect(find.text('Sort by'), findsOneWidget);
+      expect(find.text('Reset All'), findsOneWidget);
+      expect(find.text('Apply Filters'), findsOneWidget);
+
+      // Select "Strength" ChoiceChip inside modal
       await tester.tap(find.widgetWithText(ChoiceChip, 'Strength'));
       await tester.pumpAndSettle();
 
-      // Now the removable tag appears inside the search bar
-      expect(find.byTooltip('Remove Strength filter'), findsOneWidget);
-      expect(find.text('Strength'), findsWidgets); // One in tag, one in chip
-
-      // Tap the remove icon on the tag
-      await tester.tap(find.byTooltip('Remove Strength filter'));
+      // Tap Apply Filters
+      await tester.tap(find.text('Apply Filters'));
       await tester.pumpAndSettle();
 
-      // Removable tag is removed
-      expect(find.byTooltip('Remove Strength filter'), findsNothing);
-    });
+      // Bottom sheet closed
+      expect(find.text('Filter and sort'), findsNothing);
 
-    testWidgets('clear filters action appears on the right side of the search bar',
-        (tester) async {
-      await tester.pumpWidget(_wrap(BrowseCoachesScreen(
-        live: true,
-        liveRepository: repo,
-        isCurrent: () => true,
-      )));
+      // Only Jackson matches Strength
+      expect(find.text('Jackson'), findsOneWidget);
+      expect(find.text('Elena'), findsNothing);
+      expect(find.text('Marcus'), findsNothing);
+
+      // Active filter indicator uses subtle dot without red alert Badge
+      expect(find.byType(Badge), findsNothing);
+
+      // Active filter summary is displayed with count under search bar
+      expect(find.text('Strength'), findsWidgets);
+      expect(find.byKey(const Key('coach-active-filter-indicator')),
+          findsOneWidget);
+      expect(find.textContaining('1 coach available'), findsOneWidget);
+
+      // Tap the clear icon on the active filter summary
+      await tester.tap(find.byTooltip('Filter and sort coaches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset All'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply Filters'));
       await tester.pumpAndSettle();
 
-      // Before filtering, no "Clear filters" on the right side of the search bar
-      expect(find.text('Clear filters'), findsNothing);
-
-      // Select category "Mobility"
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Mobility'));
-      await tester.pumpAndSettle();
-
-      // "Clear filters" is now visible in the search bar
-      expect(find.text('Clear filters'), findsOneWidget);
-      expect(find.text('Elena'), findsOneWidget);
-      expect(find.text('Jackson'), findsNothing);
-
-      // Tap "Clear filters"
-      await tester.tap(find.text('Clear filters'));
-      await tester.pumpAndSettle();
-
-      // Filters are reset and all coaches are displayed again
-      expect(find.text('Clear filters'), findsNothing);
+      // Summary is cleared and hidden, all 3 coaches visible again
+      expect(
+          find.byKey(const Key('coach-active-filter-indicator')), findsNothing);
+      expect(find.text('3 coaches available'), findsOneWidget);
       expect(find.text('Jackson'), findsOneWidget);
       expect(find.text('Elena'), findsOneWidget);
       expect(find.text('Marcus'), findsOneWidget);
     });
 
-    testWidgets('typing a search query shows clear filters on right side',
+    testWidgets(
+        'training location filter in modal shows compact summary "GainPath Main · All specialties"',
         (tester) async {
       await tester.pumpWidget(_wrap(BrowseCoachesScreen(
         live: true,
         liveRepository: repo,
         isCurrent: () => true,
-      )));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField), 'Marcus');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Clear filters'), findsOneWidget);
-      expect(find.text('Marcus'), findsWidgets); // Typed in textfield and in coach card
-      expect(find.text('Jackson'), findsNothing);
-
-      await tester.tap(find.text('Clear filters'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Clear filters'), findsNothing);
-      expect(find.text('Jackson'), findsOneWidget);
-    });
-
-    testWidgets('filter window displays optimized modal with sort options and actions',
-        (tester) async {
-      await tester.pumpWidget(_wrap(BrowseCoachesScreen(
-        live: true,
-        liveRepository: repo,
-        isCurrent: () => true,
+        loadBranches: () async => {
+          'branch_1': 'GainPath Main',
+          'branch_2': 'GainPath Downtown',
+        },
       )));
       await tester.pumpAndSettle();
 
@@ -182,29 +204,86 @@ void main() {
       await tester.tap(find.byTooltip('Filter and sort coaches'));
       await tester.pumpAndSettle();
 
-      // Verify title, close button, section headings, and sort option labels
-      expect(find.text('Filter and sort'), findsOneWidget);
-      expect(find.byTooltip('Close filters'), findsOneWidget);
-      expect(find.text('Specialty'), findsOneWidget);
-      expect(find.text('Sort by'), findsOneWidget);
-      expect(find.text('Highest rated'), findsOneWidget);
-      expect(find.text('Price: low to high'), findsOneWidget);
-      expect(find.text('Most experienced'), findsOneWidget);
-      expect(find.text('Reset'), findsOneWidget);
-      expect(find.text('Apply'), findsOneWidget);
+      // Training location chips are visible inside modal
+      expect(find.widgetWithText(ChoiceChip, 'All branches'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'GainPath Main'), findsOneWidget);
+      expect(
+          find.widgetWithText(ChoiceChip, 'GainPath Downtown'), findsOneWidget);
 
-      // Select "Price: low to high" and apply
-      await tester.tap(find.text('Price: low to high'));
-      await tester.tap(find.text('Apply'));
+      // Select GainPath Main
+      await tester.tap(find.widgetWithText(ChoiceChip, 'GainPath Main'));
       await tester.pumpAndSettle();
 
-      // Modal closed
-      expect(find.text('Filter and sort'), findsNothing);
-      // "Clear filters" is visible because custom sorting is active
-      expect(find.text('Clear filters'), findsOneWidget);
+      // Apply
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      // Active filter summary shows "GainPath Main · All specialties"
+      expect(find.text('GainPath Main'), findsWidgets);
+      expect(find.byKey(const Key('coach-active-filter-indicator')),
+          findsOneWidget);
+      expect(find.textContaining('2 coaches available'), findsOneWidget);
+      expect(find.text('Jackson'), findsOneWidget);
+      expect(find.text('Elena'), findsOneWidget);
+      expect(find.text('Marcus'), findsNothing);
+
+      // Re-open filter modal and test Reset All
+      await tester.tap(find.byTooltip('Filter and sort coaches'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reset All'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      // All filters reset to defaults; redundant summary hidden
+      expect(
+          find.textContaining('GainPath Main · All specialties'), findsNothing);
+      expect(find.text('3 coaches available'), findsOneWidget);
     });
 
-    testWidgets('filter modal selecting specialty reflects removable tag in search bar',
+    testWidgets(
+        'combined location and specialty filter produces combined summary',
+        (tester) async {
+      await tester.pumpWidget(_wrap(BrowseCoachesScreen(
+        live: true,
+        liveRepository: repo,
+        isCurrent: () => true,
+        loadBranches: () async => {
+          'branch_1': 'GainPath Main',
+          'branch_2': 'GainPath Downtown',
+        },
+      )));
+      await tester.pumpAndSettle();
+
+      // Open filter modal
+      await tester.tap(find.byTooltip('Filter and sort coaches'));
+      await tester.pumpAndSettle();
+
+      // Select GainPath Main and Mobility
+      await tester.tap(find.widgetWithText(ChoiceChip, 'GainPath Main'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Mobility'));
+      await tester.pumpAndSettle();
+
+      // Active count badge in modal header shows 2 active
+      expect(find.text('2 active'), findsOneWidget);
+
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      // Summary shows combined "GainPath Main · Mobility"
+      expect(find.text('GainPath Main'), findsWidgets);
+      expect(find.text('Mobility'), findsWidgets);
+      expect(find.textContaining('1 coach available'), findsOneWidget);
+      expect(find.text('Elena'), findsOneWidget);
+      expect(find.text('Jackson'), findsNothing);
+      expect(find.text('Marcus'), findsNothing);
+      expect(find.byType(Badge), findsNothing);
+    });
+
+    testWidgets(
+        'typing a search query shows clear button inside the search field',
         (tester) async {
       await tester.pumpWidget(_wrap(BrowseCoachesScreen(
         live: true,
@@ -213,47 +292,73 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Filter and sort coaches'));
+      expect(find.byTooltip('Clear search query'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'Marcus');
       await tester.pumpAndSettle();
 
-      // Tap Conditioning in the modal (using last to pick from modal chips)
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Conditioning').last);
-      await tester.tap(find.text('Apply'));
-      await tester.pumpAndSettle();
-
-      // Removable tag appears in the search bar
-      expect(find.byTooltip('Remove Conditioning filter'), findsOneWidget);
-      expect(find.text('Marcus'), findsOneWidget);
+      expect(find.byTooltip('Clear search query'), findsOneWidget);
+      expect(find.text('Marcus'), findsWidgets);
       expect(find.text('Jackson'), findsNothing);
+
+      // Tap clear query button
+      await tester.tap(find.byTooltip('Clear search query'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Clear search query'), findsNothing);
+      expect(find.text('Jackson'), findsOneWidget);
+      expect(find.text('Marcus'), findsOneWidget);
+      expect(find.text('Elena'), findsOneWidget);
     });
 
-    testWidgets('responsive layout on 320px width at 200% text scale without overflow',
-        (tester) async {
-      tester.view.physicalSize = const Size(320, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    for (final width in [320.0, 360.0, 393.0, 430.0]) {
+      testWidgets(
+          'responsive layout on ${width.toInt()}px width at 200% text scale without overflow',
+          (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_wrap(
-        BrowseCoachesScreen(
-          live: true,
-          liveRepository: repo,
-          isCurrent: () => true,
-        ),
-        width: 320.0,
-        scale: 2.0,
-      ));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_wrap(
+          BrowseCoachesScreen(
+            live: true,
+            liveRepository: repo,
+            isCurrent: () => true,
+            loadBranches: () async => {
+              'branch_1': 'GainPath Main',
+              'branch_2': 'GainPath Downtown',
+            },
+          ),
+          width: width,
+          scale: 2.0,
+        ));
+        await tester.pumpAndSettle();
 
-      // Tap Strength category
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Strength'));
-      await tester.pumpAndSettle();
+        // Enter query
+        await tester.enterText(find.byType(TextField), 'Jack');
+        await tester.pumpAndSettle();
 
-      // Enter query
-      await tester.enterText(find.byType(TextField), 'Jack');
-      await tester.pumpAndSettle();
+        // Open filter modal
+        await tester.tap(find.byTooltip('Filter and sort coaches'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      // Ensure zero RenderFlex overflow exceptions occurred
-      expect(tester.takeException(), isNull);
-    });
+        // Select a branch and a specialty in modal
+        await tester.tap(find.widgetWithText(ChoiceChip, 'GainPath Main'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Strength'));
+        await tester.pumpAndSettle();
+
+        // Verify Apply Filters and Reset All are hit-testable without clipping
+        expect(find.text('Apply Filters').hitTestable(), findsOneWidget);
+        expect(find.text('Reset All').hitTestable(), findsOneWidget);
+
+        // Apply
+        await tester.tap(find.text('Apply Filters'));
+        await tester.pumpAndSettle();
+
+        // Ensure zero RenderFlex overflow exceptions occurred
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 }

@@ -60,7 +60,10 @@ export class XenditBookingGateway implements BillplzGateway {
 
   async create(input: BookingCheckoutInput): Promise<SandboxBill> {
     const channel = channels.get(input.selectedPaymentMethodCode ?? '');
-    if (!channel || !this.enabledChannels.has(channel)) {
+    const allowed = input.chooseMethodAtCheckout && input.selectedPaymentMethodCode === undefined
+      ? [...channels.values()].filter(code => this.enabledChannels.has(code))
+      : channel && this.enabledChannels.has(channel) ? [channel] : [];
+    if (allowed.length === 0) {
       throw new DomainError('invalid-argument', 'Choose an available payment method.');
     }
     const reference = xenditBookingReference(input.organizationId, input.reference);
@@ -70,7 +73,7 @@ export class XenditBookingGateway implements BillplzGateway {
         reference_id: reference, session_type: 'PAY', mode: 'PAYMENT_LINK',
         capture_method: 'AUTOMATIC', allow_save_payment_method: 'DISABLED',
         country: 'MY', currency: 'MYR', amount: input.amountMinor / 100,
-        allowed_payment_channels: [channel],
+        allowed_payment_channels: allowed,
         description: input.description,
         success_return_url: this.returnUrl, cancel_return_url: this.returnUrl,
       }),

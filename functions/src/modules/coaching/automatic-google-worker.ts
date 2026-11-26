@@ -35,7 +35,7 @@ export const synchronizeGoogleBooking=onDocumentUpdated({document:'orgs/{organiz
   await authorize();const access=await connection.access(org);
   const readMapping=()=>store.transact(tx=>tx.get(coachCalendarPath(org,b.coachId)));
   let mapping=await readMapping();
-  if(kind==='calendar'&&!mapping&&!controlledDelivery&&b.status==='confirmed'){
+  if(kind==='calendar'&&!mapping&&automaticCalendarInScope(deliveryEvent,config)&&b.status==='confirmed'){
    const name=await store.transact(async tx=>{const profile=await tx.get(`orgs/${org}/coaches/${b.coachId}`);
     if(profile?.status!=='published'||typeof profile.displayName!=='string'||!profile.displayName.trim())throw new DomainError('failed-precondition','Coach publication is required.');
     return profile.displayName.trim().slice(0,80);

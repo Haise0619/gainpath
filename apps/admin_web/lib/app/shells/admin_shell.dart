@@ -12,11 +12,15 @@ import '../../features/gamification/presentation/admin/reward_fulfilment_panel.d
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../features/group_classes/group_classes_admin.dart';
+import '../../infrastructure/firebase/firebase_function_transport.dart'
+    show firebaseCallable;
 import '../../features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import '../../features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import '../../features/identity/presentation/admin/admin_settings_screens.dart';
@@ -39,7 +43,8 @@ import '../../features/identity/presentation/admin/member_provision_page.dart'
     show MemberSetupRequest;
 import '../../features/identity/presentation/admin/coaches_screen.dart';
 import '../../features/identity/presentation/admin/coach_review_discard_guard.dart';
-import '../../features/identity/presentation/admin/coach_review_notification_button.dart';
+import '../../features/identity/presentation/admin/admin_notification_button.dart';
+import '../../features/membership/payment_review_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -68,8 +73,7 @@ class _NavPage {
 }
 
 /// A sidebar destination that expands in place to reveal its children —
-/// Content and Governance, per the console's structure. Never itself
-/// selectable: it holds no page of its own, only a submenu.
+/// it holds no page of its own, only a submenu.
 class _NavGroup {
   final IconData icon;
   final IconData iconFilled;
@@ -151,9 +155,14 @@ class _AdminShellState extends State<AdminShell> {
   static const _calendarPath = '/console/operations-calendar';
   static const _announcementsPath = '/console/announcements';
   static final _routeId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
-  late final _calendarRepository =
-      FirebaseOperationsCalendarRepository(_requestBranch);
+  late final _calendarRepository = FirebaseOperationsCalendarRepository(
+      _requestBranch,
+      groupClasses:
+          widget.liveSession?.datasetScope == null && widget.liveSession != null
+              ? _classCall
+              : null);
   String? _calendarBranch;
+  int _classCalendarRevision = 0;
   String? _announcementDrillDownId;
   String? _focusedBookingId;
   String? _focusedCoachBranch;
@@ -183,7 +192,44 @@ class _AdminShellState extends State<AdminShell> {
 
   String _dateKey(DateTime day) => day.toIso8601String().split('T').first;
 
+  Future<Map<String, dynamic>> _classCall(
+      String action, Map<String, dynamic> input) async {
+    final session = widget.liveSession;
+    bool current() =>
+        mounted &&
+        session != null &&
+        session.datasetScope == null &&
+        context.read<AuthBloc>().state.session?.scope == session.scope;
+    if (!current()) throw StateError('Group class session changed.');
+    final response = await firebaseCallable(action == 'instructorPhoto'
+            ? 'getCoachPublishedPhotoCommand'
+            : 'groupClassesCommand')
+        .call<Map<String, dynamic>>({
+      ...input,
+      'schemaVersion': 1,
+      'organizationId': session!.organizationId,
+      if (action != 'instructorPhoto') 'action': action,
+    });
+    if (!current()) throw StateError('Group class session changed.');
+    if (const {
+      'save',
+      'publish',
+      'close',
+      'cancel',
+      'join',
+      'removeParticipant',
+      'attendance'
+    }.contains(action)) {
+      setState(() => _classCalendarRevision++);
+    }
+    return response.data;
+  }
+
   void _openCalendarSource(OperationsEvent event) {
+    if (event.type == CalendarEventType.groupClass) {
+      openGroupClassAdminDetails(context, _classCall, event.sourceId);
+      return;
+    }
     if (event.type == CalendarEventType.announcement) {
       _select(_indexOfLabel('Announcements'), announcementId: event.sourceId);
       return;
@@ -265,12 +311,15 @@ class _AdminShellState extends State<AdminShell> {
   String? _notificationCoachId;
   int _notificationReviewGeneration = 0;
   final Set<int> _visited = {0};
-  final Set<String> _expanded = {'Users & Coaches', 'Payments'};
+  final Set<String> _expanded = {'Members & Coaches', 'Payments'};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   AdminConsoleNavigation? _consoleRoutes;
   ReportsCategory _lastReportCategory = ReportsCategory.overview;
   int get _reportsIndex => _firstChildIndexOfGroup('Reports');
-  bool get _inReports => _groupLabelFor(_index) == 'Reports';
+  bool get _inReports => _isStandardReport(_index);
+  bool _isStandardReport(int index) =>
+      index >= _reportsIndex &&
+      index < _reportsIndex + ReportsCategory.values.length;
   ReportsCategory get _reportCategory =>
       ReportsCategory.values[_index - _reportsIndex];
   @override
@@ -432,7 +481,40 @@ class _AdminShellState extends State<AdminShell> {
             onOpenCoaches: () => _select(_indexOfLabel('Coaches')),
             onProcessVoucher: _openRewardCollection)),
     _NavGroup(
-        Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
+        Icons.event_note_outlined, Icons.event_note_rounded, 'Operations', [
+      if (_calendarEnabled)
+        const _NavPage(
+          Icons.calendar_month_outlined,
+          Icons.calendar_month_rounded,
+          'Operations Calendar',
+          '',
+          SizedBox.shrink(),
+        ),
+      if (widget.liveSession case final session?
+          when session.datasetScope == null)
+        _NavPage(
+            Icons.groups_outlined,
+            Icons.groups_rounded,
+            'Group Classes',
+            'Schedule classes and manage participants',
+            GroupClassesAdminPage(call: _classCall)),
+      if (widget.liveSession != null)
+        _NavPage(
+          Icons.location_on_outlined,
+          Icons.location_on,
+          'Branches',
+          'Manage gym locations',
+          const SizedBox.shrink(),
+        ),
+      _NavPage(
+          Icons.fitness_center_outlined,
+          Icons.fitness_center_rounded,
+          'Equipment Catalog',
+          'Publish and retire gym-floor machines',
+          const EquipmentCatalogScreen()),
+    ]),
+    _NavGroup(Icons.people_outline_rounded, Icons.people_rounded,
+        'Members & Coaches', [
       _NavPage(Icons.groups_outlined, Icons.groups_rounded, 'Members',
           'Search, filter, and view member accounts', const MembersScreen()),
       _NavPage(
@@ -443,74 +525,6 @@ class _AdminShellState extends State<AdminShell> {
           CoachesScreen(
               live: widget.liveSession != null,
               discardGuard: _coachReviewGuard)),
-    ]),
-    if (widget.liveSession != null)
-      _NavPage(
-        Icons.location_on_outlined,
-        Icons.location_on,
-        'Branches',
-        'Manage gym locations',
-        const SizedBox.shrink(),
-      ),
-    if (_calendarEnabled)
-      const _NavPage(
-        Icons.calendar_month_outlined,
-        Icons.calendar_month_rounded,
-        'Operations Calendar',
-        '',
-        SizedBox.shrink(),
-      ),
-    _NavGroup(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded,
-        'Recommendations', [
-      _NavPage(
-          Icons.dashboard_outlined,
-          Icons.dashboard_rounded,
-          'Overview',
-          'Monitor recommendations and delivery outcomes',
-          RiskLeaderboardScreen(
-              live: widget.liveSession != null,
-              insightsRepository: _fypRecommendations?.insights,
-              queueRepository: _fypRecommendations?.queue,
-              canonicalRepository: _canonicalRecommendations,
-              relatedLinks: {
-                for (final destination in const [
-                  'AI Content Planner',
-                  'AI Member Outreach',
-                  'Delivery Issues',
-                  'Exercise Guidance Insights',
-                ])
-                  destination: () => _select(_indexOfLabel(destination)),
-              })),
-      _NavPage(
-          Icons.auto_awesome_outlined,
-          Icons.auto_awesome,
-          'AI Content Planner',
-          'Discover and draft new fitness content',
-          AiContentPlannerPage(repository: _adminAi, onApply: openAdminAiDraft)),
-      _NavPage(
-          Icons.people_alt_outlined,
-          Icons.people_alt,
-          'AI Member Outreach',
-          'Analyze active members and send personalized suggestions',
-          AiMemberOutreachPage(repository: _adminAi)),
-      _NavPage(
-          Icons.error_outline,
-          Icons.error,
-          'Delivery Issues',
-          'Review recommendation delivery outcomes',
-          RiskLeaderboardScreen(
-              live: widget.liveSession != null,
-              canonicalRepository: _canonicalRecommendations,
-              initialTab: RecommendationMonitorTab.attention)),
-      _NavPage(
-          Icons.insights_outlined,
-          Icons.insights,
-          'Exercise Guidance Insights',
-          'Review exercise guidance coverage',
-          RiskLeaderboardScreen(
-              live: widget.liveSession != null,
-              insightsRepository: _fypRecommendations?.insights,
-              initialInsights: true)),
     ]),
     _NavGroup(Icons.payments_outlined, Icons.payments_rounded, 'Payments', [
       _NavPage(
@@ -559,6 +573,20 @@ class _AdminShellState extends State<AdminShell> {
                   mode: PaymentsMode.reconciliation,
                   onNavigateMode: _navigateToPaymentMode)),
     ]),
+    if (widget.liveSession case final session?
+        when session.datasetScope == null)
+      _NavPage(
+        Icons.support_agent_outlined,
+        Icons.support_agent,
+        'Support Requests',
+        'Review and reply to member requests',
+        SupportRequestsPage(
+          key: ValueKey(session.scope),
+          admin: true,
+          call: (action, input) => _supportCall(session, action, input),
+          openReference: (kind, id) => _openLinkedPayment(session, id),
+        ),
+      ),
     _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
       _NavPage(
           Icons.video_library_outlined,
@@ -589,13 +617,10 @@ class _AdminShellState extends State<AdminShell> {
               videoPicker: LocalEquipmentVideoPicker(
                   maxBytes: MiniGameContent.maxPreviewBytes))),
     ]),
-    _NavPage(
-        Icons.fitness_center_outlined,
-        Icons.fitness_center_rounded,
-        'Equipment Catalog',
-        'Publish and retire gym-floor machines',
-        const EquipmentCatalogScreen()),
-    _NavGroup(Icons.gavel_outlined, Icons.gavel_rounded, 'Governance', [
+    _NavGroup(
+        Icons.campaign_outlined, Icons.campaign_rounded, 'Member Engagement', [
+      _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
+          'Manage updates across gym locations', const SizedBox.shrink()),
       _NavPage(
           Icons.card_giftcard_outlined,
           Icons.card_giftcard_rounded,
@@ -604,14 +629,59 @@ class _AdminShellState extends State<AdminShell> {
               ? 'Manage the reward shop, reward details and voucher collection'
               : 'Points-shop inventory and stock',
           RewardCatalogScreen(live: widget.liveSession != null)),
-      _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
-          'Manage updates across gym locations', const SizedBox.shrink()),
+    ]),
+    _NavGroup(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded,
+        'Recommendations', [
       _NavPage(
-          Icons.smart_toy_outlined,
-          Icons.smart_toy_rounded,
-          'AI Chatbot Disclaimer',
-          'The safety notice shown before first use',
-          ChatbotDisclaimerScreen(live: widget.liveSession != null)),
+          Icons.dashboard_outlined,
+          Icons.dashboard_rounded,
+          'Overview',
+          'Monitor recommendations and delivery outcomes',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              insightsRepository: _fypRecommendations?.insights,
+              queueRepository: _fypRecommendations?.queue,
+              canonicalRepository: _canonicalRecommendations,
+              relatedLinks: {
+                for (final destination in const [
+                  'AI Content Planner',
+                  'AI Member Outreach',
+                  'Delivery Issues',
+                  'Exercise Guidance Insights',
+                ])
+                  destination: () => _select(_indexOfLabel(destination)),
+              })),
+      _NavPage(
+          Icons.auto_awesome_outlined,
+          Icons.auto_awesome,
+          'AI Content Planner',
+          'Discover and draft new fitness content',
+          AiContentPlannerPage(
+              repository: _adminAi, onApply: openAdminAiDraft)),
+      _NavPage(
+          Icons.people_alt_outlined,
+          Icons.people_alt,
+          'AI Member Outreach',
+          'Analyze active members and send personalized suggestions',
+          AiMemberOutreachPage(repository: _adminAi)),
+      _NavPage(
+          Icons.error_outline,
+          Icons.error,
+          'Delivery Issues',
+          'Review recommendation delivery outcomes',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              canonicalRepository: _canonicalRecommendations,
+              initialTab: RecommendationMonitorTab.attention)),
+      _NavPage(
+          Icons.insights_outlined,
+          Icons.insights,
+          'Exercise Guidance Insights',
+          'Review exercise guidance coverage',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              insightsRepository: _fypRecommendations?.insights,
+              initialInsights: true)),
     ]),
     _NavGroup(
         Icons.bar_chart_outlined,
@@ -621,15 +691,59 @@ class _AdminShellState extends State<AdminShell> {
           for (final category in ReportsCategory.values)
             _NavPage(Icons.analytics_outlined, Icons.analytics_rounded,
                 category.label, '', const SizedBox.shrink()),
+          if (widget.liveSession case final session?
+              when session.datasetScope == null)
+            _NavPage(
+                Icons.groups_outlined,
+                Icons.groups_rounded,
+                'Group Classes Analytics',
+                'Registrations and marked attendance',
+                GroupClassAnalytics(call: _classCall)),
         ],
         opensFirstChild: true),
-    _NavPage(
-        Icons.tune_outlined,
-        Icons.tune_rounded,
-        'System Settings',
-        'General, reward conversion, legal & compliance',
-        SystemSettingsScreen(live: widget.liveSession != null)),
+    _NavGroup(
+        Icons.settings_outlined,
+        Icons.settings_rounded,
+        'Settings',
+        [
+          _NavPage(
+              Icons.tune_outlined,
+              Icons.tune_rounded,
+              'System Settings',
+              'General, reward conversion, legal & compliance',
+              SystemSettingsScreen(
+                live: widget.liveSession != null,
+                complianceCall: _complianceCallFor(widget.liveSession),
+              )),
+          _NavPage(
+              Icons.smart_toy_outlined,
+              Icons.smart_toy_rounded,
+              'AI Chatbot Disclaimer',
+              'The safety notice shown before first use',
+              ChatbotDisclaimerScreen(live: widget.liveSession != null)),
+        ],
+        opensFirstChild: true),
   ];
+
+  Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)?
+      _complianceCallFor(AuthSession? session) {
+    if (session == null || session.datasetScope != null) return null;
+    return (action, input) async {
+      bool current() =>
+          mounted &&
+          context.read<AuthBloc>().state.session?.scope == session.scope;
+      if (!current()) throw StateError('Compliance session changed.');
+      final result = await firebaseCallable('complianceCommand')
+          .call<Map<String, dynamic>>({
+        ...input,
+        'schemaVersion': 1,
+        'organizationId': session.organizationId,
+        'action': action,
+      });
+      if (!current()) throw StateError('Compliance session changed.');
+      return result.data;
+    };
+  }
 
   List<_NavPage> get _flatPages {
     final pages = <_NavPage>[];
@@ -954,11 +1068,11 @@ class _AdminShellState extends State<AdminShell> {
       _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
-    if (owner == 'Reports') _lastReportCategory = _reportCategory;
+    if (_inReports) _lastReportCategory = _reportCategory;
     if (updateHistory) {
       final page = _flatPages[flatIndex];
       final Uri uri;
-      if (owner == 'Reports') {
+      if (_inReports) {
         uri = Uri(
           path: '/reports/${_reportCategory.name}',
           queryParameters: reportBranch == null && reportDate == null
@@ -1045,13 +1159,141 @@ class _AdminShellState extends State<AdminShell> {
     });
   }
 
-  Future<void> _openCoachAlert(String coachId) async {
+  bool _isNotificationCurrent(AuthSession session) {
+    if (!mounted) return false;
+    final auth = context.read<AuthBloc>().state;
+    return auth.status == AuthStatus.signedIn &&
+        auth.session == session &&
+        session.role == AppRole.admin &&
+        !session.needsVerification &&
+        session.accountLifecycleState == 'active';
+  }
+
+  Future<Map<String, dynamic>> _supportCall(AuthSession session, String action,
+      Map<String, dynamic> input) async {
+    if (!_isNotificationCurrent(session)) {
+      throw StateError('Support session changed.');
+    }
+    final result =
+        await firebaseCallable('supportRequestCommand').call<Map<String, dynamic>>({
+      ...input,
+      'schemaVersion': 1,
+      'organizationId': session.organizationId,
+      'action': action,
+    });
+    if (!_isNotificationCurrent(session)) {
+      throw StateError('Support session changed.');
+    }
+    return result.data;
+  }
+
+  void _openLinkedPayment(AuthSession session, String id) {
+    if (!_isNotificationCurrent(session)) return;
+    _openPaymentNotice(session, id);
+  }
+
+  void _openPaymentNotice(AuthSession session, String id, {bool refund = false}) {
+    unawaited(Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: Text(refund ? 'Refund Requests' : 'Linked payment')),
+        body: AdminPaymentReviewRoute(
+          session: session,
+          mode: refund ? PaymentsMode.refunds : PaymentsMode.transactions,
+          initialBookingId: id,
+        ),
+      ),
+    )));
+  }
+
+  Future<List<AdminNotification>> _loadRefundNotices(AuthSession session) async {
+    final repository = FirebasePaymentReviewRepository(
+        session: session, isCurrent: () => _isNotificationCurrent(session));
+    final notices = <String, AdminNotification>{};
+    String? cursor;
+    for (var page = 0; page < 2; page++) {
+      final results = await repository.load(afterId: cursor);
+      for (final record in results.records) {
+        if (!record.isPendingRefundReview || record.id.isEmpty) continue;
+        notices[record.id] = AdminNotification(
+          AdminNotificationKind.refund,
+          record.id,
+          record.businessTitle,
+          'Refund awaiting review',
+          ((record.data['updatedAtMillis'] ?? record.data['createdAtMillis'])
+                      as num?)
+                  ?.toInt() ??
+              0,
+          revision: record.text('refundReference').isEmpty
+              ? null
+              : record.text('refundReference'),
+        );
+      }
+      if (results.nextAfterId == null || results.nextAfterId == cursor) break;
+      cursor = results.nextAfterId;
+    }
+    return notices.values.toList();
+  }
+
+  Future<List<AdminNotification>> _loadSupportNotices(AuthSession session) async {
+    final result = await _supportCall(session, 'list', const {});
+    final tickets = result['tickets'] as List;
+    return [
+      for (final ticket in tickets.cast<Map>())
+        if (ticket['unread'] == true && ticket['id'] is String)
+          AdminNotification(
+            AdminNotificationKind.support,
+            ticket['id'] as String,
+            ticket['title'] as String? ?? 'Support request',
+            ticket['category'] as String? ?? 'New message',
+            (ticket['updatedAtMillis'] as num?)?.toInt() ?? 0,
+          ),
+    ];
+  }
+
+  Widget _buildNotifications() {
+    final session = widget.liveSession;
+    if (session == null) return const _NotificationButton();
+    return AdminNotificationButton(
+      key: ValueKey(session.scope),
+      scope: jsonEncode([
+        session.organizationId,
+        session.userId,
+        session.datasetScope?.datasetId,
+        session.datasetScope?.revision,
+      ]),
+      isCurrent: () => _isNotificationCurrent(session),
+      loadRefunds:
+          session.datasetScope == null ? () => _loadRefundNotices(session) : null,
+      loadSupport:
+          session.datasetScope == null ? () => _loadSupportNotices(session) : null,
+      onOpen: (notice) async {
+        if (!_isNotificationCurrent(session)) return false;
+        switch (notice.kind) {
+          case AdminNotificationKind.coach:
+            return _openCoachAlert(notice.id);
+          case AdminNotificationKind.refund:
+            _openPaymentNotice(session, notice.id, refund: true);
+          case AdminNotificationKind.support:
+            unawaited(Navigator.of(context).push<void>(MaterialPageRoute(
+              builder: (_) => SupportRequestsPage.adminThread(
+                id: notice.id,
+                call: (action, input) => _supportCall(session, action, input),
+                openReference: (kind, id) => _openLinkedPayment(session, id),
+              ),
+            )));
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<bool> _openCoachAlert(String coachId) async {
     if (!await _mayLeaveBranchEditor() ||
         !await _canLeaveAddCoach() ||
         !await _canLeaveAddMember() ||
         !await _coachReviewGuard.canLeave() ||
         !mounted) {
-      return;
+      return false;
     }
     if (_addingCoach) _closeAddCoach();
     final fromAddMember = _addingMember;
@@ -1064,7 +1306,7 @@ class _AdminShellState extends State<AdminShell> {
     setState(() {
       _index = index;
       _visited.add(index);
-      _expanded.add('Users & Coaches');
+      _expanded.add('Members & Coaches');
       _scopedCoachIdForBookings = null;
       _scopedCoachIdForSchedule = null;
       _scopedCoachIdForReview = coachId;
@@ -1082,6 +1324,7 @@ class _AdminShellState extends State<AdminShell> {
     if (fromBranches || fromAddMember || fromCalendar) {
       _consoleRoutes?.go(context, Uri.parse(_coachesPath));
     }
+    return true;
   }
 
   Future<void> _signOut() async {
@@ -1143,7 +1386,7 @@ class _AdminShellState extends State<AdminShell> {
                         onOpenNavigation: useDrawer
                             ? () => _scaffoldKey.currentState?.openDrawer()
                             : null,
-                        onOpenCoachAlert: _openCoachAlert,
+                        notifications: _buildNotifications(),
                         liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
                         subtitle: current.label == 'Branches'
@@ -1160,10 +1403,15 @@ class _AdminShellState extends State<AdminShell> {
                         index: _inReports ? _reportsIndex : _index,
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
-                          if (_groupLabelFor(entry.key) == 'Reports') {
+                          if (d.label == 'Group Classes Analytics' &&
+                              _visited.contains(entry.key)) {
+                            return GroupClassAnalytics(
+                                key: ValueKey(_classCalendarRevision),
+                                call: _classCall);
+                          }
+                          if (_isStandardReport(entry.key)) {
                             if (entry.key != _reportsIndex ||
-                                !_visited.any(
-                                    (i) => _groupLabelFor(i) == 'Reports')) {
+                                !_visited.any((i) => _isStandardReport(i))) {
                               return const SizedBox.shrink();
                             }
                             return ReportsScreen(
@@ -1191,6 +1439,7 @@ class _AdminShellState extends State<AdminShell> {
                               key: ValueKey(session?.scope),
                               repository: _calendarRepository,
                               initialBranchId: _calendarBranch,
+                              groupClassesRevision: _classCalendarRevision,
                               onOpenSource: _openCalendarSource,
                               onOpenCoach: _openCalendarCoach,
                               onOpenReport: (branch, day) => _select(
@@ -1352,7 +1601,7 @@ class _Crumb {
 }
 
 class _TopBar extends StatelessWidget {
-  final ValueChanged<String> onOpenCoachAlert;
+  final Widget notifications;
   final List<_Crumb> breadcrumbs;
   final String subtitle;
   final VoidCallback onSignOut;
@@ -1361,7 +1610,7 @@ class _TopBar extends StatelessWidget {
   const _TopBar(
       {this.onOpenNavigation,
       required this.breadcrumbs,
-      required this.onOpenCoachAlert,
+      required this.notifications,
       required this.subtitle,
       this.liveSession,
       required this.onSignOut});
@@ -1426,9 +1675,7 @@ class _TopBar extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: AppColors.inkSoft))),
           const SizedBox(width: 14),
-          if (liveSession == null) const _NotificationButton(),
-          if (liveSession != null)
-            CoachReviewNotificationButton(onOpenCoach: onOpenCoachAlert),
+          notifications,
           const SizedBox(width: 6),
           _ProfileMenu(onSignOut: onSignOut, liveSession: liveSession),
         ],

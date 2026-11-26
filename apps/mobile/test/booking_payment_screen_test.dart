@@ -57,6 +57,23 @@ class Payments implements BookingPaymentRepository {
           durationMinutes: durationMinutes);
 }
 
+class RefundPayments extends Payments implements BookingPaymentMethodRepository {
+  int methodLoads = 0;
+
+  @override
+  Future<BookingPaymentMethods> loadPaymentMethods(String bookingId) async {
+    methodLoads++;
+    throw StateError('Refund details must not load payment methods.');
+  }
+
+  @override
+  Future<BookingPaymentView> createWithPaymentMethod(String bookingId,
+      {required String gatewayCode,
+      String? quoteToken,
+      bool usePremiumVoucher = false}) =>
+      create(bookingId);
+}
+
 class FutureOptions extends Options {
   final start =
       ((DateTime.now().millisecondsSinceEpoch ~/ 1800000) + 96) * 1800000;
@@ -120,6 +137,28 @@ class VoucherPayments extends Payments
 }
 
 void main() {
+  testWidgets('refund details read the existing payment without offering checkout',
+      (tester) async {
+    final repo = RefundPayments()
+      ..status = 'reconciliation_required'
+      ..paymentStatus = 'cleared'
+      ..refundStatus = 'completed';
+    await tester.pumpWidget(MaterialApp(
+        home: BookingPaymentScreen(
+      repository: repo,
+      bookingId: 'booking',
+      isCurrent: () => true,
+      detailsOnly: true,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund details'), findsOneWidget);
+    expect(find.text('Refund completed'), findsOneWidget);
+    expect(find.text('Continue to Payment'), findsNothing);
+    expect(repo.gets, 1);
+    expect(repo.methodLoads, 0);
+    expect(repo.creates, 0);
+  });
+
   testWidgets(
       'trusted voucher is opt-in, reloads total, and checkout keeps the selected choice',
       (tester) async {

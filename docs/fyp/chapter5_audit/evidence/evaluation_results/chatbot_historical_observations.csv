@@ -1,0 +1,6 @@
+case,source,evidence_class,sample_count,provider_requests_per_case,median_elapsed_ms,reply_characters
+progressive_overload_education,docs/integration/module6-ai-assistant.md,historical_live_smoke,1,1,,200
+catalogue_equipment_guidance,docs/integration/module6-ai-assistant.md,historical_live_smoke,1,1,,232
+terminal_coach_list_before,docs/integration/ai-chatbot-optimization-implementation.md,historical_offline_injected,7,2,39.55,
+terminal_coach_list_after,docs/integration/ai-chatbot-optimization-implementation.md,historical_offline_injected,7,1,25.56,
+

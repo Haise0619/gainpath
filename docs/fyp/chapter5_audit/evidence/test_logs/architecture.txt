@@ -1,0 +1,10 @@
+Run: architecture
+Base commit: f81fb2d5d48857c75cb5f1b8491086fc4bcceba6 (audited dirty working tree)
+Started UTC: 2026-11-25T14:43:44.9361463Z
+Ended UTC: 2026-11-25T14:44:17.1403523Z
+Duration seconds (wall-clock): 32.2
+Child process exit code: -1073741816
+See diagnostic summary.
+apps/mobile/lib/features/workout/presentation/member/widgets/workout_achievement_feedback.dart:6: cross-feature implementation access; use a navigation or domain contract (../../../../gamification/application/member_achievements_controller.dart)
+apps/mobile/lib/features/workout/presentation/member/widgets/workout_achievement_feedback.dart:8: cross-feature implementation access; use a navigation or domain contract (../../../../gamification/presentation/member/member_achievements_screen.dart)
+

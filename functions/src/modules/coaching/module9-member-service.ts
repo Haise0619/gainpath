@@ -43,7 +43,7 @@ export async function module9MemberCommand(store: DocumentStore, auth: Auth, raw
       try {
       if (data.schemaVersion !== 1 || data.recipientId !== uid || typeof data.title !== 'string' || typeof data.message !== 'string'
         || !Number.isSafeInteger(data.createdAtMillis) || typeof data.read !== 'boolean') throw new DomainError('failed-precondition', 'Notification requires review.');
-      const record={ id, title: data.title, message: data.message, bookingId: data.bookingId ?? null, createdAtMillis: data.createdAtMillis, read: data.read };
+      const record={ id, title: data.title, message: data.message, bookingId: data.bookingId ?? null, ...(data.type === 'group_class' && typeof data.groupClassId === 'string' ? {groupClassId:data.groupClassId} : {}), createdAtMillis: data.createdAtMillis, read: data.read };
       if(!isRecommendation(data)){records.push(record);continue;}
       if(data.type!=='recommendation')throw new DomainError('failed-precondition','Recommendation type requires review.');
       if (data.recommendationKind==='routine' && d.includeRoutine!==true) continue;

@@ -245,6 +245,8 @@ class FirebaseBookingListRepository
             'includeCancellationDetails': true,
             'includeMemberChangeDetails': true,
             'includePaymentDetails': true,
+            if (role == AppRole.member && scope.datasetScope == null)
+              'allowPartialResults': true,
             'organizationId': scope.organizationId,
             if (coachId != null) 'coachId': coachId,
             if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,

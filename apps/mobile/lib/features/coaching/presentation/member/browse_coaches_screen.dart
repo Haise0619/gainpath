@@ -2,6 +2,7 @@ import 'package:gainpath_domain/membership.dart';
 import '../../../../navigation/membership_access_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'booking_schedule_screen.dart';
 import '../../../../presentation/shared/coach_profile_screen.dart';
@@ -21,8 +22,13 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.bookingsBuilder, this.onMessages, this.enforceMembership = false, this.membershipAccessRepository,
-      this.loadSelectedBranch, this.loadBranches});
+      this.bookingsBuilder,
+      this.onMessages,
+      this.enforceMembership = false,
+      this.membershipAccessRepository,
+      this.loadSelectedBranch,
+      this.loadBranches,
+      this.onOpenGroupClasses});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
@@ -33,6 +39,7 @@ class BrowseCoachesScreen extends StatefulWidget {
   final VoidCallback? onMessages;
   final Future<String?> Function()? loadSelectedBranch;
   final Future<Map<String, String>> Function()? loadBranches;
+  final VoidCallback? onOpenGroupClasses;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
 }
@@ -47,8 +54,6 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   bool _filterBranch = false;
   int _branchRead = 0;
   CoachDirectoryCubit? _directory;
-  int _tab = 0;
-  Widget? _bookings;
   @override
   void initState() {
     super.initState();
@@ -74,10 +79,13 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   Future<void> _loadBranches(int read) async {
     try {
       final names = await widget.loadBranches?.call();
-      if (names != null && mounted && read == _branchRead && widget.isCurrent?.call() == true) {
+      if (names != null &&
+          mounted &&
+          read == _branchRead &&
+          widget.isCurrent?.call() == true) {
         setState(() => _branchNames = names);
       }
-    } catch (_) { /* Keep the directory usable. */ }
+    } catch (_) {/* Keep the directory usable. */}
   }
 
   Future<void> _loadBranch(Future<String?> Function() loader, int read) async {
@@ -110,8 +118,6 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       _branchNames = {};
       _filterBranch = false;
       _specialtyFilter = 'All';
-      _tab = 0;
-      _bookings = null;
       _bind();
     }
   }
@@ -129,66 +135,119 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
         _specialtyFilter = 'All';
         _sortBy = _SortBy.rating;
         _filterBranch = false;
+        _selectedBranch = '';
       });
-  Widget _tabs(BuildContext context) {
+
+  void _openMyBookings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) {
+          final isDark = Theme.of(routeContext).brightness == Brightness.dark;
+          final colors = Theme.of(routeContext).colorScheme;
+          final validSession = !widget.live || widget.isCurrent?.call() == true;
+          final content = widget.bookingsBuilder?.call(routeContext) ??
+              (widget.live
+                  ? const Center(
+                      child: Text('Bookings unavailable in this view.'))
+                  : BookingScheduleScreen(
+                      embedded: true,
+                      onFindCoach: () => Navigator.of(routeContext).maybePop(),
+                    ));
+          return Scaffold(
+            backgroundColor: isDark ? colors.surface : const Color(0xFFF8F7FC),
+            appBar: AppBar(
+              backgroundColor: isDark ? colors.surface : AppColors.surface,
+              foregroundColor: isDark ? colors.onSurface : AppColors.ink,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              title: const Text('My Bookings'),
+            ),
+            body: SafeArea(
+              top: false,
+              child: !validSession
+                  ? const Center(
+                      child: Text('Bookings unavailable for this session.'))
+                  : NotificationListener<SwitchToFindCoachNotification>(
+                      onNotification: (_) {
+                        Navigator.of(routeContext).maybePop();
+                        return true;
+                      },
+                      child: content,
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _quickAccess(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-            color: colors.primary.withValues(alpha: .08),
-            borderRadius: BorderRadius.circular(18)),
-        child: Row(children: [
-          for (var index = 0; index < 2; index++)
-            Expanded(
-                child: Padding(
-                    padding: EdgeInsets.only(left: index == 1 ? 4 : 0),
-                    child: Semantics(
-                        selected: _tab == index,
-                        child: TextButton(
-                            onPressed: () => setState(() {
-                                  _tab = index;
-                                  if (index == 1 && _bookings == null) {
-                                    _bookings = widget.bookingsBuilder
-                                            ?.call(context) ??
-                                        (widget.live
-                                            ? const Center(
-                                                child: Text(
-                                                    'Bookings unavailable in this view.'))
-                                            : BookingScheduleScreen(
-                                                embedded: true,
-                                                onFindCoach: () =>
-                                                    setState(() => _tab = 0),
-                                              ));
-                                  }
-                                }),
-                            style: TextButton.styleFrom(
-                                backgroundColor: _tab == index
-                                    ? colors.primary
-                                    : Colors.transparent,
-                                foregroundColor: _tab == index
-                                    ? colors.onPrimary
-                                    : colors.onSurface,
-                                minimumSize: const Size(0, 48),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 10),
-                                textStyle: memberCoachTypography(context)
-                                    .titleSmall
-                                    ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14))),
-                            child: Text(
-                                index == 0 ? 'Find Coach' : 'My Bookings',
-                                textAlign: TextAlign.center))))),
-        ]));
+    final text = memberCoachTypography(context);
+    final border = colors.brightness == Brightness.dark
+        ? colors.outlineVariant
+        : AppColors.hairline;
+    Widget tile(String label, IconData icon, Key key, VoidCallback action) =>
+        Expanded(
+          child: Semantics(
+            button: true,
+            child: InkWell(
+              key: key,
+              onTap: action,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 15),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: colors.primary, size: 24),
+                    const SizedBox(height: 8),
+                    Text(label,
+                        textAlign: TextAlign.center,
+                        style: text.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSurface)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+    final classes = widget.onOpenGroupClasses;
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          tile('My Bookings', Icons.calendar_today_outlined,
+              const Key('coaches-my-bookings-button'), _openMyBookings),
+          if (classes != null) ...[
+            VerticalDivider(width: 1, indent: 12, endIndent: 12, color: border),
+            tile('Group Classes', Icons.groups_outlined,
+                const Key('coaches-group-classes-entry'), classes),
+          ],
+        ]),
+      ),
+    );
   }
 
   Future<void> _filters(List<String> specialties) async {
+    var selectedBranch = _filterBranch ? (_selectedBranch ?? '') : '';
+    var filterBranch = _filterBranch;
     var specialty = _specialtyFilter;
     var sort = _sortBy;
     final result = await showModalBottomSheet<
-            ({String specialty, _SortBy sort})>(
+            ({
+              String? branch,
+              bool filterBranch,
+              String specialty,
+              _SortBy sort
+            })>(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
@@ -198,8 +257,12 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
         builder: (context) => StatefulBuilder(builder: (context, update) {
               final colors = Theme.of(context).colorScheme;
               final text = memberCoachTypography(context);
-              final activeCount =
-                  (specialty != 'All' ? 1 : 0) + (sort != _SortBy.rating ? 1 : 0);
+              final isLocActive = filterBranch && selectedBranch.isNotEmpty;
+              final isSpecActive = specialty != 'All';
+              final isSortActive = sort != _SortBy.rating;
+              final activeCount = (isLocActive ? 1 : 0) +
+                  (isSpecActive ? 1 : 0) +
+                  (isSortActive ? 1 : 0);
               return ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.sizeOf(context).height * 0.85,
@@ -232,7 +295,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: colors.primary.withValues(alpha: .12),
+                                        color: colors.primary
+                                            .withValues(alpha: .12),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
@@ -262,15 +326,118 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (_branchNames.isNotEmpty) ...[
+                                Row(
+                                  children: [
+                                    Icon(Icons.location_on_outlined,
+                                        size: 18, color: colors.primary),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Training location',
+                                        style: text.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Select your preferred gym branch',
+                                  style: text.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ChoiceChip(
+                                      label: const Text('All branches'),
+                                      selected: !filterBranch ||
+                                          selectedBranch.isEmpty,
+                                      onSelected: (_) => update(() {
+                                        selectedBranch = '';
+                                        filterBranch = false;
+                                      }),
+                                      selectedColor: colors.primary,
+                                      checkmarkColor: colors.onPrimary,
+                                      backgroundColor: colors
+                                          .surfaceContainerHighest
+                                          .withValues(alpha: .35),
+                                      side: BorderSide(
+                                        color: (!filterBranch ||
+                                                selectedBranch.isEmpty)
+                                            ? colors.primary
+                                            : colors.outlineVariant
+                                                .withValues(alpha: .5),
+                                      ),
+                                      labelStyle: text.labelLarge?.copyWith(
+                                        fontWeight: (!filterBranch ||
+                                                selectedBranch.isEmpty)
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: (!filterBranch ||
+                                                selectedBranch.isEmpty)
+                                            ? colors.onPrimary
+                                            : colors.onSurface,
+                                      ),
+                                    ),
+                                    for (final branch in _branchNames.entries)
+                                      ChoiceChip(
+                                        label: Text(branch.value),
+                                        selected: filterBranch &&
+                                            selectedBranch == branch.key,
+                                        onSelected: (_) => update(() {
+                                          if (filterBranch &&
+                                              selectedBranch == branch.key) {
+                                            selectedBranch = '';
+                                            filterBranch = false;
+                                          } else {
+                                            selectedBranch = branch.key;
+                                            filterBranch = true;
+                                          }
+                                        }),
+                                        selectedColor: colors.primary,
+                                        checkmarkColor: colors.onPrimary,
+                                        backgroundColor: colors
+                                            .surfaceContainerHighest
+                                            .withValues(alpha: .35),
+                                        side: BorderSide(
+                                          color: (filterBranch &&
+                                                  selectedBranch == branch.key)
+                                              ? colors.primary
+                                              : colors.outlineVariant
+                                                  .withValues(alpha: .5),
+                                        ),
+                                        labelStyle: text.labelLarge?.copyWith(
+                                          fontWeight: (filterBranch &&
+                                                  selectedBranch == branch.key)
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          color: (filterBranch &&
+                                                  selectedBranch == branch.key)
+                                              ? colors.onPrimary
+                                              : colors.onSurface,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+                              ],
                               Row(
                                 children: [
                                   Icon(Icons.category_outlined,
                                       size: 18, color: colors.primary),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    'Specialty',
-                                    style: text.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                  Expanded(
+                                    child: Text(
+                                      'Specialty',
+                                      style: text.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -292,12 +459,14 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                     label: Text(s),
                                     selected: isSelected,
                                     onSelected: (_) => update(() {
-                                      specialty =
-                                          (isSelected && s != 'All') ? 'All' : s;
+                                      specialty = (isSelected && s != 'All')
+                                          ? 'All'
+                                          : s;
                                     }),
                                     selectedColor: colors.primary,
                                     checkmarkColor: colors.onPrimary,
-                                    backgroundColor: colors.surfaceContainerHighest
+                                    backgroundColor: colors
+                                        .surfaceContainerHighest
                                         .withValues(alpha: .35),
                                     side: BorderSide(
                                       color: isSelected
@@ -322,10 +491,12 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                   Icon(Icons.sort_rounded,
                                       size: 18, color: colors.primary),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    'Sort by',
-                                    style: text.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                  Expanded(
+                                    child: Text(
+                                      'Sort by',
+                                      style: text.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -346,111 +517,115 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                   }
                                 },
                                 child: Column(
-                                children: _SortBy.values.map((option) {
-                                  final isSelected = sort == option;
-                                  final (title, subtitle, icon) = switch (option) {
-                                    _SortBy.rating => (
-                                        'Highest rated',
-                                        'Top rated coaches first',
-                                        Icons.star_rounded,
-                                      ),
-                                    _SortBy.priceLow => (
-                                        'Price: low to high',
-                                        'Most affordable session fees first',
-                                        Icons.payments_outlined,
-                                      ),
-                                    _SortBy.experience => (
-                                        'Most experienced',
-                                        'Coaches with highest years in practice',
-                                        Icons.workspace_premium_outlined,
-                                      ),
-                                  };
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: InkWell(
-                                      onTap: () => update(() => sort = option),
-                                      borderRadius: BorderRadius.circular(14),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? colors.primary
-                                                  .withValues(alpha: .06)
-                                              : colors.surface,
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          border: Border.all(
+                                  children: _SortBy.values.map((option) {
+                                    final isSelected = sort == option;
+                                    final (title, subtitle, icon) =
+                                        switch (option) {
+                                      _SortBy.rating => (
+                                          'Highest rated',
+                                          'Top rated coaches first',
+                                          Icons.star_rounded,
+                                        ),
+                                      _SortBy.priceLow => (
+                                          'Price: low to high',
+                                          'Most affordable session fees first',
+                                          Icons.payments_outlined,
+                                        ),
+                                      _SortBy.experience => (
+                                          'Most experienced',
+                                          'Coaches with highest years in practice',
+                                          Icons.workspace_premium_outlined,
+                                        ),
+                                    };
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: InkWell(
+                                        onTap: () =>
+                                            update(() => sort = option),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
                                             color: isSelected
                                                 ? colors.primary
-                                                : colors.outlineVariant
-                                                    .withValues(alpha: .4),
-                                            width: isSelected ? 1.5 : 1,
+                                                    .withValues(alpha: .06)
+                                                : colors.surface,
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? colors.primary
+                                                  : colors.outlineVariant
+                                                      .withValues(alpha: .4),
+                                              width: isSelected ? 1.5 : 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 36,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: isSelected
+                                                      ? colors.primary
+                                                          .withValues(
+                                                              alpha: .12)
+                                                      : colors
+                                                          .surfaceContainerHighest
+                                                          .withValues(
+                                                              alpha: .5),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(
+                                                  icon,
+                                                  size: 20,
+                                                  color: isSelected
+                                                      ? colors.primary
+                                                      : colors.onSurfaceVariant,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      title,
+                                                      style: text.bodyMedium
+                                                          ?.copyWith(
+                                                        fontWeight: isSelected
+                                                            ? FontWeight.w700
+                                                            : FontWeight.w600,
+                                                        color: isSelected
+                                                            ? colors.primary
+                                                            : colors.onSurface,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      subtitle,
+                                                      style: text.bodySmall
+                                                          ?.copyWith(
+                                                        color: colors
+                                                            .onSurfaceVariant,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Radio<_SortBy>(
+                                                value: option,
+                                                activeColor: colors.primary,
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 36,
-                                              height: 36,
-                                              decoration: BoxDecoration(
-                                                color: isSelected
-                                                    ? colors.primary
-                                                        .withValues(alpha: .12)
-                                                    : colors
-                                                        .surfaceContainerHighest
-                                                        .withValues(alpha: .5),
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Icon(
-                                                icon,
-                                                size: 20,
-                                                color: isSelected
-                                                    ? colors.primary
-                                                    : colors.onSurfaceVariant,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    title,
-                                                    style: text.bodyMedium
-                                                        ?.copyWith(
-                                                      fontWeight: isSelected
-                                                          ? FontWeight.w700
-                                                          : FontWeight.w600,
-                                                      color: isSelected
-                                                          ? colors.primary
-                                                          : colors.onSurface,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    subtitle,
-                                                    style: text.bodySmall
-                                                        ?.copyWith(
-                                                      color: colors
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Radio<_SortBy>(
-                                              value: option,
-                                              activeColor: colors.primary,
-                                            ),
-                                          ],
-                                        ),
                                       ),
-                                    ),
-                                  );
-                                }).toList(),
+                                    );
+                                  }).toList(),
+                                ),
                               ),
-                            ),
                               const SizedBox(height: 16),
                               Container(
                                 padding: const EdgeInsets.all(12),
@@ -458,7 +633,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                   color: colors.primary.withValues(alpha: .05),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: colors.primary.withValues(alpha: .12),
+                                    color:
+                                        colors.primary.withValues(alpha: .12),
                                   ),
                                 ),
                                 child: Row(
@@ -489,47 +665,116 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                           color: colors.surface,
                           border: Border(
                             top: BorderSide(
-                              color: colors.outlineVariant.withValues(alpha: .3),
+                              color:
+                                  colors.outlineVariant.withValues(alpha: .3),
                             ),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => update(() {
-                                  specialty = 'All';
-                                  sort = _SortBy.rating;
-                                }),
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final textScale =
+                                MediaQuery.textScalerOf(context).scale(14);
+                            final isNarrowOrLargeText =
+                                constraints.maxWidth < 280 || textScale > 18;
+                            if (isNarrowOrLargeText) {
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(
+                                      context,
+                                      (
+                                        branch: selectedBranch,
+                                        filterBranch: filterBranch,
+                                        specialty: specialty,
+                                        sort: sort,
+                                      ),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: colors.primary,
+                                      foregroundColor: colors.onPrimary,
+                                      minimumSize: const Size(0, 48),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: const Text('Apply Filters'),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton(
+                                    onPressed: () => update(() {
+                                      selectedBranch = '';
+                                      filterBranch = false;
+                                      specialty = 'All';
+                                      sort = _SortBy.rating;
+                                    }),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 48),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: const Text('Reset All'),
+                                  ),
+                                ],
+                              );
+                            }
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => update(() {
+                                      selectedBranch = '';
+                                      filterBranch = false;
+                                      specialty = 'All';
+                                      sort = _SortBy.rating;
+                                    }),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 48),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text('Reset All'),
+                                    ),
                                   ),
                                 ),
-                                child: const Text('Reset'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 2,
-                              child: FilledButton(
-                                onPressed: () => Navigator.pop(
-                                  context,
-                                  (specialty: specialty, sort: sort),
-                                ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: colors.primary,
-                                  foregroundColor: colors.onPrimary,
-                                  minimumSize: const Size(0, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed: () => Navigator.pop(
+                                      context,
+                                      (
+                                        branch: selectedBranch,
+                                        filterBranch: filterBranch,
+                                        specialty: specialty,
+                                        sort: sort,
+                                      ),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: colors.primary,
+                                      foregroundColor: colors.onPrimary,
+                                      minimumSize: const Size(0, 48),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text('Apply Filters'),
+                                    ),
                                   ),
                                 ),
-                                child: const Text('Apply'),
-                              ),
-                            ),
-                          ],
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -539,6 +784,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
             }));
     if (result != null && mounted) {
       setState(() {
+        _selectedBranch = result.branch;
+        _filterBranch = result.filterBranch;
         _specialtyFilter = result.specialty;
         _sortBy = result.sort;
       });
@@ -574,14 +821,19 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       'All',
       ...{for (final c in coaches) c.specialty}
     ];
-    final filtered = _filterBranch || _query.trim().isNotEmpty ||
-        _specialtyFilter != 'All' ||
-        _sortBy != _SortBy.rating;
+    final isBranchActive =
+        _filterBranch && _selectedBranch != null && _selectedBranch!.isNotEmpty;
+    final isSpecialtyActive = _specialtyFilter != 'All';
+    final isSortActive = _sortBy != _SortBy.rating;
+    final activeFilterCount = (isBranchActive ? 1 : 0) +
+        (isSpecialtyActive ? 1 : 0) +
+        (isSortActive ? 1 : 0);
     final hasNarrowingFilters =
-        _query.trim().isNotEmpty || _specialtyFilter != 'All' || _filterBranch;
+        _query.trim().isNotEmpty || isSpecialtyActive || isBranchActive;
     final visible = coaches.where((c) {
       final q = _query.trim().toLowerCase();
-      return (!_filterBranch || published[c.id]?.branchIds.contains(_selectedBranch) == true) &&
+      return (!_filterBranch ||
+              published[c.id]?.branchIds.contains(_selectedBranch) == true) &&
           (_specialtyFilter == 'All' || c.specialty == _specialtyFilter) &&
           (q.isEmpty ||
               c.name.toLowerCase().contains(q) ||
@@ -663,428 +915,361 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
         child: child);
     final error = state?.message != null;
     final loading = state?.loading == true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      appBar: AppBar(title: const Text('Coaches'), actions: [if (widget.onMessages != null) IconButton(tooltip: 'Messages', onPressed: widget.onMessages, icon: const Icon(Icons.chat_bubble_outline_rounded))]),
-      body: Column(children: [
-        Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: _tabs(context)),
-        Expanded(
-            child: IndexedStack(index: _tab, children: [
-          TickerMode(
-              enabled: _tab == 0,
-              child: discovery(RefreshIndicator(
-                  onRefresh: () async {
-                    await _directory?.refresh();
-                  },
-                  child: CustomScrollView(
-                      key: const PageStorageKey('member-coaches-list'),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                            sliver: SliverToBoxAdapter(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _searchController,
-                                            onChanged: (value) =>
-                                                setState(() => _query = value),
-                                            decoration: InputDecoration(
-                                              hintText: _specialtyFilter !=
-                                                      'All'
-                                                  ? 'Search…'
-                                                  : (MediaQuery.textScalerOf(
-                                                                      context)
-                                                                  .scale(14) >
-                                                              19
-                                                          ? 'Search…'
-                                                          : 'Search coaches…'),
-                                              hintStyle: text.bodyMedium
-                                                  ?.copyWith(
-                                                color: colors.onSurfaceVariant
-                                                    .withValues(alpha: .65),
-                                                fontSize: 13,
-                                              ),
-                                              isDense: true,
-                                              filled: true,
-                                              fillColor: colors
-                                                  .surfaceContainerHighest
-                                                  .withValues(alpha: .35),
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 12),
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colors.outlineVariant
-                                                      .withValues(alpha: .5),
-                                                ),
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colors.outlineVariant
-                                                      .withValues(alpha: .5),
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colors.primary,
-                                                  width: 1.5,
-                                                ),
-                                              ),
-                                              prefixIcon: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const SizedBox(width: 12),
-                                                  Icon(Icons.search_rounded,
-                                                      size: 20,
-                                                      color: colors
-                                                          .onSurfaceVariant),
-                                                  if (_specialtyFilter !=
-                                                      'All') ...[
-                                                    const SizedBox(width: 8),
-                                                    ConstrainedBox(
-                                                      constraints:
-                                                          const BoxConstraints(
-                                                              maxWidth: 120),
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets.only(
-                                                                left: 8,
-                                                                right: 4,
-                                                                top: 4,
-                                                                bottom: 4),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: colors.primary
-                                                              .withValues(
-                                                                  alpha: .12),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(14),
-                                                          border: Border.all(
-                                                            color: colors
-                                                                .primary
-                                                                .withValues(
-                                                                    alpha: .25),
-                                                          ),
-                                                        ),
-                                                        child: Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            Flexible(
-                                                              child: Text(
-                                                                _specialtyFilter,
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                style: text
-                                                                    .labelSmall
-                                                                    ?.copyWith(
-                                                                  color: colors
-                                                                      .primary,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                                width: 2),
-                                                            Semantics(
-                                                              button: true,
-                                                              label:
-                                                                  'Remove $_specialtyFilter filter',
-                                                              child: Tooltip(
-                                                                message:
-                                                                    'Remove $_specialtyFilter filter',
-                                                                child: InkWell(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              10),
-                                                                  onTap: () => setState(() =>
-                                                                      _specialtyFilter =
-                                                                          'All'),
-                                                                  child:
-                                                                      Padding(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .all(
-                                                                                2),
-                                                                    child: Icon(
-                                                                      Icons
-                                                                          .close_rounded,
-                                                                      size: 14,
-                                                                      color: colors
-                                                                          .primary,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                  const SizedBox(width: 6),
-                                                ],
-                                              ),
-                                              suffixIcon: filtered
-                                                  ? Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              right: 6),
-                                                      child: TextButton(
-                                                        onPressed: _clear,
-                                                        style: TextButton
-                                                            .styleFrom(
-                                                          visualDensity:
-                                                              VisualDensity
-                                                                  .compact,
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 4),
-                                                          minimumSize:
-                                                              Size.zero,
-                                                          tapTargetSize:
-                                                              MaterialTapTargetSize
-                                                                  .shrinkWrap,
-                                                          foregroundColor:
-                                                              colors.primary,
-                                                          textStyle: text
-                                                              .labelSmall
-                                                              ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                          ),
-                                                        ),
-                                                        child: const Text(
-                                                            'Clear filters'),
-                                                      ),
-                                                    )
-                                                  : null,
+      backgroundColor: isDark ? colors.surface : const Color(0xFFF8F7FC),
+      appBar: AppBar(
+        backgroundColor: isDark ? colors.surface : AppColors.surface,
+        foregroundColor: isDark ? colors.onSurface : const Color(0xFF211A31),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text('Coaches'),
+        actions: [
+          if (widget.onMessages != null)
+            IconButton(
+              tooltip: 'Messages',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: widget.onMessages,
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+            )
+          else
+            const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: NestedScrollView(
+          headerSliverBuilder: (_, __) => [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              sliver: SliverToBoxAdapter(child: _quickAccess(context)),
+            ),
+          ],
+          body: discovery(RefreshIndicator(
+              onRefresh: () async {
+                await _directory?.refresh();
+              },
+              child: CustomScrollView(
+                  key: const PageStorageKey('member-coaches-list'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 26),
+                        sliver: SliverToBoxAdapter(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SizedBox(
+                                      child: TextField(
+                                        controller: _searchController,
+                                        onChanged: (value) =>
+                                            setState(() => _query = value),
+                                        style: text.bodyMedium?.copyWith(
+                                          fontSize: 14,
+                                          color: isDark
+                                              ? colors.onSurface
+                                              : const Color(0xFF211A31),
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'Search coaches…',
+                                          hintStyle: text.bodyMedium?.copyWith(
+                                            color: (isDark
+                                                    ? colors.onSurfaceVariant
+                                                    : const Color(0xFF766D87))
+                                                .withValues(alpha: .75),
+                                            fontSize: 13,
+                                          ),
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: isDark
+                                              ? colors.surfaceContainerHighest
+                                                  .withValues(alpha: .35)
+                                              : Colors.white,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 14, vertical: 13),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            borderSide: BorderSide(
+                                              color: isDark
+                                                  ? colors.outlineVariant
+                                                      .withValues(alpha: .5)
+                                                  : const Color(0xFFE7E3EF),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Badge(
-                                            isLabelVisible:
-                                                _specialtyFilter != 'All' ||
-                                                    _sortBy != _SortBy.rating,
-                                            label: Text(((_specialtyFilter == 'All'
-                                                        ? 0
-                                                        : 1) +
-                                                    (_sortBy == _SortBy.rating
-                                                        ? 0
-                                                        : 1))
-                                                .toString()),
-                                            child: IconButton.filledTonal(
-                                                tooltip:
-                                                    'Filter and sort coaches',
-                                                onPressed: () =>
-                                                    _filters(specialties),
-                                                style: IconButton.styleFrom(
-                                                    backgroundColor: colors
-                                                        .primary
-                                                        .withValues(alpha: .08),
-                                                    foregroundColor:
-                                                        colors.primary,
-                                                    minimumSize: const Size(48, 48),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                                                icon: const Icon(Icons.tune_rounded, size: 22))),
-                                      ]),
-                                  const SizedBox(height: 12),
-                                  if (_branchNames.isNotEmpty)
-                                    InputDecorator(
-                                      decoration: const InputDecoration(labelText: 'Training location'),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          isExpanded: true,
-                                          value: _filterBranch && _branchNames.containsKey(_selectedBranch) ? _selectedBranch : '',
-                                          items: [
-                                            const DropdownMenuItem(value: '', child: Text('All branches')),
-                                            for (final branch in _branchNames.entries)
-                                              DropdownMenuItem(value: branch.key, child: Text(branch.value)),
-                                          ],
-                                          onChanged: (value) => setState(() {
-                                            _selectedBranch = value;
-                                            _filterBranch = value != null && value.isNotEmpty;
-                                          }),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            borderSide: BorderSide(
+                                              color: isDark
+                                                  ? colors.outlineVariant
+                                                      .withValues(alpha: .5)
+                                                  : const Color(0xFFE7E3EF),
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            borderSide: BorderSide(
+                                              color: isDark
+                                                  ? colors.primary
+                                                  : const Color(0xFF7027DC),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          prefixIcon: Icon(
+                                            Icons.search_rounded,
+                                            size: 20,
+                                            color: isDark
+                                                ? colors.onSurfaceVariant
+                                                : const Color(0xFF766D87),
+                                          ),
+                                          suffixIcon: _query.isNotEmpty
+                                              ? IconButton(
+                                                  tooltip: 'Clear search query',
+                                                  icon: const Icon(
+                                                      Icons.close_rounded,
+                                                      size: 18),
+                                                  color: isDark
+                                                      ? colors.onSurfaceVariant
+                                                      : const Color(0xFF766D87),
+                                                  onPressed: () {
+                                                    _searchController.clear();
+                                                    setState(() => _query = '');
+                                                  },
+                                                )
+                                              : null,
                                         ),
                                       ),
                                     ),
-                                  SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                          children: specialties
-                                              .map((s) => Padding(
-                                                  padding: const EdgeInsets.only(
-                                                      right: 8),
-                                                  child: ChoiceChip(
-                                                      label: Text(s),
-                                                      selected:
-                                                          s == _specialtyFilter,
-                                                      onSelected: (_) => setState(() =>
-                                                          _specialtyFilter = (s == _specialtyFilter && s != 'All')
-                                                              ? 'All'
-                                                              : s),
-                                                      selectedColor:
-                                                          colors.primary,
-                                                      checkmarkColor:
-                                                          colors.onPrimary,
-                                                      labelStyle: text.labelLarge?.copyWith(
-                                                          color: s == _specialtyFilter
-                                                              ? colors.onPrimary
-                                                              : colors
-                                                                  .onSurface),
-                                                      materialTapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .padded)))
-                                              .toList())),
-                                ]))),
-                        if (!current)
-                          SliverToBoxAdapter(
-                              child: status(
-                                  Icons.lock_outline,
-                                  'Coaches unavailable',
-                                  'Your session has changed. Return and sign in again.'))
-                        else if (loading)
-                          const SliverToBoxAdapter(
-                              child: Padding(
-                                  padding: EdgeInsets.all(32),
-                                  child: Column(children: [
-                                    CircularProgressIndicator(),
-                                    SizedBox(height: 16),
-                                    Text('Finding your coaches…')
-                                  ])))
-                        else if (error && coaches.isEmpty)
-                          SliverToBoxAdapter(
-                              child: status(
-                                  Icons.cloud_off_outlined,
-                                  'Could not load coaches',
-                                  'Check your connection and try again.',
-                                  retry: true))
-                        else if (visible.isEmpty)
-                          SliverToBoxAdapter(
-                              child: hasNarrowingFilters
-                                  ? status(
-                                      Icons.search_off_rounded,
-                                      'No matching coaches',
-                                      'Try another name or specialty, or clear your filters.',
-                                      clear: true)
-                                  : status(
-                                      Icons.people_outline,
-                                      'No coaches available yet.',
-                                      'Published coaches will appear here. Pull down to refresh.'))
-                        else
-                          SliverPadding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              sliver: SliverList.builder(
-                                  itemCount: visible.length,
-                                  itemBuilder: (context, index) {
-                                    final c = visible[index],
-                                        p = published[c.id];
-                                    return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
-                                        child: CoachCard(
-                                            key: ValueKey(
-                                                'member-coach-${c.id}'),
-                                            coach: c,
-                                            published: p,
-                                            branchNames: _branchNames,
-                                            photo: p == null
-                                                ? null
-                                                : PublishedCoachPhoto(
-                                                    coach: p,
-                                                    repository:
-                                                        widget.liveRepository!,
-                                                    isCurrent:
-                                                        widget.isCurrent!,
-                                                    size: 56),
-                                            onTap: () {
-                                              if (widget.live &&
-                                                  widget.isCurrent?.call() !=
-                                                      true) {
-                                                _directory?.invalidate();
-                                                return;
-                                              }
-                                              if (p != null) {
-                                                widget.onOpenPublished
-                                                    ?.call(c.id);
-                                              } else {
-                                                Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                        builder: (_) =>
-                                                            CoachProfileScreen(
-                                                                coach: c)));
-                                              }
-                                            }));
-                                  })),
-                        if (current && !loading && state?.nextCursor != null)
-                          SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                              sliver: SliverToBoxAdapter(
-                                  child: Column(children: [
-                                if (error)
-                                  Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Text(
-                                          'Could not load more coaches. Try again.',
-                                          style: text.bodyMedium?.copyWith(
-                                              color: colors.onSurfaceVariant))),
-                                SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton(
-                                        onPressed: state!.loadingMore
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Tooltip(
+                                    message: 'Filter and sort coaches',
+                                    child: Material(
+                                      color:
+                                          colors.primary.withValues(alpha: .09),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        side: BorderSide(
+                                          color: activeFilterCount > 0
+                                              ? (isDark
+                                                  ? colors.primary
+                                                  : const Color(0xFF7027DC))
+                                              : (isDark
+                                                  ? colors.outlineVariant
+                                                      .withValues(alpha: .5)
+                                                  : const Color(0xFFE7E3EF)),
+                                        ),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        onTap: () => _filters(specialties),
+                                        child: SizedBox(
+                                          width: 50,
+                                          height: 50,
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.tune_rounded,
+                                                size: 21,
+                                                color: colors.primary,
+                                              ),
+                                              if (activeFilterCount > 0)
+                                                Positioned(
+                                                  key: const Key(
+                                                      'coach-active-filter-indicator'),
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: BoxDecoration(
+                                                      color: isDark
+                                                          ? colors.primary
+                                                          : const Color(
+                                                              0xFF7027DC),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (!loading &&
+                                  (!error || coaches.isNotEmpty) &&
+                                  current)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 14),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                          child: Text(
+                                        '${visible.length} ${visible.length == 1 ? "coach" : "coaches"} available',
+                                        style: text.bodySmall?.copyWith(
+                                          color: colors.onSurface,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      )),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                          child: Text(
+                                        isBranchActive
+                                            ? _branchNames[_selectedBranch] ??
+                                                'Selected branch'
+                                            : 'All branches',
+                                        textAlign: TextAlign.end,
+                                        style: text.bodySmall?.copyWith(
+                                            color: colors.onSurfaceVariant),
+                                      )),
+                                    ],
+                                  ),
+                                ),
+                              if (isSpecialtyActive || isSortActive)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                      [
+                                        if (isSpecialtyActive) _specialtyFilter,
+                                        if (isSortActive)
+                                          _sortBy == _SortBy.priceLow
+                                              ? 'Sorted by price'
+                                              : 'Sorted by experience',
+                                      ].join(' · '),
+                                      style: text.bodySmall
+                                          ?.copyWith(color: colors.primary)),
+                                ),
+                            ]))),
+                    if (!current)
+                      SliverToBoxAdapter(
+                          child: status(
+                              Icons.lock_outline,
+                              'Coaches unavailable',
+                              'Your session has changed. Return and sign in again.'))
+                    else if (loading)
+                      SliverToBoxAdapter(
+                        child: Semantics(
+                          label: 'Loading coaches',
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(children: [
+                              for (var i = 0; i < 2; i++)
+                                Container(
+                                  height: 88,
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: colors.surfaceContainerHighest
+                                        .withValues(alpha: .48),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                            ]),
+                          ),
+                        ),
+                      )
+                    else if (error && coaches.isEmpty)
+                      SliverToBoxAdapter(
+                          child: status(
+                              Icons.cloud_off_outlined,
+                              'Could not load coaches',
+                              'Check your connection and try again.',
+                              retry: true))
+                    else if (visible.isEmpty)
+                      SliverToBoxAdapter(
+                          child: hasNarrowingFilters
+                              ? status(
+                                  Icons.search_off_rounded,
+                                  'No matching coaches',
+                                  'Try another name or specialty, or clear your filters.',
+                                  clear: true)
+                              : status(
+                                  Icons.people_outline,
+                                  'No coaches available',
+                                  'Pull down to refresh.'))
+                    else
+                      SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          sliver: SliverList.builder(
+                              itemCount: visible.length,
+                              itemBuilder: (context, index) {
+                                final c = visible[index], p = published[c.id];
+                                return Padding(
+                                    key: ValueKey(c.id),
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: CoachCard(
+                                        key: ValueKey('member-coach-${c.id}'),
+                                        coach: c,
+                                        published: p,
+                                        branchNames: _branchNames,
+                                        photo: p == null
                                             ? null
-                                            : _directory!.loadMore,
-                                        style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(0, 48)),
-                                        child: Text(state.loadingMore
-                                            ? 'Loading…'
-                                            : error
-                                                ? 'Retry loading more'
-                                                : 'Load more coaches'))),
-                              ]))),
-                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                      ])))),
-          TickerMode(
-              enabled: _tab == 1,
-              child: NotificationListener<SwitchToFindCoachNotification>(
-                onNotification: (_) {
-                  setState(() => _tab = 0);
-                  return true;
-                },
-                child: !current
-                    ? const Center(
-                        child: Text('Bookings unavailable for this session.'))
-                    : _bookings ?? const SizedBox.shrink(),
-              )),
-        ])),
-      ]),
+                                            : PublishedCoachPhoto(
+                                                coach: p,
+                                                repository:
+                                                    widget.liveRepository!,
+                                                isCurrent: widget.isCurrent!,
+                                                size: 56),
+                                        onTap: () {
+                                          if (widget.live &&
+                                              widget.isCurrent?.call() !=
+                                                  true) {
+                                            _directory?.invalidate();
+                                            return;
+                                          }
+                                          if (p != null) {
+                                            widget.onOpenPublished?.call(c.id);
+                                          } else {
+                                            Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        CoachProfileScreen(
+                                                            coach: c)));
+                                          }
+                                        }));
+                              })),
+                    if (current && !loading && state?.nextCursor != null)
+                      SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          sliver: SliverToBoxAdapter(
+                              child: Column(children: [
+                            if (error)
+                              Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                      'Could not load more coaches. Try again.',
+                                      style: text.bodyMedium?.copyWith(
+                                          color: colors.onSurfaceVariant))),
+                            SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                    onPressed: state!.loadingMore
+                                        ? null
+                                        : _directory!.loadMore,
+                                    style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(0, 48)),
+                                    child: Text(state.loadingMore
+                                        ? 'Loading…'
+                                        : error
+                                            ? 'Retry loading more'
+                                            : 'Load more coaches'))),
+                          ]))),
+                    const SliverToBoxAdapter(child: SizedBox(height: 26)),
+                  ]))),
+        ),
+      ),
     );
   }
 }

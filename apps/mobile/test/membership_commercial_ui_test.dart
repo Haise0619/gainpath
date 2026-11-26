@@ -366,4 +366,66 @@ void main() {
     expect(find.text('Submit refund request'), findsNothing);
     expect(find.textContaining('request window has ended'), findsOneWidget);
   });
+
+  testWidgets(
+      'membership home layout preserves complete labels across 320, 360, 393, 430 widths and 1.0, 1.3, 1.5, 2.0 scales',
+      (t) async {
+    final repo = CommercialMembershipFake();
+    repo.overview['entitlement'] =
+        fixture.entitlement(tier: 'basic', paidStatus: 'active');
+    repo.overview['upgradeSupported'] = true;
+
+    for (final width in [320.0, 360.0, 393.0, 430.0]) {
+      for (final scale in [1.0, 1.3, 1.5, 2.0]) {
+        t.view.physicalSize = Size(width, 844);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+
+        await t.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(
+              size: Size(width, 844),
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: MaterialApp(
+              home: MembershipDashboardScreen(repository: repo),
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+
+        // 1. Critical action buttons: fully visible, no ellipsis
+        expect(find.text('Renew Basic'), findsOneWidget,
+            reason: 'Renew Basic missing at width $width, scale $scale');
+        expect(find.text('Upgrade to Premium'), findsOneWidget,
+            reason: 'Upgrade to Premium missing at width $width, scale $scale');
+
+        // Scroll down to benefits if needed at high text scales
+        await t.scrollUntilVisible(find.text('Gym Entry'), 50,
+            scrollable: find.byType(Scrollable).first);
+
+        // 2. All 4 compact benefit titles: fully visible without truncation
+        expect(find.text('Gym Entry'), findsOneWidget,
+            reason: 'Gym Entry missing at width $width, scale $scale');
+        expect(find.text('Coach Booking'), findsOneWidget,
+            reason: 'Coach Booking missing at width $width, scale $scale');
+        expect(find.text('Mini-Games'), findsOneWidget,
+            reason: 'Mini-Games missing at width $width, scale $scale');
+        expect(find.text('Physical Rewards'), findsOneWidget,
+            reason: 'Physical Rewards missing at width $width, scale $scale');
+
+        // 3. Status and expiry information
+        expect(find.text('Basic Membership'), findsOneWidget);
+        expect(find.textContaining('Paid membership active'), findsOneWidget);
+
+        // 4. Zero RenderFlex overflow exceptions
+        expect(t.takeException(), isNull,
+            reason: 'Overflow caught at width $width, scale $scale');
+
+        // Unmount to reset scroll state for next test combination
+        await t.pumpWidget(const SizedBox());
+        await t.pumpAndSettle();
+      }
+    }
+  });
 }
