@@ -272,19 +272,19 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 26),
+                      const SizedBox(height: 12),
                       AppCheckInCard(
                         state: state,
                         onClaim: onClaim,
                         onRefresh: onRefresh,
                         homeDense: true,
                       ),
-                      const SizedBox(height: 26),
+                      const SizedBox(height: 18),
                       TrainingAchievementPreview(
                         controller: achievements,
                         onViewAll: () => _badges(context),
                       ),
-                      const SizedBox(height: 26),
+                      const SizedBox(height: 18),
                       widget.gamesSection ??
                           FitnessArcadeHost(
                               key: ValueKey('games-$_gamesRevision'),
